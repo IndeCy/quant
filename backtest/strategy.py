@@ -18,7 +18,7 @@ class BaseStrategy(ABC):
         self.parameters = {}
         
     @abstractmethod
-    def generate_signals(self, data: pd.DataFrame, date: datetime) -> Dict[str, int]:
+    def generate_signals(self, data: Dict[str, pd.DataFrame], date: datetime) -> Dict[str, int]:
         """
         生成交易信号
         
@@ -34,7 +34,7 @@ class BaseStrategy(ABC):
         """
         pass
     
-    def on_bar(self, date: datetime, data: pd.DataFrame) -> Dict[str, int]:
+    def on_bar(self, date: datetime, data: Dict[str, pd.DataFrame]) -> Dict[str, int]:
         """
         每个交易日的回调函数
         

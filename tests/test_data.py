@@ -6,9 +6,11 @@ import unittest
 import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
-
 import sys
-sys.path.insert(0, '/home/runner/work/quant/quant')
+import os
+
+# 添加项目根目录到路径
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backtest.data import DataManager
 

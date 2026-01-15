@@ -32,6 +32,9 @@ cd quant
 
 # 安装依赖
 pip install -r requirements.txt
+
+# 或者安装为Python包（推荐）
+pip install -e .
 ```
 
 ## 快速开始 (Quick Start)
