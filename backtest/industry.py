@@ -327,11 +327,11 @@ class IndustryManager:
         return list(self._industry_tree.get(level1, {}).keys())
 
     def get_level3_industries(self, level1: str, level2: str) -> List[str]:
-        """根据一级和二级行业获取三级（下游）行业列表"""
+        """根据一级和二级行业获取三级行业列表"""
         return list(self._industry_tree.get(level1, {}).get(level2, {}).keys())
 
     def _format_stocks(self, level1: str, level2: str, level3: str) -> List[Dict[str, str]]:
-        """格式化指定三级行业下股票列表"""
+        """格式化指定三级行业下股票列表（私有方法，调用方已完成路径校验）"""
         stocks = self._industry_tree[level1][level2][level3]
         return [
             {

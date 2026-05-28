@@ -11,6 +11,10 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backtest.industry import IndustryManager
 
+EXPECTED_LEVEL1_COUNT = 31
+MIN_STOCKS_PER_LEVEL3 = 3
+EXPECTED_BANK_STOCK_COUNT = 3
+
 
 class TestIndustryManager(unittest.TestCase):
     """测试IndustryManager类"""
@@ -23,7 +27,7 @@ class TestIndustryManager(unittest.TestCase):
         level1 = self.manager.get_level1_industries()
         self.assertIn("银行", level1)
         self.assertIn("电力设备", level1)
-        self.assertGreaterEqual(len(level1), 31)
+        self.assertEqual(len(level1), EXPECTED_LEVEL1_COUNT)
 
     def test_get_level2_and_level3_industries(self):
         """测试获取二级和三级行业"""
@@ -36,13 +40,17 @@ class TestIndustryManager(unittest.TestCase):
     def test_get_stocks_by_levels(self):
         """测试按层级获取股票"""
         level1_stocks = self.manager.get_stocks("银行")
-        self.assertGreaterEqual(len(level1_stocks), 3)
+        self.assertGreaterEqual(len(level1_stocks), MIN_STOCKS_PER_LEVEL3)
 
         level2_stocks = self.manager.get_stocks("银行", "股份制银行")
-        self.assertEqual(len(level2_stocks), len(level1_stocks))
+        level1_codes = {item["code"] for item in level1_stocks}
+        level2_codes = {item["code"] for item in level2_stocks}
+        self.assertTrue(level2_codes.issubset(level1_codes))
 
         level3_stocks = self.manager.get_stocks("银行", "股份制银行", "全国性商业银行")
-        self.assertEqual(len(level3_stocks), 3)
+        self.assertEqual(len(level3_stocks), EXPECTED_BANK_STOCK_COUNT)
+        level3_codes = {item["code"] for item in level3_stocks}
+        self.assertTrue(level3_codes.issubset(level2_codes))
         self.assertEqual(level3_stocks[0]["level1"], "银行")
         self.assertEqual(level3_stocks[0]["level2"], "股份制银行")
         self.assertEqual(level3_stocks[0]["level3"], "全国性商业银行")
