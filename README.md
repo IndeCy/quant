@@ -10,6 +10,7 @@
 - ✅ **交易成本模拟**: 包含佣金、印花税、过户费等真实交易成本
 - ✅ **性能分析**: 计算收益率、夏普比率、最大回撤等关键指标
 - ✅ **内置策略**: 提供多种常见交易策略示例
+- ✅ **实时数据获取**: 集成 [a-stock-data](https://github.com/simonlin1212/a-stock-data) V3.2，覆盖行情/资金/行业/基础数据，零第三方数据封装依赖
 
 ## 系统架构 (Architecture)
 
@@ -17,6 +18,7 @@
 backtest/
 ├── __init__.py          # 包初始化
 ├── data.py              # 数据管理模块
+├── fetcher.py           # A股数据获取模块（集成 a-stock-data V3.2）
 ├── strategy.py          # 策略基类
 ├── strategies.py        # 示例策略集合
 ├── engine.py            # 回测引擎
@@ -93,25 +95,55 @@ python simple_example.py
 }
 ```
 
-### 数据源建议
+### 使用内置数据获取模块（推荐）
 
-可以使用以下数据源获取A股历史数据：
-
-- **Tushare**: https://tushare.pro/
-- **AkShare**: https://github.com/akfamily/akshare
-- **baostock**: http://baostock.com/
-
-示例（使用AkShare）：
+`backtest.fetcher` 模块集成了 [a-stock-data](https://github.com/simonlin1212/a-stock-data) V3.2 的数据获取能力，
+直连通达信/腾讯/东财，**零第三方数据封装依赖**，开箱即用。
 
 ```python
-import akshare as ak
+from backtest.data import DataManager
+from backtest.fetcher import load_symbol, get_realtime_quote, get_industry_sectors, get_stock_info
 
-# 获取股票历史数据
-stock_data = ak.stock_zh_a_hist(symbol="000001", period="daily", 
-                                 start_date="20230101", end_date="20231231")
-# 重命名列以匹配系统格式
-stock_data.columns = ['date', 'open', 'close', 'high', 'low', 'volume', ...]
+dm = DataManager()
+
+# ── 行情层：直接从通达信拉取历史K线并加载（不封IP）────────────────────────
+load_symbol(dm, '000001', offset=250)   # 加载约1年日线，自动推断交易所后缀(.SZ)
+load_symbol(dm, '600519', offset=500)   # 加载约2年日线
+load_symbol(dm, '688017', offset=250)   # 科创板
+
+# ── 行情层：腾讯财经实时报价（不封IP）────────────────────────────────────
+quotes = get_realtime_quote(['600519', '000858', '300476'])
+for code, q in quotes.items():
+    print(f"{q['name']}({code}): {q['price']}元  PE={q['pe_ttm']:.1f}  PB={q['pb']:.2f}  市值={q['mcap_yi']:.0f}亿")
+
+# ── 信号层：行业板块涨跌排行（东财，已内置限流）──────────────────────────
+sectors = get_industry_sectors()
+top5 = sorted(sectors, key=lambda x: x['change_pct'], reverse=True)[:5]
+for s in top5:
+    print(f"{s['name']}: {s['change_pct']:+.2f}%  ↑{s['up_count']} ↓{s['down_count']}")
+
+# ── 基础数据：个股基本信息（东财，已内置限流）────────────────────────────
+info = get_stock_info('600519')
+print(f"{info['name']} 行业:{info['industry']} 上市:{info['list_date']}")
 ```
+
+`backtest.fetcher` 数据能力一览：
+
+| 函数 | 数据来源 | 封IP风险 | 说明 |
+|------|---------|---------|------|
+| `get_klines(symbol)` | mootdx（通达信） | 无 | 历史K线，多周期 |
+| `load_symbol(dm, symbol)` | mootdx | 无 | 便捷函数：拉取并加载进 DataManager |
+| `get_realtime_quote(codes)` | 腾讯财经 | 无 | 实时价/PE/PB/市值/换手率/涨跌停价 |
+| `get_industry_sectors()` | 东财 push2 | 有（已限流） | 行业板块涨跌/上涨下跌家数/领涨股 |
+| `get_fund_flow_minute(symbol)` | 东财 push2 | 有（已限流） | 分钟级主力/大单/小单净流入 |
+| `get_stock_info(symbol)` | 东财 push2 | 有（已限流） | 行业/总股本/流通股/市值/上市日期 |
+
+> 东财接口已内置串行限流（≥1s 间隔 + 随机抖动），批量调用时可调大 `backtest.fetcher.EM_MIN_INTERVAL`。
+
+### 其他数据源参考
+
+- **Tushare**: https://tushare.pro/
+- **baostock**: http://baostock.com/
 
 ## 内置策略 (Built-in Strategies)
 
@@ -209,6 +241,65 @@ class MyStrategy(BaseStrategy):
 - **波动率**: 收益率的标准差（年化）
 - **胜率**: 盈利交易日占比
 - **交易次数**: 总交易笔数
+
+## 行业分类与数据导入 (Industry & Data Import)
+
+`IndustryManager` 提供三种方式扩充股票数据，无需修改源代码。
+
+### 单只添加
+
+```python
+from backtest.industry import IndustryManager
+
+manager = IndustryManager()
+manager.add_stock("002339.SZ", "利通电子", "电子", "消费电子", "消费电子零部件")
+```
+
+### 从 CSV 文件批量导入
+
+CSV 需包含表头：`code,name,level1,level2,level3`
+
+```csv
+code,name,level1,level2,level3
+002339.SZ,利通电子,电子,消费电子,消费电子零部件
+603893.SH,瑞芯微,电子,半导体,芯片设计
+```
+
+```python
+added = manager.import_from_csv("my_stocks.csv")
+print(f"新增 {added} 只股票")
+```
+
+### 从 JSON 文件批量导入
+
+```json
+[
+  {"code": "002339.SZ", "name": "利通电子", "level1": "电子", "level2": "消费电子", "level3": "消费电子零部件"}
+]
+```
+
+```python
+added = manager.import_from_json("my_stocks.json")
+```
+
+### 与第三方数据源集成（akshare 示例）
+
+安装 akshare 后，可将其行业分类数据导出为 CSV，再用 `import_from_csv` 导入：
+
+```python
+import akshare as ak
+import pandas as pd
+
+# 获取东方财富行业成分股（示例）
+df = ak.stock_board_industry_cons_em(symbol="半导体")
+df["level1"] = "电子"
+df["level2"] = "半导体"
+df["level3"] = "芯片设计"
+df = df.rename(columns={"代码": "code", "名称": "name"})
+df[["code", "name", "level1", "level2", "level3"]].to_csv("semiconductor.csv", index=False)
+
+manager.import_from_csv("semiconductor.csv")
+```
 
 ## 测试 (Testing)
 

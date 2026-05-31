@@ -125,6 +125,29 @@ class MyStrategy(BaseStrategy):
 - 波动率
 - 胜率
 
+#### 2.5 行业分类模块 (Industry Module)
+
+**文件**: `backtest/industry.py`
+
+**职责**:
+- 提供申万行业分类（一级/二级/三级）树状数据
+- 根据行业层级筛选代表性A股股票池
+- 支持按股票代码反查行业归属
+
+**核心类**:
+- `IndustryManager`: 行业分类管理器
+
+**关键方法**:
+```python
+get_level1_industries()                     # 获取一级行业
+get_level2_industries(level1)               # 获取二级行业
+get_level3_industries(level1, level2)       # 获取三级行业
+get_stocks(level1, level2, level3)          # 按行业筛选股票
+get_industry_by_stock(code)                 # 根据代码反查行业
+search_industry(keyword)                    # 按关键字搜索行业路径
+get_industry_tree(level1)                   # 获取行业树结构
+```
+
 ## A股交易规则实现 (A-share Trading Rules)
 
 ### 1. 交易单位 (Trading Unit)
