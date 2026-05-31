@@ -44,7 +44,7 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
             "农业综合": [
                 {"code": "600737.SH", "name": "中粮糖业"},
                 {"code": "000505.SZ", "name": "京粮控股"},
-                {"code": "601000.SH", "name": "唐山港"},
+                {"code": "000930.SZ", "name": "中粮科技"},
             ],
         },
     },
@@ -130,7 +130,7 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
         "小金属": {
             "钨钼稀土": [
                 {"code": "002203.SZ", "name": "海亮股份"},
-                {"code": "600547.SH", "name": "山东黄金"},
+                {"code": "600549.SH", "name": "厦门钨业"},
                 {"code": "000831.SZ", "name": "中国稀土"},
             ],
             "钴镍锂": [
@@ -150,7 +150,7 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
             "锂资源": [
                 {"code": "002460.SZ", "name": "赣锋锂业"},
                 {"code": "002738.SZ", "name": "中矿资源"},
-                {"code": "002554.SZ", "name": "惠博普"},
+                {"code": "002466.SZ", "name": "天齐锂业"},
             ],
         },
     },
@@ -175,8 +175,8 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
         "消费电子": {
             "消费电子整机": [
                 {"code": "002415.SZ", "name": "海康威视"},
-                {"code": "002049.SZ", "name": "紫光国微"},
                 {"code": "300866.SZ", "name": "安克创新"},
+                {"code": "002405.SZ", "name": "四维图新"},
             ],
             "消费电子零部件": [
                 {"code": "002841.SZ", "name": "视源股份"},
@@ -187,7 +187,7 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
         "光学光电子": {
             "光学元件": [
                 {"code": "002916.SZ", "name": "深南电路"},
-                {"code": "300454.SZ", "name": "深信服"},
+                {"code": "002273.SZ", "name": "水晶光电"},
                 {"code": "688206.SH", "name": "概伦电子"},
             ],
         },
@@ -228,7 +228,7 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
             "车身底盘": [
                 {"code": "601799.SH", "name": "星宇股份"},
                 {"code": "002091.SZ", "name": "江苏通达"},
-                {"code": "603799.SH", "name": "华友钴业"},
+                {"code": "601689.SH", "name": "拓普集团"},
             ],
             "智能驾驶": [
                 {"code": "002985.SZ", "name": "北摩高科"},
@@ -263,7 +263,7 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
             "热水器油烟机": [
                 {"code": "002050.SZ", "name": "三花智控"},
                 {"code": "002337.SZ", "name": "赛象科技"},
-                {"code": "600690.SH", "name": "海尔智家"},
+                {"code": "002792.SZ", "name": "华帝股份"},
             ],
         },
     },
@@ -300,18 +300,18 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
             ],
             "饮料": [
                 {"code": "605499.SH", "name": "东鹏饮料"},
-                {"code": "002507.SZ", "name": "涪陵榨菜"},
-                {"code": "603288.SH", "name": "海天味业"},
+                {"code": "000848.SZ", "name": "承德露露"},
+                {"code": "603156.SH", "name": "养元饮品"},
             ],
         },
         "食品加工": {
             "调味品": [
                 {"code": "603288.SH", "name": "海天味业"},
                 {"code": "600872.SH", "name": "中炬高新"},
-                {"code": "002507.SZ", "name": "涪陵榨菜"},
+                {"code": "002013.SZ", "name": "中粮包装"},
             ],
             "休闲食品": [
-                {"code": "002507.SZ", "name": "涪陵榨菜"},
+                {"code": "002455.SZ", "name": "百川畅银"},
                 {"code": "603719.SH", "name": "良品铺子"},
                 {"code": "002650.SZ", "name": "加加食品"},
             ],
@@ -403,7 +403,7 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
                 {"code": "600027.SH", "name": "华电国际"},
             ],
             "新能源发电": [
-                {"code": "601012.SH", "name": "隆基绿能"},
+                {"code": "003048.SZ", "name": "中核汇能"},
                 {"code": "000591.SZ", "name": "太阳能"},
                 {"code": "600905.SH", "name": "三峡能源"},
             ],
@@ -546,7 +546,7 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
         "证券": {
             "综合券商": [
                 {"code": "600030.SH", "name": "中信证券"},
-                {"code": "601211.SH", "name": "国泰海通"},
+                {"code": "601211.SH", "name": "国泰君安"},
                 {"code": "601688.SH", "name": "华泰证券"},
             ],
             "互联网券商": [
@@ -590,13 +590,13 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
         },
         "IT服务": {
             "云计算": [
-                {"code": "300230.SZ", "name": "永辉超市"},
+                {"code": "600845.SH", "name": "宝信软件"},
                 {"code": "002230.SZ", "name": "科大讯飞"},
-                {"code": "300014.SZ", "name": "亿纬锂能"},
+                {"code": "300374.SZ", "name": "国盾量子"},
             ],
             "信息安全": [
                 {"code": "300454.SZ", "name": "深信服"},
-                {"code": "002049.SZ", "name": "紫光国微"},
+                {"code": "002268.SZ", "name": "卫士通"},
                 {"code": "300687.SZ", "name": "奥普特"},
             ],
         },
@@ -713,25 +713,25 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
             "光伏设备": [
                 {"code": "688599.SH", "name": "天合光能"},
                 {"code": "601012.SH", "name": "隆基绿能"},
-                {"code": "002594.SZ", "name": "比亚迪"},
+                {"code": "300274.SZ", "name": "阳光电源"},
             ],
         },
         "电力设备": {
             "输变电设备": [
                 {"code": "601877.SH", "name": "正泰电器"},
                 {"code": "002266.SZ", "name": "浙富控股"},
-                {"code": "601615.SH", "name": "明阳智能"},
+                {"code": "002028.SZ", "name": "思源电气"},
             ],
         },
         "电池": {
             "锂电池": [
                 {"code": "300750.SZ", "name": "宁德时代"},
-                {"code": "002460.SZ", "name": "赣锋锂业"},
+                {"code": "300438.SZ", "name": "鹏辉能源"},
                 {"code": "300014.SZ", "name": "亿纬锂能"},
             ],
             "储能": [
-                {"code": "300274.SZ", "name": "阳光电源"},
-                {"code": "002151.SZ", "name": "北斗星通"},
+                {"code": "688063.SH", "name": "派能科技"},
+                {"code": "688335.SH", "name": "科华数能"},
                 {"code": "688819.SH", "name": "天能股份"},
             ],
         },
@@ -788,13 +788,13 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
         },
         "专用设备": {
             "半导体设备": [
-                {"code": "688012.SH", "name": "中微公司"},
-                {"code": "688037.SH", "name": "芯源微"},
-                {"code": "300604.SZ", "name": "长川科技"},
+                {"code": "002371.SZ", "name": "北方华创"},
+                {"code": "688072.SH", "name": "拓荆科技"},
+                {"code": "688361.SH", "name": "中科飞测"},
             ],
             "医疗设备": [
-                {"code": "300760.SZ", "name": "迈瑞医疗"},
-                {"code": "603192.SH", "name": "华安鑫创"},
+                {"code": "688114.SH", "name": "华大智造"},
+                {"code": "300003.SZ", "name": "乐普医疗"},
                 {"code": "688289.SH", "name": "灵动微电子"},
             ],
         },
@@ -816,7 +816,7 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
         },
         "玻璃玻纤": {
             "玻璃制造": [
-                {"code": "000786.SZ", "name": "北新建材"},
+                {"code": "000012.SZ", "name": "南玻A"},
                 {"code": "600586.SH", "name": "金晶科技"},
                 {"code": "601136.SH", "name": "旗滨集团"},
             ],
@@ -828,7 +828,7 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
         },
         "装饰建材": {
             "陶瓷石材": [
-                {"code": "000786.SZ", "name": "北新建材"},
+                {"code": "002918.SZ", "name": "蒙娜丽莎"},
                 {"code": "002910.SZ", "name": "庄园牧场"},
                 {"code": "002285.SZ", "name": "世联行"},
             ],
@@ -853,7 +853,7 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
             "园林工程": [
                 {"code": "002949.SZ", "name": "华阳国际"},
                 {"code": "002154.SZ", "name": "报喜鸟"},
-                {"code": "300070.SZ", "name": "碧水源"},
+                {"code": "603056.SH", "name": "德邦股份"},
             ],
         },
         "装修装饰": {
@@ -908,22 +908,22 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
         "旅游及景区": {
             "景区运营": [
                 {"code": "600054.SH", "name": "黄山旅游"},
-                {"code": "000930.SZ", "name": "中粮科技"},
+                {"code": "000978.SZ", "name": "桂林旅游"},
                 {"code": "600098.SH", "name": "广州发展"},
             ],
         },
         "教育": {
             "教育培训": [
                 {"code": "002607.SZ", "name": "中公教育"},
-                {"code": "002230.SZ", "name": "科大讯飞"},
+                {"code": "300359.SZ", "name": "全通教育"},
                 {"code": "300532.SZ", "name": "今天国际"},
             ],
         },
         "专业服务": {
             "人力资源": [
                 {"code": "002085.SZ", "name": "万丰奥威"},
-                {"code": "300498.SZ", "name": "温氏股份"},
-                {"code": "603869.SH", "name": "新智认知"},
+                {"code": "300662.SZ", "name": "科锐国际"},
+                {"code": "002216.SZ", "name": "三全食品"},
             ],
         },
     },
@@ -940,13 +940,13 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
         "环境治理": {
             "固废处理": [
                 {"code": "000826.SZ", "name": "启迪环境"},
-                {"code": "300070.SZ", "name": "碧水源"},
+                {"code": "603568.SH", "name": "伟明环保"},
                 {"code": "601200.SH", "name": "上海环境"},
             ],
             "水处理": [
                 {"code": "300070.SZ", "name": "碧水源"},
-                {"code": "603568.SH", "name": "伟明环保"},
                 {"code": "300172.SZ", "name": "中电环保"},
+                {"code": "603285.SH", "name": "国祯环保"},
             ],
         },
         "环保设备": {
@@ -969,7 +969,7 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
             "专业化妆品": [
                 {"code": "600318.SH", "name": "新力金融"},
                 {"code": "002271.SZ", "name": "东方雨虹"},
-                {"code": "300987.SZ", "name": "N华宝"},
+                {"code": "300987.SZ", "name": "华宝新能"},
             ],
         },
     },
