@@ -82,7 +82,7 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
             "碳纤维": [
                 {"code": "300686.SZ", "name": "东方盛虹"},
                 {"code": "688295.SH", "name": "中复神鹰"},
-                {"code": "300693.SZ", "name": "盛剑环境"},
+                {"code": "300699.SZ", "name": "光威复材"},
             ],
         },
         "化学纤维": {
@@ -188,14 +188,14 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
             "光学元件": [
                 {"code": "002916.SZ", "name": "深南电路"},
                 {"code": "002273.SZ", "name": "水晶光电"},
-                {"code": "688206.SH", "name": "概伦电子"},
+                {"code": "002222.SZ", "name": "福晶科技"},
             ],
         },
         "被动元件": {
             "电容电阻": [
                 {"code": "600563.SH", "name": "法拉电子"},
-                {"code": "300433.SZ", "name": "蓝思科技"},
-                {"code": "002459.SZ", "name": "晶澳科技"},
+                {"code": "000636.SZ", "name": "风华高科"},
+                {"code": "002384.SZ", "name": "东山精密"},
             ],
         },
     },
@@ -311,7 +311,7 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
                 {"code": "002013.SZ", "name": "中粮包装"},
             ],
             "休闲食品": [
-                {"code": "002455.SZ", "name": "百川畅银"},
+                {"code": "002557.SZ", "name": "洽洽食品"},
                 {"code": "603719.SH", "name": "良品铺子"},
                 {"code": "002650.SZ", "name": "加加食品"},
             ],
@@ -634,7 +634,7 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
             "互联网内容": [
                 {"code": "600804.SH", "name": "鹏博士"},
                 {"code": "002364.SZ", "name": "中恒电气"},
-                {"code": "300741.SZ", "name": "华统股份"},
+                {"code": "300393.SZ", "name": "中文在线"},
             ],
         },
     },
@@ -795,7 +795,7 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
             "医疗设备": [
                 {"code": "688114.SH", "name": "华大智造"},
                 {"code": "300003.SZ", "name": "乐普医疗"},
-                {"code": "688289.SH", "name": "灵动微电子"},
+                {"code": "688139.SH", "name": "海尔生物"},
             ],
         },
         "自动化设备": {
