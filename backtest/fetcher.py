@@ -457,8 +457,7 @@ def get_stock_info(symbol: str) -> dict:
 
     def _num(val, divisor: float = 1.0) -> float:
         try:
-            v = float(val)
-            return v / divisor if v != "-" else 0.0
+            return float(val) / divisor
         except (TypeError, ValueError):
             return 0.0
 

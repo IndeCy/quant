@@ -138,7 +138,7 @@ print(f"{info['name']} 行业:{info['industry']} 上市:{info['list_date']}")
 | `get_fund_flow_minute(symbol)` | 东财 push2 | 有（已限流） | 分钟级主力/大单/小单净流入 |
 | `get_stock_info(symbol)` | 东财 push2 | 有（已限流） | 行业/总股本/流通股/市值/上市日期 |
 
-> 东财接口已内置串行限流（≥1s 间隔 + 随机抖动），批量调用时可调大 `fetcher.EM_MIN_INTERVAL`。
+> 东财接口已内置串行限流（≥1s 间隔 + 随机抖动），批量调用时可调大 `backtest.fetcher.EM_MIN_INTERVAL`。
 
 ### 其他数据源参考
 
