@@ -3,6 +3,8 @@
 基于申万行业分类提供A股行业树与代表股票查询能力
 """
 
+import csv
+import json
 from copy import deepcopy
 from typing import Dict, List, Optional
 
@@ -182,6 +184,7 @@ SW_INDUSTRY_TREE: Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]] = {
                 {"code": "002841.SZ", "name": "视源股份"},
                 {"code": "600183.SH", "name": "生益科技"},
                 {"code": "002456.SZ", "name": "欧菲光"},
+                {"code": "002339.SZ", "name": "利通电子"},
             ],
         },
         "光学光电子": {
@@ -983,7 +986,7 @@ class IndustryManager:
         self,
         industry_tree: Optional[Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]]] = None,
     ):
-        self._industry_tree = industry_tree or SW_INDUSTRY_TREE
+        self._industry_tree = deepcopy(industry_tree or SW_INDUSTRY_TREE)
         self._stock_index = self._build_stock_index()
 
     def _build_stock_index(self) -> Dict[str, Dict[str, str]]:
@@ -1103,3 +1106,95 @@ class IndustryManager:
         if level1 not in self._industry_tree:
             return {}
         return {level1: deepcopy(self._industry_tree[level1])}
+
+    def add_stock(self, code: str, name: str, level1: str, level2: str, level3: str) -> None:
+        """
+        新增一只股票到行业树。若行业路径不存在则自动创建；若股票代码已存在则跳过。
+
+        Args:
+            code:   股票代码，例如 "002339.SZ"
+            name:   股票名称，例如 "利通电子"
+            level1: 一级行业，例如 "电子"
+            level2: 二级行业，例如 "消费电子"
+            level3: 三级行业，例如 "消费电子零部件"
+        """
+        if code in self._stock_index:
+            return
+
+        self._industry_tree.setdefault(level1, {})
+        self._industry_tree[level1].setdefault(level2, {})
+        self._industry_tree[level1][level2].setdefault(level3, [])
+        self._industry_tree[level1][level2][level3].append({"code": code, "name": name})
+        self._stock_index[code] = {
+            "code": code,
+            "name": name,
+            "level1": level1,
+            "level2": level2,
+            "level3": level3,
+        }
+
+    def import_from_records(self, records: List[Dict[str, str]]) -> int:
+        """
+        从字典列表批量导入股票。每条记录须包含字段：
+        code, name, level1, level2, level3。
+        已存在的股票代码会被跳过。
+
+        Returns:
+            新增的股票数量。
+        """
+        before = len(self._stock_index)
+        for record in records:
+            self.add_stock(
+                code=record["code"],
+                name=record["name"],
+                level1=record["level1"],
+                level2=record["level2"],
+                level3=record["level3"],
+            )
+        return len(self._stock_index) - before
+
+    def import_from_csv(self, filepath: str) -> int:
+        """
+        从 CSV 文件批量导入股票。CSV 须包含表头：
+        code, name, level1, level2, level3。
+
+        示例 CSV 行::
+
+            code,name,level1,level2,level3
+            002339.SZ,利通电子,电子,消费电子,消费电子零部件
+
+        Returns:
+            新增的股票数量。
+        """
+        with open(filepath, newline="", encoding="utf-8") as f:
+            reader = csv.DictReader(f)
+            records = [
+                {
+                    "code": row["code"].strip(),
+                    "name": row["name"].strip(),
+                    "level1": row["level1"].strip(),
+                    "level2": row["level2"].strip(),
+                    "level3": row["level3"].strip(),
+                }
+                for row in reader
+            ]
+        return self.import_from_records(records)
+
+    def import_from_json(self, filepath: str) -> int:
+        """
+        从 JSON 文件批量导入股票。JSON 须为对象数组，每个对象包含：
+        code, name, level1, level2, level3。
+
+        示例 JSON::
+
+            [
+              {"code": "002339.SZ", "name": "利通电子",
+               "level1": "电子", "level2": "消费电子", "level3": "消费电子零部件"}
+            ]
+
+        Returns:
+            新增的股票数量。
+        """
+        with open(filepath, encoding="utf-8") as f:
+            records = json.load(f)
+        return self.import_from_records(records)

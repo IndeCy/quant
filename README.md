@@ -210,7 +210,66 @@ class MyStrategy(BaseStrategy):
 - **胜率**: 盈利交易日占比
 - **交易次数**: 总交易笔数
 
-## 测试 (Testing)
+## 行业分类与数据导入 (Industry & Data Import)
+
+`IndustryManager` 提供三种方式扩充股票数据，无需修改源代码。
+
+### 单只添加
+
+```python
+from backtest.industry import IndustryManager
+
+manager = IndustryManager()
+manager.add_stock("002339.SZ", "利通电子", "电子", "消费电子", "消费电子零部件")
+```
+
+### 从 CSV 文件批量导入
+
+CSV 需包含表头：`code,name,level1,level2,level3`
+
+```csv
+code,name,level1,level2,level3
+002339.SZ,利通电子,电子,消费电子,消费电子零部件
+603893.SH,瑞芯微,电子,半导体,芯片设计
+```
+
+```python
+added = manager.import_from_csv("my_stocks.csv")
+print(f"新增 {added} 只股票")
+```
+
+### 从 JSON 文件批量导入
+
+```json
+[
+  {"code": "002339.SZ", "name": "利通电子", "level1": "电子", "level2": "消费电子", "level3": "消费电子零部件"}
+]
+```
+
+```python
+added = manager.import_from_json("my_stocks.json")
+```
+
+### 与第三方数据源集成（akshare 示例）
+
+安装 akshare 后，可将其行业分类数据导出为 CSV，再用 `import_from_csv` 导入：
+
+```python
+import akshare as ak
+import pandas as pd
+
+# 获取东方财富行业成分股（示例）
+df = ak.stock_board_industry_cons_em(symbol="半导体")
+df["level1"] = "电子"
+df["level2"] = "半导体"
+df["level3"] = "芯片设计"
+df = df.rename(columns={"代码": "code", "名称": "name"})
+df[["code", "name", "level1", "level2", "level3"]].to_csv("semiconductor.csv", index=False)
+
+manager.import_from_csv("semiconductor.csv")
+```
+
+
 
 运行单元测试：
 
