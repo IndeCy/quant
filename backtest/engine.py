@@ -178,6 +178,55 @@ class BacktestEngine:
             })
             
         return success
+
+    def _execute_target_weight_orders(
+        self,
+        target_weights: Dict[str, float],
+        current_prices: Dict[str, float],
+        current_date: datetime,
+    ) -> None:
+        """按目标权重调仓，适合轮动策略做等权持仓。"""
+        total_value = self.portfolio.get_total_value(current_prices)
+
+        # 先卖出超配或目标为0的持仓，释放现金后再买入欠配标的。
+        sell_orders: List[Order] = []
+        buy_orders: List[Order] = []
+        for symbol, target_weight in target_weights.items():
+            if symbol not in current_prices:
+                continue
+            price = current_prices[symbol]
+            current_quantity = self.portfolio.positions.get(symbol, 0)
+            current_value = current_quantity * price
+            target_value = total_value * max(target_weight, 0.0)
+            value_diff = target_value - current_value
+            quantity = int(abs(value_diff) / price)
+            quantity = (quantity // 100) * 100
+            if quantity < 100:
+                continue
+            if value_diff < 0:
+                sell_orders.append(Order(symbol, -min(quantity, current_quantity), price, current_date))
+            else:
+                buy_orders.append(Order(symbol, quantity, price, current_date))
+
+        for order in sell_orders:
+            if abs(order.quantity) >= 100:
+                self.execute_order(order)
+        for order in buy_orders:
+            execution_price = order.price * (1 + self.slippage)
+            while order.quantity >= 100:
+                commission = self.calculate_commission(execution_price, order.quantity)
+                if self.portfolio.cash >= order.quantity * execution_price + commission:
+                    break
+                order.quantity -= 100
+            if order.quantity < 100:
+                continue
+            self.execute_order(order)
+
+    def _is_target_weight_signal(self, signals: Dict[str, int | float]) -> bool:
+        """判断信号是否为目标权重格式。"""
+        if not signals:
+            return False
+        return all(isinstance(signal, float) and -1.0 <= signal <= 1.0 for signal in signals.values())
     
     def run(self, start_date: Optional[datetime] = None,
             end_date: Optional[datetime] = None) -> pd.DataFrame:
@@ -221,6 +270,17 @@ class BacktestEngine:
             
             # 生成交易信号
             signals = self.strategy.on_bar(current_date, current_data)
+
+            if self._is_target_weight_signal(signals):
+                self._execute_target_weight_orders(signals, current_prices, current_date)
+                total_value = self.portfolio.get_total_value(current_prices)
+                self.daily_values.append({
+                    'date': current_date,
+                    'total_value': total_value,
+                    'cash': self.portfolio.cash,
+                    'positions_value': total_value - self.portfolio.cash
+                })
+                continue
             
             # 执行交易
             for symbol, signal in signals.items():

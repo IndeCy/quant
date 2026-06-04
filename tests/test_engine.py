@@ -14,6 +14,21 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from backtest.data import DataManager
 from backtest.strategies import BuyAndHoldStrategy, MovingAverageCrossStrategy
 from backtest.engine import BacktestEngine, Order, Portfolio
+from backtest.strategy import BaseStrategy
+
+
+class TargetWeightStrategy(BaseStrategy):
+    """测试用目标权重策略"""
+
+    def __init__(self):
+        super().__init__(name="TargetWeightTest")
+        self.sent = False
+
+    def generate_signals(self, data, date):
+        if self.sent:
+            return {}
+        self.sent = True
+        return {"AAA.SZ": 0.5, "BBB.SZ": 0.5}
 
 
 class TestOrder(unittest.TestCase):
@@ -164,6 +179,30 @@ class TestBacktestEngine(unittest.TestCase):
         
         # 检查交易记录
         self.assertIsInstance(engine.trades, list)
+
+    def test_target_weight_signals_allocate_cash_evenly(self):
+        """目标权重信号应按目标资产占比调仓"""
+        dates = pd.date_range(start="2023-01-01", periods=3, freq="D")
+        bars = pd.DataFrame(
+            {
+                "date": dates,
+                "open": [10.0, 10.0, 10.0],
+                "high": [10.0, 10.0, 10.0],
+                "low": [10.0, 10.0, 10.0],
+                "close": [10.0, 10.0, 10.0],
+                "volume": [1000, 1000, 1000],
+            }
+        )
+        data_manager = DataManager()
+        data_manager.load_data("AAA.SZ", bars)
+        data_manager.load_data("BBB.SZ", bars)
+        engine = BacktestEngine(data_manager, TargetWeightStrategy(), initial_capital=1000000.0, commission_rate=0.0)
+
+        engine.run()
+
+        aaa_value = engine.portfolio.positions["AAA.SZ"] * 10.0
+        bbb_value = engine.portfolio.positions["BBB.SZ"] * 10.0
+        self.assertAlmostEqual(aaa_value, bbb_value, delta=1000.0)
 
 
 if __name__ == '__main__':

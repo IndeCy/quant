@@ -6,7 +6,6 @@
 import pandas as pd
 import numpy as np
 from typing import Dict, Optional
-import matplotlib.pyplot as plt
 
 
 class PerformanceAnalyzer:
@@ -67,12 +66,18 @@ class PerformanceAnalyzer:
         if len(self.daily_values) < 2:
             return 0.0
         
-        excess_returns = self.daily_values['returns'] - self.risk_free_rate / 252
+        returns = self.daily_values['returns'].dropna()
+        if returns.empty or np.isclose(returns.std(), 0.0):
+            return 0.0
+
+        excess_returns = returns - self.risk_free_rate / 252
+        excess_std = excess_returns.std()
         
-        if excess_returns.std() == 0:
+        # 极小标准差通常来自浮点误差，直接计算会把夏普比率放大成异常值。
+        if np.isclose(excess_std, 0.0):
             return 0.0
         
-        return np.sqrt(252) * excess_returns.mean() / excess_returns.std()
+        return np.sqrt(252) * excess_returns.mean() / excess_std
     
     def get_max_drawdown(self) -> float:
         """计算最大回撤"""
@@ -149,6 +154,9 @@ class PerformanceAnalyzer:
         if len(self.daily_values) == 0:
             print("没有数据可绘制")
             return
+
+        # 绘图功能才需要 matplotlib，避免只做绩效计算时强依赖绘图库。
+        import matplotlib.pyplot as plt
         
         fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8))
         

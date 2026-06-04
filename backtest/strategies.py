@@ -18,6 +18,7 @@ class BuyAndHoldStrategy(BaseStrategy):
         super().__init__(name="BuyAndHold")
         self.symbol = symbol
         self.bought = False
+        self.parameters = {"strategy_type": "基线"}
         
     def generate_signals(self, data: Dict[str, pd.DataFrame], date: datetime) -> Dict[str, int]:
         """在第一个交易日买入并持有"""
@@ -36,6 +37,11 @@ class MovingAverageCrossStrategy(BaseStrategy):
         self.symbol = symbol
         self.short_window = short_window
         self.long_window = long_window
+        self.parameters = {
+            "short_window": short_window,
+            "long_window": long_window,
+            "strategy_type": "趋势跟随",
+        }
         
     def generate_signals(self, data: Dict[str, pd.DataFrame], date: datetime) -> Dict[str, int]:
         """
@@ -93,6 +99,12 @@ class MomentumStrategy(BaseStrategy):
         self.lookback_period = lookback_period
         self.buy_threshold = buy_threshold
         self.sell_threshold = sell_threshold
+        self.parameters = {
+            "lookback_period": lookback_period,
+            "buy_threshold": buy_threshold,
+            "sell_threshold": sell_threshold,
+            "strategy_type": "趋势跟随",
+        }
         
     def generate_signals(self, data: Dict[str, pd.DataFrame], date: datetime) -> Dict[str, int]:
         """
@@ -130,6 +142,11 @@ class MeanReversionStrategy(BaseStrategy):
         self.symbol = symbol
         self.window = window
         self.num_std = num_std
+        self.parameters = {
+            "window": window,
+            "num_std": num_std,
+            "strategy_type": "均值回归",
+        }
         
     def generate_signals(self, data: Dict[str, pd.DataFrame], date: datetime) -> Dict[str, int]:
         """
@@ -167,4 +184,222 @@ class MeanReversionStrategy(BaseStrategy):
         if current_price > current['upper']:
             return {self.symbol: -1000000}
         
+        return {}
+
+
+class DonchianChannelBreakoutStrategy(BaseStrategy):
+    """唐奇安通道突破策略"""
+
+    def __init__(self, symbol: str, entry_window: int = 20, exit_window: int = 10):
+        super().__init__(name="Donchian_Channel_Breakout")
+        self.symbol = symbol
+        self.entry_window = entry_window
+        self.exit_window = exit_window
+        self.parameters = {
+            "entry_window": entry_window,
+            "exit_window": exit_window,
+            "strategy_type": "趋势跟随",
+        }
+
+    def generate_signals(self, data: Dict[str, pd.DataFrame], date: datetime) -> Dict[str, int]:
+        """
+        唐奇安通道:
+        - 当前收盘价突破前 entry_window 日最高价: 买入
+        - 当前收盘价跌破前 exit_window 日最低价: 卖出
+        """
+        if self.symbol not in data:
+            return {}
+
+        df = data[self.symbol]
+        required = max(self.entry_window, self.exit_window) + 1
+        if len(df) < required:
+            return {}
+
+        current_close = df.iloc[-1]["close"]
+        entry_high = df["high"].iloc[-(self.entry_window + 1):-1].max()
+        exit_low = df["low"].iloc[-(self.exit_window + 1):-1].min()
+
+        if current_close > entry_high:
+            return {self.symbol: 1000000}
+        if current_close < exit_low:
+            return {self.symbol: -1000000}
+        return {}
+
+
+class TurtleTradingStrategy(BaseStrategy):
+    """海龟交易法策略"""
+
+    def __init__(
+        self,
+        symbol: str,
+        entry_window: int = 20,
+        exit_window: int = 10,
+        atr_window: int = 14,
+        atr_multiplier: float = 2.0,
+    ):
+        super().__init__(name="Turtle_Trading")
+        self.symbol = symbol
+        self.entry_window = entry_window
+        self.exit_window = exit_window
+        self.atr_window = atr_window
+        self.atr_multiplier = atr_multiplier
+        self.entry_price = None
+        self.parameters = {
+            "entry_window": entry_window,
+            "exit_window": exit_window,
+            "atr_window": atr_window,
+            "atr_multiplier": atr_multiplier,
+            "strategy_type": "趋势跟随",
+        }
+
+    def _calculate_atr(self, df: pd.DataFrame) -> float:
+        """计算 ATR，用于海龟策略的波动止损。"""
+        high_low = df["high"] - df["low"]
+        high_close = (df["high"] - df["close"].shift(1)).abs()
+        low_close = (df["low"] - df["close"].shift(1)).abs()
+        true_range = pd.concat([high_low, high_close, low_close], axis=1).max(axis=1)
+        return float(true_range.rolling(window=self.atr_window).mean().iloc[-1])
+
+    def generate_signals(self, data: Dict[str, pd.DataFrame], date: datetime) -> Dict[str, int]:
+        """
+        海龟交易法:
+        - 突破前 entry_window 日高点买入
+        - 跌破前 exit_window 日低点卖出
+        - 买入后若跌破 entry_price - ATR倍数 止损卖出
+        """
+        if self.symbol not in data:
+            return {}
+
+        df = data[self.symbol]
+        required = max(self.entry_window, self.exit_window, self.atr_window) + 1
+        if len(df) < required:
+            return {}
+
+        current_close = float(df.iloc[-1]["close"])
+        entry_high = float(df["high"].iloc[-(self.entry_window + 1):-1].max())
+        exit_low = float(df["low"].iloc[-(self.exit_window + 1):-1].min())
+        atr = self._calculate_atr(df)
+
+        if self.entry_price is not None and not np.isnan(atr):
+            stop_price = self.entry_price - self.atr_multiplier * atr
+            if current_close <= stop_price:
+                self.entry_price = None
+                return {self.symbol: -1000000}
+
+        if current_close > entry_high:
+            self.entry_price = current_close
+            return {self.symbol: 1000000}
+
+        if current_close < exit_low:
+            self.entry_price = None
+            return {self.symbol: -1000000}
+
+        return {}
+
+
+class RSIStrategy(BaseStrategy):
+    """RSI 超买超卖策略"""
+
+    def __init__(self, symbol: str, window: int = 14, oversold: float = 30.0, overbought: float = 70.0):
+        super().__init__(name="RSI_Reversion")
+        self.symbol = symbol
+        self.window = window
+        self.oversold = oversold
+        self.overbought = overbought
+        self.parameters = {
+            "window": window,
+            "oversold": oversold,
+            "overbought": overbought,
+            "strategy_type": "均值回归",
+        }
+
+    def _calculate_rsi(self, close: pd.Series) -> float:
+        """计算 RSI 指标，连续下跌时 RSI 接近 0，连续上涨时接近 100。"""
+        delta = close.diff()
+        gain = delta.clip(lower=0).rolling(window=self.window).mean()
+        loss = (-delta.clip(upper=0)).rolling(window=self.window).mean()
+        avg_gain = gain.iloc[-1]
+        avg_loss = loss.iloc[-1]
+        if pd.isna(avg_gain) or pd.isna(avg_loss):
+            return np.nan
+        if avg_loss == 0:
+            return 100.0
+        relative_strength = avg_gain / avg_loss
+        return float(100 - (100 / (1 + relative_strength)))
+
+    def generate_signals(self, data: Dict[str, pd.DataFrame], date: datetime) -> Dict[str, int]:
+        """
+        RSI 策略:
+        - RSI 低于 oversold: 买入
+        - RSI 高于 overbought: 卖出
+        """
+        if self.symbol not in data:
+            return {}
+
+        df = data[self.symbol]
+        if len(df) < self.window + 1:
+            return {}
+
+        rsi = self._calculate_rsi(df["close"])
+        if np.isnan(rsi):
+            return {}
+        if rsi < self.oversold:
+            return {self.symbol: 1000000}
+        if rsi > self.overbought:
+            return {self.symbol: -1000000}
+        return {}
+
+
+class BollingerBandStrategy(BaseStrategy):
+    """布林带策略，支持回归和突破两种模式"""
+
+    def __init__(self, symbol: str, window: int = 20, num_std: float = 2.0, mode: str = "reversion"):
+        super().__init__(name=f"Bollinger_{mode}")
+        if mode not in {"reversion", "breakout"}:
+            raise ValueError("mode 只能是 reversion 或 breakout")
+        self.symbol = symbol
+        self.window = window
+        self.num_std = num_std
+        self.mode = mode
+        self.parameters = {
+            "window": window,
+            "num_std": num_std,
+            "mode": mode,
+            "strategy_type": "均值回归" if mode == "reversion" else "趋势跟随",
+        }
+
+    def generate_signals(self, data: Dict[str, pd.DataFrame], date: datetime) -> Dict[str, int]:
+        """
+        布林带策略:
+        - 回归模式: 跌破下轨买入，突破上轨卖出
+        - 突破模式: 突破上轨买入，跌破中轨卖出
+        """
+        if self.symbol not in data:
+            return {}
+
+        df = data[self.symbol]
+        if len(df) < self.window:
+            return {}
+
+        close = df["close"]
+        middle = close.rolling(window=self.window).mean().iloc[-1]
+        std = close.rolling(window=self.window).std().iloc[-1]
+        if pd.isna(middle) or pd.isna(std):
+            return {}
+
+        upper = middle + self.num_std * std
+        lower = middle - self.num_std * std
+        current_close = close.iloc[-1]
+
+        if self.mode == "reversion":
+            if current_close < lower:
+                return {self.symbol: 1000000}
+            if current_close > upper:
+                return {self.symbol: -1000000}
+        else:
+            if current_close > upper:
+                return {self.symbol: 1000000}
+            if current_close < middle:
+                return {self.symbol: -1000000}
+
         return {}
