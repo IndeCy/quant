@@ -28,6 +28,8 @@ htmlcov/
 *.swp
 *.swo
 *~
+*.bak
+backups/
 data/
 *.csv
 *.h5
