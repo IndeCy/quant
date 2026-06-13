@@ -97,11 +97,28 @@ class PaperTradingStore:
               UNIQUE(account_id, trade_date)
             );
 
+            CREATE TABLE IF NOT EXISTS paper_corporate_action (
+              id integer PRIMARY KEY AUTOINCREMENT,
+              account_id integer NOT NULL DEFAULT 0,
+              symbol varchar(32) NOT NULL DEFAULT '',
+              ex_date varchar(10) NOT NULL DEFAULT '',
+              action_type varchar(30) NOT NULL DEFAULT '',
+              quantity_delta integer NOT NULL DEFAULT 0,
+              cash_delta real NOT NULL DEFAULT 0,
+              note varchar(255) NOT NULL DEFAULT '',
+              create_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              modify_time datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              UNIQUE(account_id, symbol, ex_date, action_type)
+            );
+
             CREATE INDEX IF NOT EXISTS idx_paper_order_account
             ON paper_order(account_id, status, order_date);
 
             CREATE INDEX IF NOT EXISTS idx_paper_snapshot_account
             ON paper_daily_snapshot(account_id, trade_date);
+
+            CREATE INDEX IF NOT EXISTS idx_paper_corporate_action_account
+            ON paper_corporate_action(account_id, symbol, ex_date);
             """
         )
         self.conn.commit()
@@ -302,6 +319,97 @@ class PaperTradingStore:
             params.append(status)
         sql += " ORDER BY order_date DESC, id DESC"
         return [dict(row) for row in self.conn.execute(sql, params).fetchall()]
+
+    def apply_corporate_action(
+        self,
+        account_id: int,
+        symbol: str,
+        ex_date: str,
+        action_type: str,
+        quantity_delta: int = 0,
+        cash_delta: float = 0.0,
+        note: str = "",
+    ) -> bool:
+        """应用送转、分红等企业行动，并保证同一笔记录只入账一次。"""
+        position = self._get_position(account_id, symbol)
+        if position is None:
+            raise ValueError(f"持仓不存在，无法应用企业行动: {symbol}")
+
+        exists = self.conn.execute(
+            """
+            SELECT id FROM paper_corporate_action
+            WHERE account_id = ? AND symbol = ? AND ex_date = ? AND action_type = ?
+            """,
+            (account_id, symbol, ex_date, action_type),
+        ).fetchone()
+        if exists is not None:
+            return False
+
+        old_quantity = int(position["quantity"])
+        old_cost = float(position["cost_amount"])
+        new_quantity = old_quantity + int(quantity_delta)
+        if new_quantity <= 0:
+            raise ValueError("企业行动导致持仓数量非法")
+
+        avg_cost = old_cost / new_quantity if new_quantity else 0.0
+        self.conn.execute(
+            """
+            UPDATE paper_position
+            SET quantity = ?, avg_cost = ?, modify_time = CURRENT_TIMESTAMP
+            WHERE account_id = ? AND symbol = ?
+            """,
+            (new_quantity, avg_cost, account_id, symbol),
+        )
+        if cash_delta:
+            self.conn.execute(
+                "UPDATE paper_account SET cash = cash + ?, modify_time = CURRENT_TIMESTAMP WHERE id = ?",
+                (float(cash_delta), account_id),
+            )
+        self.conn.execute(
+            """
+            INSERT INTO paper_corporate_action (
+              account_id, symbol, ex_date, action_type, quantity_delta, cash_delta, note
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                account_id,
+                symbol,
+                ex_date,
+                action_type,
+                int(quantity_delta),
+                float(cash_delta),
+                note,
+            ),
+        )
+        self.conn.commit()
+        return True
+
+    def list_corporate_actions(self, account_id: int, symbol: Optional[str] = None) -> List[Dict[str, Any]]:
+        """列出企业行动流水，可按股票过滤。"""
+        params: List[Any] = [account_id]
+        sql = "SELECT * FROM paper_corporate_action WHERE account_id = ?"
+        if symbol:
+            sql += " AND symbol = ?"
+            params.append(symbol)
+        sql += " ORDER BY ex_date, id"
+        return [dict(row) for row in self.conn.execute(sql, params).fetchall()]
+
+    def get_corporate_action_cash_by_symbol(self, account_id: int, trade_date: str) -> Dict[str, float]:
+        """汇总截至某日已经入账的企业行动现金，供盘后盈亏对账使用。"""
+        rows = self.conn.execute(
+            """
+            SELECT symbol, SUM(cash_delta) AS total_cash_delta
+            FROM paper_corporate_action
+            WHERE account_id = ? AND ex_date <= ?
+            GROUP BY symbol
+            """,
+            (account_id, trade_date),
+        ).fetchall()
+        return {
+            str(row["symbol"]): float(row["total_cash_delta"] or 0.0)
+            for row in rows
+        }
 
     def record_daily_snapshot(
         self,

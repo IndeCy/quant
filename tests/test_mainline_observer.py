@@ -184,7 +184,7 @@ def test_observe_account_builds_tomorrow_plan_when_b_signal_switches(tmp_path: P
 
 
 def test_observe_account_uses_actual_return_base_for_mainline_account(tmp_path: Path):
-    """主线链动真实观察应按用户确认的 99.54 万本金口径计算收益率。"""
+    """主线链动真实观察应按券商软件的 100 万本金口径计算收益率。"""
     db_path = tmp_path / "paper.sqlite3"
     store = PaperTradingStore(db_path)
     try:
@@ -231,5 +231,129 @@ def test_observe_account_uses_actual_return_base_for_mainline_account(tmp_path: 
     )
 
     assert round(result.total_value, 2) == 976685.0
-    assert round(result.strategy_return * 100, 2) == -1.88
-    assert "总收益率 -1.88%" in result.summary_text
+    assert round(result.strategy_return * 100, 2) == -2.33
+    assert "总收益率 -2.33%" in result.summary_text
+
+
+def test_observe_account_values_positions_with_unadjusted_prices(tmp_path: Path):
+    """真实持仓估值应优先使用不复权价格，避免和券商市值口径偏离。"""
+    db_path = tmp_path / "paper.sqlite3"
+    store = PaperTradingStore(db_path)
+    try:
+        account_id = store.create_account(
+            strategy_name="主线链动策略",
+            strategy_code="Mainline_Chain_Momentum",
+            initial_cash=1001437.0,
+            benchmark_symbol="000001.SH",
+            benchmark_name="上证指数",
+            start_date="2026-01-01",
+        )
+        order_id = store.record_pending_order(account_id, "2026-01-01", "A1", "通信一号", "BUY", 100.0, 1000)
+        store.fill_order(order_id, "2026-01-02", 100.0)
+    finally:
+        store.close()
+
+    qfq_bars = make_bars("2026-01-01", 122, 80.0, 0.0)
+    raw_bars = make_bars("2026-01-01", 122, 95.0, 0.0)
+    benchmark = make_bars("2026-01-01", 122, 3000.0, 1.0)
+    chains = [
+        ChainDefinition(
+            name="通信AI",
+            proxy_symbol="CHAIN_A",
+            stocks=[ChainStock("A1", "通信一号", "通信AI", "设备")],
+        )
+    ]
+
+    def loader(symbols, fetch_start, fetch_end, cache_path):
+        return MarketSnapshot(
+            trade_date=date(2026, 6, 9),
+            stock_bars={
+                "A1": qfq_bars,
+                "CHAIN_A": make_bars("2026-01-01", 122, 100.0, 0.2),
+            },
+            benchmark_bars=benchmark,
+            refresh_notes=[],
+            valuation_bars={
+                "A1": raw_bars,
+                "CHAIN_A": make_bars("2026-01-01", 122, 100.0, 0.2),
+            },
+        )
+
+    result = observe_account(
+        account_id=account_id,
+        requested_date="2026-06-09",
+        db_path=db_path,
+        market_loader=loader,
+        chains=chains,
+    )
+
+    assert round(result.positions[0].close_price, 2) == 95.0
+    assert round(result.position_value, 2) == 95000.0
+    assert round(result.total_value, 2) == 996437.0
+
+
+def test_observe_account_includes_cash_dividend_in_position_pnl(tmp_path: Path):
+    """单票盈亏应把已入账分红现金计入，和券商持仓盈亏口径保持一致。"""
+    db_path = tmp_path / "paper.sqlite3"
+    store = PaperTradingStore(db_path)
+    try:
+        account_id = store.create_account(
+            strategy_name="主线链动策略",
+            strategy_code="Mainline_Chain_Momentum",
+            initial_cash=1000000.0,
+            benchmark_symbol="000001.SH",
+            benchmark_name="上证指数",
+            start_date="2026-01-01",
+        )
+        order_id = store.record_pending_order(account_id, "2026-01-01", "A1", "通信一号", "BUY", 100.0, 300)
+        store.fill_order(order_id, "2026-01-02", 100.0)
+        store.apply_corporate_action(
+            account_id=account_id,
+            symbol="A1",
+            ex_date="2026-06-11",
+            action_type="DIVIDEND_BONUS",
+            quantity_delta=120,
+            cash_delta=270.0,
+            note="10派10元转4股",
+        )
+    finally:
+        store.close()
+
+    qfq_bars = make_bars("2026-01-01", 122, 80.0, 0.0)
+    raw_bars = make_bars("2026-01-01", 122, 95.0, 0.0)
+    benchmark = make_bars("2026-01-01", 122, 3000.0, 1.0)
+    chains = [
+        ChainDefinition(
+            name="通信AI",
+            proxy_symbol="CHAIN_A",
+            stocks=[ChainStock("A1", "通信一号", "通信AI", "设备")],
+        )
+    ]
+
+    def loader(symbols, fetch_start, fetch_end, cache_path):
+        return MarketSnapshot(
+            trade_date=date(2026, 6, 11),
+            stock_bars={
+                "A1": qfq_bars,
+                "CHAIN_A": make_bars("2026-01-01", 122, 100.0, 0.2),
+            },
+            benchmark_bars=benchmark,
+            refresh_notes=[],
+            valuation_bars={
+                "A1": raw_bars,
+                "CHAIN_A": make_bars("2026-01-01", 122, 100.0, 0.2),
+            },
+        )
+
+    result = observe_account(
+        account_id=account_id,
+        requested_date="2026-06-11",
+        db_path=db_path,
+        market_loader=loader,
+        chains=chains,
+    )
+
+    assert result.positions[0].quantity == 420
+    assert round(result.positions[0].market_value, 2) == 39900.0
+    assert round(result.positions[0].pnl_amount, 2) == 10170.0
+    assert round(result.positions[0].pnl_ratio * 100, 2) == 33.9

@@ -185,21 +185,30 @@ def _tencent_code(symbol: str) -> str:
     return f"{prefix}{code}"
 
 
-def parse_tencent_stock_payload(payload: dict, tencent_code: str) -> pd.DataFrame:
-    """解析腾讯个股/ETF K线，兼容 day 和 qfqday 两种返回字段。"""
+def parse_tencent_stock_payload(payload: dict, tencent_code: str, adjust: str = ADJUST) -> pd.DataFrame:
+    """解析腾讯个股/ETF K线，按复权类型优先读取对应字段。"""
     symbol_payload = (payload.get("data") or {}).get(tencent_code, {})
-    raw_klines = symbol_payload.get("qfqday") or symbol_payload.get("day") or []
+    if adjust == "none":
+        raw_klines = symbol_payload.get("day") or symbol_payload.get("qfqday") or []
+    else:
+        raw_klines = symbol_payload.get("qfqday") or symbol_payload.get("day") or []
     return parse_tencent_klines(raw_klines)
 
 
-def _fetch_tencent_stock_klines_remote(symbol: str, fetch_start: date, fetch_end: date) -> pd.DataFrame:
+def _fetch_tencent_stock_klines_remote(
+    symbol: str,
+    fetch_start: date,
+    fetch_end: date,
+    adjust: str = ADJUST,
+) -> pd.DataFrame:
     """直接调用腾讯个股或 ETF 日 K 接口。"""
     tencent_code = _tencent_code(symbol)
-    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={tencent_code},day,,,2000,qfq"
+    adjust_param = "qfq" if adjust == "qfq" else "none"
+    url = f"https://web.ifzq.gtimg.cn/appstock/app/fqkline/get?param={tencent_code},day,,,2000,{adjust_param}"
     request = Request(url, headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)"})
     with urlopen(request, timeout=20) as response:
         payload = json.loads(response.read().decode("utf-8"))
-    df = parse_tencent_stock_payload(payload, tencent_code)
+    df = parse_tencent_stock_payload(payload, tencent_code, adjust=adjust)
     return df[(df.index.date >= fetch_start) & (df.index.date <= fetch_end)]
 
 
@@ -207,6 +216,7 @@ def fetch_tencent_stock_klines(
     symbol: str,
     fetch_start: date,
     fetch_end: date,
+    adjust: str = ADJUST,
     cache_path=DEFAULT_CACHE_PATH,
 ) -> pd.DataFrame:
     """拉取腾讯个股日 K，并优先使用本地 SQLite 缓存。"""
@@ -217,10 +227,10 @@ def fetch_tencent_stock_klines(
             provider=TENCENT_PROVIDER,
             symbol=symbol,
             frequency=FREQUENCY,
-            adjust=ADJUST,
+            adjust=adjust,
             start_date=fetch_start,
             end_date=fetch_end,
-            fetcher=lambda start, end: _fetch_tencent_stock_klines_remote(symbol, start, end),
+            fetcher=lambda start, end: _fetch_tencent_stock_klines_remote(symbol, start, end, adjust=adjust),
             max_fetch_days=2000,
         )
     finally:

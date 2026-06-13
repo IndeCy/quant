@@ -38,7 +38,7 @@ from examples.shanghai_index_ma_backtest import (
 
 
 WARMUP_DAYS = 200
-MAINLINE_EFFECTIVE_RETURN_BASE = 995_400.0
+MAINLINE_EFFECTIVE_RETURN_BASE = 1_000_000.0
 MAINLINE_STORED_INITIAL_CASH = 1_001_437.0
 
 
@@ -52,6 +52,7 @@ class PositionObservation:
     close_price: float
     market_value: float
     cost_amount: float
+    cash_dividend: float
     pnl_amount: float
     pnl_ratio: float
 
@@ -64,6 +65,7 @@ class MarketSnapshot:
     stock_bars: Dict[str, pd.DataFrame]
     benchmark_bars: pd.DataFrame
     refresh_notes: List[str]
+    valuation_bars: Dict[str, pd.DataFrame] | None = None
 
 
 @dataclass(frozen=True)
@@ -113,8 +115,9 @@ def _format_wan(value: float) -> str:
 def _resolve_return_base(account: dict) -> float:
     """解析盘后观察使用的收益率基数。"""
     initial_cash = float(account["initial_cash"])
-    # 账户 1 的主线链动模拟盘历史上按 99.54 万作为收益率口径，
-    # 但本地 SQLite 中已落成 100.1437 万，这里按用户确认的实际口径纠偏。
+    # 主线链动账户在券商软件里的“总盈亏”口径按 100 万初始本金展示，
+    # 但本地 SQLite 中落成了 100.1437 万，这里统一按券商口径纠偏，
+    # 这样盘后观察的总收益率才能和真实持仓页面对齐。
     if (
         str(account.get("strategy_code", "")) == "Mainline_Chain_Momentum"
         and abs(initial_cash - MAINLINE_STORED_INITIAL_CASH) < 1e-6
@@ -141,13 +144,14 @@ def _load_cached_stock_bars(
     symbol: str,
     fetch_start: date,
     fetch_end: date,
+    adjust: str = STOCK_ADJUST,
 ) -> pd.DataFrame:
     """从本地缓存读取个股/ETF 日线。"""
     return cache.read_bars(
         provider=STOCK_PROVIDER,
         symbol=symbol,
         frequency=STOCK_FREQUENCY,
-        adjust=STOCK_ADJUST,
+        adjust=adjust,
         start_date=fetch_start,
         end_date=fetch_end,
     )
@@ -179,17 +183,42 @@ def load_market_snapshot(
     """优先尝试刷新行情，失败后回退到本地缓存。"""
     notes: List[str] = []
     stock_bars: Dict[str, pd.DataFrame] = {}
+    valuation_bars: Dict[str, pd.DataFrame] = {}
     cache = MarketDataCache(cache_path)
     try:
         for symbol in symbols:
             try:
-                stock_bars[symbol] = fetch_tencent_stock_klines(symbol, fetch_start, fetch_end, cache_path=cache_path)
+                stock_bars[symbol] = fetch_tencent_stock_klines(
+                    symbol,
+                    fetch_start,
+                    fetch_end,
+                    adjust=STOCK_ADJUST,
+                    cache_path=cache_path,
+                )
             except Exception as exc:
-                cached = _load_cached_stock_bars(cache, symbol, fetch_start, fetch_end)
+                cached = _load_cached_stock_bars(cache, symbol, fetch_start, fetch_end, adjust=STOCK_ADJUST)
                 if cached.empty:
                     raise RuntimeError(f"{symbol} 无法刷新且本地缓存为空") from exc
                 stock_bars[symbol] = cached
                 notes.append(f"{symbol} 行情刷新失败，回退缓存: {exc}")
+
+            # 真实持仓估值必须使用不复权价格，才能和券商软件的市值、盈亏口径一致。
+            try:
+                valuation_bars[symbol] = fetch_tencent_stock_klines(
+                    symbol,
+                    fetch_start,
+                    fetch_end,
+                    adjust="none",
+                    cache_path=cache_path,
+                )
+            except Exception as exc:
+                cached = _load_cached_stock_bars(cache, symbol, fetch_start, fetch_end, adjust="none")
+                if cached.empty:
+                    valuation_bars[symbol] = stock_bars[symbol]
+                    notes.append(f"{symbol} 不复权行情缺失，估值回退前复权: {exc}")
+                else:
+                    valuation_bars[symbol] = cached
+                    notes.append(f"{symbol} 不复权行情刷新失败，估值回退缓存: {exc}")
 
         try:
             benchmark_bars = fetch_tencent_index_klines(
@@ -207,11 +236,13 @@ def load_market_snapshot(
         cache.close()
 
     latest_dates = [pd.Timestamp(df.index.max()).date() for df in stock_bars.values() if not df.empty]
+    latest_dates.extend(pd.Timestamp(df.index.max()).date() for df in valuation_bars.values() if not df.empty)
     latest_dates.append(pd.Timestamp(benchmark_bars.index.max()).date())
     trade_date = min(latest_dates)
     return MarketSnapshot(
         trade_date=trade_date,
         stock_bars=stock_bars,
+        valuation_bars=valuation_bars,
         benchmark_bars=benchmark_bars,
         refresh_notes=notes,
     )
@@ -299,18 +330,22 @@ def _simulate_b_signal(
 def _build_position_observations(
     positions: Iterable[dict],
     stock_bars: Dict[str, pd.DataFrame],
+    valuation_bars: Dict[str, pd.DataFrame] | None,
+    corporate_cash: Dict[str, float],
     trade_date: date,
 ) -> List[PositionObservation]:
     """将数据库持仓转换成带估值和盈亏的观察对象。"""
     result: List[PositionObservation] = []
+    price_bars = valuation_bars or stock_bars
     for position in positions:
         symbol = str(position["symbol"])
-        bars = _slice_to_date(stock_bars[symbol], trade_date)
+        bars = _slice_to_date(price_bars[symbol], trade_date)
         close_price = float(bars["close"].iloc[-1])
         quantity = int(position["quantity"])
         cost_amount = float(position["cost_amount"])
         market_value = close_price * quantity
-        pnl_amount = market_value - cost_amount
+        cash_dividend = float(corporate_cash.get(symbol, 0.0))
+        pnl_amount = market_value + cash_dividend - cost_amount
         pnl_ratio = pnl_amount / cost_amount if cost_amount else 0.0
         result.append(
             PositionObservation(
@@ -320,6 +355,7 @@ def _build_position_observations(
                 close_price=close_price,
                 market_value=market_value,
                 cost_amount=cost_amount,
+                cash_dividend=cash_dividend,
                 pnl_amount=pnl_amount,
                 pnl_ratio=pnl_ratio,
             )
@@ -388,7 +424,14 @@ def observe_account(
         snapshot = loader(symbols, fetch_start, observe_date, cache_path)
 
         trade_date = snapshot.trade_date
-        position_views = _build_position_observations(positions, snapshot.stock_bars, trade_date)
+        corporate_cash = store.get_corporate_action_cash_by_symbol(account_id, trade_date.isoformat())
+        position_views = _build_position_observations(
+            positions,
+            snapshot.stock_bars,
+            snapshot.valuation_bars,
+            corporate_cash,
+            trade_date,
+        )
         position_value = sum(item.market_value for item in position_views)
         cash = float(account["cash"])
         total_value = cash + position_value
