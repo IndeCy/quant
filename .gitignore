@@ -30,6 +30,7 @@ htmlcov/
 *~
 *.bak
 backups/
-data/
+data/*
+!data/*.py
 *.csv
 *.h5

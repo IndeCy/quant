@@ -182,7 +182,7 @@ class TestBacktestEngine(unittest.TestCase):
 
     def test_target_weight_signals_allocate_cash_evenly(self):
         """目标权重信号应按目标资产占比调仓"""
-        dates = pd.date_range(start="2023-01-01", periods=3, freq="D")
+        dates = pd.date_range(start="2023-01-03", periods=3, freq="D")
         bars = pd.DataFrame(
             {
                 "date": dates,

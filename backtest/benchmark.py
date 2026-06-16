@@ -11,6 +11,8 @@ from typing import Dict, List
 
 import pandas as pd
 
+from data.cleaning import clean_daily_bars
+
 
 def _total_return(values: pd.Series) -> float:
     """计算一段资产曲线的总收益率。"""
@@ -46,6 +48,12 @@ def build_benchmark_curve(
     if benchmark_bars.empty or len(target_index) == 0:
         return pd.Series(dtype=float, name="benchmark_value")
 
+    benchmark_bars = benchmark_bars.copy()
+    if "close" in benchmark_bars.columns:
+        for column in ["open", "high", "low"]:
+            if column not in benchmark_bars.columns:
+                benchmark_bars[column] = benchmark_bars["close"]
+    benchmark_bars = clean_daily_bars(benchmark_bars, symbol="BENCHMARK")
     closes = benchmark_bars["close"].copy()
     closes.index = pd.to_datetime(closes.index)
     aligned = closes.reindex(pd.to_datetime(target_index), method="ffill").bfill()

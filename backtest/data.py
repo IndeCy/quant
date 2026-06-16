@@ -7,27 +7,32 @@ import pandas as pd
 from typing import Optional, List
 from datetime import datetime
 
+from data.adjustment import AdjustType, normalize_adjust
+from data.cleaning import clean_daily_bars
+
 
 class DataManager:
     """A股数据管理器"""
     
     def __init__(self):
         self.data = {}
+        self.adjustments = {}
         
-    def load_data(self, symbol: str, data: pd.DataFrame) -> None:
+    def load_data(self, symbol: str, data: pd.DataFrame, adjust: str | AdjustType = AdjustType.NONE) -> None:
         """
         加载股票数据
         
         Args:
             symbol: 股票代码 (如 '000001.SZ')
             data: DataFrame包含 ['date', 'open', 'high', 'low', 'close', 'volume']
+            adjust: 复权口径，支持 none/qfq/hfq
         """
-        if not isinstance(data.index, pd.DatetimeIndex):
-            if 'date' in data.columns:
-                data = data.set_index('date')
-            data.index = pd.to_datetime(data.index)
-        
-        self.data[symbol] = data.sort_index()
+        adjust_type = normalize_adjust(adjust)
+        # 统一日K字段和日期索引，后续回测统一按 trade_date 推进。
+        cleaned = clean_daily_bars(data, symbol=symbol)
+        cleaned.attrs["adjust"] = adjust_type.value
+        self.data[symbol] = cleaned
+        self.adjustments[symbol] = adjust_type
         
     def get_data(self, symbol: str, start_date: Optional[datetime] = None, 
                  end_date: Optional[datetime] = None) -> pd.DataFrame:
@@ -80,3 +85,23 @@ class DataManager:
     def get_symbols(self) -> List[str]:
         """获取所有已加载的股票代码"""
         return list(self.data.keys())
+
+    def get_adjust(self, symbol: str) -> AdjustType:
+        """获取某标的当前加载数据的复权口径。"""
+        if symbol not in self.adjustments:
+            raise ValueError(f"Symbol {symbol} not found in data manager")
+        return self.adjustments[symbol]
+
+    def get_adjustments(self) -> dict[str, AdjustType]:
+        """获取所有已加载标的的复权口径。"""
+        return self.adjustments.copy()
+
+    def validate_single_adjustment_policy(self) -> AdjustType | None:
+        """校验同一回测数据集中不能静默混用多个复权口径。"""
+        if not self.adjustments:
+            return None
+        values = set(self.adjustments.values())
+        if len(values) > 1:
+            detail = {symbol: adjust.value for symbol, adjust in self.adjustments.items()}
+            raise ValueError(f"同一次回测禁止混用复权口径: {detail}")
+        return next(iter(values))

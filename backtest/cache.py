@@ -14,6 +14,9 @@ from typing import Callable, List, Tuple
 
 import pandas as pd
 
+from data.adjustment import normalize_adjust_value
+from data.cleaning import clean_daily_bars
+
 
 DEFAULT_CACHE_PATH = Path("data/market_cache.sqlite3")
 BarFetcher = Callable[[date, date], pd.DataFrame]
@@ -106,6 +109,8 @@ class MarketDataCache:
         """批量写入或更新 OHLCV 数据。"""
         if bars.empty:
             return
+        adjust = normalize_adjust_value(adjust)
+        bars = clean_daily_bars(bars, symbol=symbol)
 
         rows = []
         for index, row in bars.iterrows():
@@ -156,6 +161,7 @@ class MarketDataCache:
         end_date: date,
     ) -> pd.DataFrame:
         """从缓存读取指定时间区间的 OHLCV 数据。"""
+        adjust = normalize_adjust_value(adjust)
         rows = self.conn.execute(
             """
             SELECT trade_time, open, high, low, close, volume, amount
@@ -177,7 +183,7 @@ class MarketDataCache:
         df = pd.DataFrame([dict(row) for row in rows])
         df["trade_time"] = pd.to_datetime(df["trade_time"])
         df = df.set_index("trade_time")
-        return df[["open", "high", "low", "close", "volume", "amount"]]
+        return clean_daily_bars(df, symbol=symbol)
 
     def get_coverage(
         self,
@@ -187,6 +193,7 @@ class MarketDataCache:
         adjust: str,
     ) -> List[CoverageInterval]:
         """读取某条时间序列已向外部数据源确认过的覆盖区间。"""
+        adjust = normalize_adjust_value(adjust)
         rows = self.conn.execute(
             """
             SELECT covered_start_time, covered_end_time
@@ -214,6 +221,7 @@ class MarketDataCache:
         end_date: date,
     ) -> None:
         """记录并合并某条时间序列已经确认过的覆盖区间。"""
+        adjust = normalize_adjust_value(adjust)
         if start_date > end_date:
             return
 
@@ -231,6 +239,7 @@ class MarketDataCache:
 
     def _merge_coverage(self, provider: str, symbol: str, frequency: str, adjust: str) -> None:
         """合并重叠或相邻覆盖区间，保留真实连续水位。"""
+        adjust = normalize_adjust_value(adjust)
         intervals = self.get_coverage(provider, symbol, frequency, adjust)
         if not intervals:
             return
@@ -320,6 +329,7 @@ def load_or_fetch_ohlcv(
     max_fetch_days: int = DEFAULT_MAX_FETCH_DAYS,
 ) -> pd.DataFrame:
     """优先读取缓存，缓存未覆盖时只补拉缺失区间。"""
+    adjust = normalize_adjust_value(adjust)
     missing = find_missing_intervals(
         cache.get_coverage(provider, symbol, frequency, adjust),
         start_date,

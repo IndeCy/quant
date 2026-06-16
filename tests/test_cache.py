@@ -55,7 +55,10 @@ class TestMarketDataCache(unittest.TestCase):
             date(2026, 5, 3),
         )
 
-        self.assertEqual(list(actual.columns), ["open", "high", "low", "close", "volume", "amount"])
+        self.assertTrue({"open", "high", "low", "close", "volume", "amount"}.issubset(actual.columns))
+        self.assertIn("is_suspended", actual.columns)
+        self.assertIn("limit_up", actual.columns)
+        self.assertIn("limit_down", actual.columns)
         self.assertEqual(len(actual), 2)
         self.assertAlmostEqual(actual.iloc[0]["close"], 11.5)
 
