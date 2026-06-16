@@ -124,7 +124,10 @@ class BacktestEngine:
             commission_rate=commission_rate,
             slippage_bps=slippage * 10000,
         )
-        self.trading_calendar = trading_calendar or TradingCalendar()
+        source_calendar = None
+        if trading_calendar is None and hasattr(data_manager, "get_trading_calendar"):
+            source_calendar = data_manager.get_trading_calendar()
+        self.trading_calendar = trading_calendar or source_calendar or TradingCalendar()
         
         self.trades = []
         self.daily_values = []
@@ -171,7 +174,12 @@ class BacktestEngine:
         for symbol in self.data_manager.get_symbols():
             data = self.data_manager.get_data(symbol)
             dates.update(pd.Timestamp(index).normalize() for index in data.index)
-        return sorted(day for day in dates if self.trading_calendar.is_trading_day(day))
+        if not dates:
+            return []
+        start = min(dates)
+        end = max(dates)
+        # 有真实交易日历时，回测按日历推进；个股停牌或缺 bar 由成交模型拦截。
+        return self.trading_calendar.trading_days(start, end)
 
     def _get_bar(self, symbol: str, current_date: pd.Timestamp) -> Optional[pd.Series]:
         """读取某标的某交易日K线，不存在则返回 None。"""
@@ -428,7 +436,7 @@ class BacktestEngine:
         dates = run_calendar.trading_days(available_dates[0], available_dates[-1])
         
         print(f"开始回测: {dates[0]} 到 {dates[-1]}")
-        print(f"初始资金: ¥{self.portfolio.initial_capital:,.2f}")
+        print(f"初始资金: CNY {self.portfolio.initial_capital:,.2f}")
         
         for current_date in dates:
             # 先执行此前信号在当前交易日触发的订单，再生成收盘后的新信号。

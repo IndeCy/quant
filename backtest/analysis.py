@@ -162,15 +162,15 @@ class PerformanceAnalyzer:
         
         summary = self.get_summary()
         
-        print(f"初始资金: ¥{self.initial_capital:,.2f}")
-        print(f"最终资产: ¥{summary['最终资产']:,.2f}")
+        print(f"初始资金: CNY {self.initial_capital:,.2f}")
+        print(f"最终资产: CNY {summary['最终资产']:,.2f}")
         print(f"总收益率: {summary['总收益率']:.2%}")
         print(f"年化收益率: {summary['年化收益率']:.2%}")
         print(f"夏普比率: {summary['夏普比率']:.2f}")
         print(f"最大回撤: {summary['最大回撤']:.2%}")
         print(f"波动率(年化): {summary['波动率']:.2%}")
         print(f"换手率: {summary['换手率']:.2%}")
-        print(f"总交易成本: ¥{summary['总交易成本']:,.2f}")
+        print(f"总交易成本: CNY {summary['总交易成本']:,.2f}")
         print(f"成交失败次数: {int(summary['成交失败次数'])}")
         print(f"胜率: {summary['胜率']:.2%}")
         print(f"交易次数: {int(summary['交易次数'])}")
@@ -197,7 +197,7 @@ class PerformanceAnalyzer:
                 label='总资产', linewidth=2)
         ax1.axhline(y=self.initial_capital, color='r', linestyle='--', 
                    label='初始资金', alpha=0.5)
-        ax1.set_ylabel('资产价值 (¥)', fontsize=12)
+        ax1.set_ylabel('资产价值 (CNY)', fontsize=12)
         ax1.set_title('资金曲线', fontsize=14, fontweight='bold')
         ax1.legend()
         ax1.grid(True, alpha=0.3)

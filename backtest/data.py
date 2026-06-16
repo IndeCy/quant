@@ -4,19 +4,46 @@
 """
 
 import pandas as pd
-from typing import Optional, List
+from typing import Optional, List, Protocol
 from datetime import datetime
 
 from data.adjustment import AdjustType, normalize_adjust
+from data.calendar import TradingCalendar
 from data.cleaning import clean_daily_bars
+
+
+class MarketDataSource(Protocol):
+    """统一行情数据源接口，避免业务模块直接访问底层存储。"""
+
+    def get_daily_bars(
+        self,
+        symbol: str,
+        start_date: str | pd.Timestamp | None = None,
+        end_date: str | pd.Timestamp | None = None,
+        adjust_policy: str | AdjustType = AdjustType.NONE,
+    ) -> pd.DataFrame:
+        """按复权口径读取统一 schema 日线。"""
+
+    def get_trading_calendar(
+        self,
+        start_date: str | pd.Timestamp | None = None,
+        end_date: str | pd.Timestamp | None = None,
+    ) -> TradingCalendar:
+        """返回数据源交易日历。"""
 
 
 class DataManager:
     """A股数据管理器"""
     
-    def __init__(self):
+    def __init__(
+        self,
+        data_source: MarketDataSource | None = None,
+        default_adjust: str | AdjustType = AdjustType.NONE,
+    ):
         self.data = {}
         self.adjustments = {}
+        self.data_source = data_source
+        self.default_adjust = normalize_adjust(default_adjust)
         
     def load_data(self, symbol: str, data: pd.DataFrame, adjust: str | AdjustType = AdjustType.NONE) -> None:
         """
@@ -33,6 +60,30 @@ class DataManager:
         cleaned.attrs["adjust"] = adjust_type.value
         self.data[symbol] = cleaned
         self.adjustments[symbol] = adjust_type
+
+    def load_symbol(
+        self,
+        symbol: str,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+        adjust: str | AdjustType | None = None,
+    ) -> None:
+        """
+        通过统一数据源接口加载单只股票。
+
+        DuckDB 等外部数据源必须在这里显式传入复权口径，确保信号价、成交价、
+        估值价和基准价不会在同一次回测里混用不同价格口径。
+        """
+        if self.data_source is None:
+            raise ValueError("DataManager 未配置外部数据源，不能 load_symbol")
+        adjust_type = self.default_adjust if adjust is None else normalize_adjust(adjust)
+        bars = self.data_source.get_daily_bars(
+            symbol,
+            start_date=start_date,
+            end_date=end_date,
+            adjust_policy=adjust_type,
+        )
+        self.load_data(symbol, bars, adjust=adjust_type)
         
     def get_data(self, symbol: str, start_date: Optional[datetime] = None, 
                  end_date: Optional[datetime] = None) -> pd.DataFrame:
@@ -95,6 +146,16 @@ class DataManager:
     def get_adjustments(self) -> dict[str, AdjustType]:
         """获取所有已加载标的的复权口径。"""
         return self.adjustments.copy()
+
+    def get_trading_calendar(
+        self,
+        start_date: Optional[datetime] = None,
+        end_date: Optional[datetime] = None,
+    ) -> TradingCalendar | None:
+        """获取外部数据源交易日历；无外部数据源时返回 None。"""
+        if self.data_source is None:
+            return None
+        return self.data_source.get_trading_calendar(start_date, end_date)
 
     def validate_single_adjustment_policy(self) -> AdjustType | None:
         """校验同一回测数据集中不能静默混用多个复权口径。"""
