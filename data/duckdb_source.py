@@ -17,6 +17,7 @@ from data.adjustment import AdjustType, normalize_adjust
 from data.calendar import TradingCalendar
 from data.cleaning import clean_daily_bars
 from data.financial import FinancialDataPortal
+from data.financial_duckdb_source import DuckDBFinancialDataSource
 
 
 DEFAULT_DUCKDB_PATH = Path(__file__).resolve().parents[2] / "database" / "daily_adj_19901219_20260615.duckdb"
@@ -41,10 +42,15 @@ class DuckDBAshareDataSource:
     STOCK_BASIC_TABLE = "stock_basic"
     STOCK_ST_TABLE = "stock_st"
 
-    def __init__(self, db_path: str | Path = DEFAULT_DUCKDB_PATH):
+    def __init__(
+        self,
+        db_path: str | Path = DEFAULT_DUCKDB_PATH,
+        financial_db_paths: dict[str, str | Path] | None = None,
+    ):
         self.db_path = Path(db_path)
         if not self.db_path.exists():
             raise FileNotFoundError(f"DuckDB 数据文件不存在: {self.db_path}")
+        self.financial_db_paths = financial_db_paths or {}
 
     def _connect(self):
         try:
@@ -182,8 +188,13 @@ class DuckDBAshareDataSource:
             results[str(symbol)] = bars
         return results
 
-    def get_financial_portal(self) -> FinancialDataPortal:
-        """当前 DuckDB 不含财务公告日字段，禁止构造会产生未来函数的财务门面。"""
+    def get_financial_portal(
+        self,
+        fields_by_statement: dict[str, Iterable[str]] | None = None,
+    ) -> FinancialDataPortal:
+        """读取已挂载财务 DuckDB，并构造 as-of 财务门面。"""
+        if self.financial_db_paths:
+            return DuckDBFinancialDataSource(self.financial_db_paths).get_financial_portal(fields_by_statement)
         raise ValueError(
             "DuckDB 数据库未发现财务表及 publish_date/ann_date 字段，"
             "不能提供 as-of 财务查询。"

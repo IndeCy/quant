@@ -53,3 +53,29 @@
   - 当前持仓股海外风险暴露表
   - 美股宏观事件窗口收益统计
   - 可接入 `backtest/macro_risk.py` 和模拟盘通知模块的风险评分设计
+
+### 补全 A 股 as-of 行业分类数据
+
+- 状态：待开始
+- 优先级：数据质量 P1
+- 来源：Quality Factor Purity Study 暴露出当前项目内置行业树覆盖不足，用户表示后续找机会补数据。
+- 背景：当前 `backtest/industry.py` 是静态样例行业树，不是完整全 A 股历史行业分类库。Quality Cleanup 持仓中约 73.87% 被标记为“未知行业”，导致行业暴露、行业中性化、剔除资源/公用事业等研究只能作为弱证据。
+- 目标：
+  - 补充完整 A 股行业归属数据，至少包含证券代码、一级行业、二级行业、三级行业、生效日期、失效日期、数据源。
+  - 行业数据必须支持 as-of 查询，避免使用今天的行业归属解释历史持仓。
+  - 支持申万行业或中信行业之一作为主口径，保留 `source` 字段方便未来切换或交叉验证。
+  - 将行业数据接入 Quality Attribution / Purity Study，使行业中性化不再把大量股票混入“未知”桶。
+  - 增加覆盖率审计：全市场覆盖率、持仓覆盖率、未知行业占比、行业变更记录数量。
+- 建议数据结构：
+  - `symbol`
+  - `industry_level1`
+  - `industry_level2`
+  - `industry_level3`
+  - `start_date`
+  - `end_date`
+  - `source`
+- 建议输出物：
+  - `data/industry_asof_source.py`
+  - 行业 as-of DuckDB/CSV 数据文件
+  - `tests/test_industry_asof_source.py`
+  - 更新 `reports/quality_attribution_audit.md` 和 `reports/quality_factor_purity_study.md` 的行业暴露口径
