@@ -25,8 +25,8 @@ def market_frame(rows: list[dict[str, object]]) -> pd.DataFrame:
         "close": 10.0,
         "volume": 100_000,
         "is_suspended": False,
-        "limit_up": 11.0,
-        "limit_down": 9.0,
+        "limit_up": False,
+        "limit_down": False,
     }
     normalized = []
     for row in rows:
@@ -60,7 +60,7 @@ class TestPaperExecution(unittest.TestCase):
         data = market_frame(
             [
                 {"date": "2024-01-02", "symbol": "AAA", "close": 10.0},
-                {"date": "2024-01-03", "symbol": "AAA", "open": 11.0, "close": 11.0, "limit_up": 11.0},
+                {"date": "2024-01-03", "symbol": "AAA", "open": 11.0, "close": 11.0, "limit_up": True},
             ]
         )
         engine = PaperTradingEngine(initial_cash=10_000.0)

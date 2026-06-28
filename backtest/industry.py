@@ -6,6 +6,7 @@
 import csv
 import json
 from copy import deepcopy
+from pathlib import Path
 from typing import Dict, List, Optional
 
 
@@ -985,9 +986,12 @@ class IndustryManager:
     def __init__(
         self,
         industry_tree: Optional[Dict[str, Dict[str, Dict[str, List[Dict[str, str]]]]]] = None,
+        industry_cache_path: str | Path = "data/industry_increment.duckdb",
     ):
         self._industry_tree = deepcopy(industry_tree or SW_INDUSTRY_TREE)
         self._stock_index = self._build_stock_index()
+        if industry_tree is None:
+            self._load_tushare_industry_cache(Path(industry_cache_path))
 
     def _build_stock_index(self) -> Dict[str, Dict[str, str]]:
         """构建股票到行业路径的索引"""
@@ -1006,6 +1010,36 @@ class IndustryManager:
                                 "level3": level3,
                             }
         return stock_index
+
+    def _load_tushare_industry_cache(self, db_path: Path) -> None:
+        """读取 Tushare 静态行业缓存，补齐内置行业树未覆盖股票。"""
+        if not db_path.exists():
+            return
+        try:
+            import duckdb
+
+            with duckdb.connect(str(db_path), read_only=True) as con:
+                records = con.execute(
+                    """
+                    SELECT ts_code AS code, name, industry
+                    FROM stock_industry
+                    WHERE ts_code IS NOT NULL AND industry IS NOT NULL AND industry != ''
+                    """
+                ).fetchall()
+        except Exception:
+            return
+        for code, name, industry in records:
+            if code in self._stock_index:
+                continue
+            level1 = str(industry)
+            self._stock_index[str(code)] = {
+                "code": str(code),
+                "name": str(name or ""),
+                "level1": level1,
+                "level2": level1,
+                "level3": level1,
+                "source": "tushare_stock_basic",
+            }
 
     def get_level1_industries(self) -> List[str]:
         """获取所有一级行业名称列表"""

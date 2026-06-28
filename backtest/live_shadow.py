@@ -130,9 +130,9 @@ class MarketConstraintChecker:
             if bool(row.get("is_suspended", False)):
                 reasons.append("SUSPENDED_NO_FILL")
             open_price = float(row.get("open", row.get("close", 0.0)) or 0.0)
-            if side == "BUY" and open_price >= float(row.get("limit_up", float("inf"))):
+            if side == "BUY" and bool(row.get("limit_up", False)):
                 reasons.append("LIMIT_UP_NO_FILL")
-            if side == "SELL" and open_price <= float(row.get("limit_down", float("-inf"))):
+            if side == "SELL" and bool(row.get("limit_down", False)):
                 reasons.append("LIMIT_DOWN_NO_FILL")
             allowed_amount = float(row.get("amount", 0.0)) * self.max_amount_participation
             if abs(float(requested_amount)) > allowed_amount:

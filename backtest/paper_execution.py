@@ -170,9 +170,9 @@ class BrokerSimulator:
         open_price = float(market_row.get("open", 0.0) or 0.0)
         if not math.isfinite(open_price) or open_price <= 0:
             return "INVALID_PRICE_NO_FILL"
-        if order.side == "BUY" and open_price >= float(market_row.get("limit_up", math.inf)):
+        if order.side == "BUY" and bool(market_row.get("limit_up", False)):
             return "LIMIT_UP_NO_FILL"
-        if order.side == "SELL" and open_price <= float(market_row.get("limit_down", -math.inf)):
+        if order.side == "SELL" and bool(market_row.get("limit_down", False)):
             return "LIMIT_DOWN_NO_FILL"
         return ""
 
