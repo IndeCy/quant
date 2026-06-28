@@ -1,30 +1,92 @@
-import { useOutletContext } from "react-router-dom";
+import { useEffect, useState } from "react";
 
-import type { DashboardData } from "../../app/types";
+import { getDataHealth } from "../../entities/dataHealth/api";
+import type { DataHealth, DataHealthSection } from "../../entities/dataHealth/model";
+import { healthTone } from "../../entities/dataHealth/status";
 import { PageHeader } from "../../shared/ui/PageHeader";
 
 export function DataHealthPage() {
-  const data = useOutletContext<DashboardData>();
-  const latestMarket = data.marketSeries.at(-1);
+  const [health, setHealth] = useState<DataHealth | null>(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    getDataHealth()
+      .then(setHealth)
+      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)));
+  }, []);
+
   return (
     <>
       <PageHeader title="数据" description="跟踪行情、基准和系统状态数据的新鲜度。" />
-      <section className="panel compact">
-        <dl>
-          <div>
-            <dt>510300最新日期</dt>
-            <dd>{latestMarket?.trade_date ?? "-"}</dd>
-          </div>
-          <div>
-            <dt>策略最新日期</dt>
-            <dd>{data.strategy.latest_metrics?.trade_date ?? "-"}</dd>
-          </div>
-          <div>
-            <dt>报告数量</dt>
-            <dd>{data.reports.length}</dd>
-          </div>
-        </dl>
-      </section>
+      {error ? <section className="panel compact missing-file">{error}</section> : null}
+      {!health ? <section className="panel compact">加载中</section> : <HealthGrid health={health} />}
     </>
+  );
+}
+
+function HealthGrid({ health }: { health: DataHealth }) {
+  return (
+    <div className="health-grid">
+      <HealthCard
+        title="A股增量行情"
+        section={health.live_market_increment}
+        rows={[
+          ["日线", health.live_market_increment.latest_daily_date],
+          ["复权因子", health.live_market_increment.latest_adj_factor_date]
+        ]}
+      />
+      <HealthCard
+        title="基准增量行情"
+        section={health.benchmark_increment}
+        rows={[
+          ["510300", health.benchmark_increment.latest_fund_date],
+          ["ETF复权", health.benchmark_increment.latest_fund_adj_date],
+          ["上证指数", health.benchmark_increment.latest_index_date]
+        ]}
+      />
+      <HealthCard
+        title="监控指标库"
+        section={health.monitoring}
+        rows={[
+          ["策略指标", health.monitoring.latest_strategy_date],
+          ["市场指标", health.monitoring.latest_market_date]
+        ]}
+      />
+      <HealthCard
+        title="系统状态库"
+        section={health.system_state}
+        rows={[
+          ["运行记录", health.system_state.latest_run_date],
+          ["报告索引", health.system_state.latest_report_date]
+        ]}
+      />
+    </div>
+  );
+}
+
+function HealthCard({ title, section, rows }: { title: string; section: DataHealthSection; rows: Array<[string, string | null | undefined]> }) {
+  const tone = healthTone(
+    section.exists,
+    rows.map(([, value]) => value)
+  );
+  return (
+    <section className="panel compact health-card">
+      <div className="health-title">
+        <h2>{title}</h2>
+        <span className={`status ${tone}`}>{section.exists ? tone : "missing"}</span>
+      </div>
+      <dl>
+        {rows.map(([label, value]) => (
+          <div key={label}>
+            <dt>{label}</dt>
+            <dd>{value ?? "-"}</dd>
+          </div>
+        ))}
+        <div>
+          <dt>文件</dt>
+          <dd>{section.path}</dd>
+        </div>
+      </dl>
+    </section>
   );
 }

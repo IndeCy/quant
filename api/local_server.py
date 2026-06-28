@@ -45,6 +45,11 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
         """返回因子列表。"""
         return api_service.factors()
 
+    @app.get("/api/data/health")
+    def data_health() -> dict[str, Any]:
+        """返回本地数据健康状态。"""
+        return api_service.data_health()
+
     @app.get("/api/reports")
     def reports(strategy_id: str | None = None) -> list[dict[str, Any]]:
         """返回报告索引。"""
@@ -62,6 +67,14 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
     def runs(strategy_id: str | None = None, limit: int = Query(default=30, ge=1, le=500)) -> list[dict[str, Any]]:
         """返回运行记录。"""
         return api_service.runs(strategy_id=strategy_id, limit=limit)
+
+    @app.get("/api/runs/{strategy_id}/{trade_date}")
+    def run_detail(strategy_id: str, trade_date: str) -> dict[str, Any]:
+        """返回某次运行详情。"""
+        detail = api_service.run_detail(strategy_id, trade_date)
+        if detail is None:
+            raise HTTPException(status_code=404, detail="run not found")
+        return detail
 
     @app.get("/api/series/strategy/{strategy_id}")
     def strategy_series(strategy_id: str) -> list[dict[str, Any]]:

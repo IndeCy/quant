@@ -232,6 +232,7 @@ def write_production_artifacts(
     holdings: pd.DataFrame,
     run,
     benchmark_curve: pd.Series,
+    warnings: list[str] | None = None,
 ) -> Path:
     """写入 runs/YYYYMMDD 每日产物，并按月末生成月度复盘。"""
     store = QualityPaperStore(PAPER_PATH)
@@ -255,6 +256,7 @@ def write_production_artifacts(
         run_dir,
         "daily pipeline completed",
     )
+    register_pipeline_steps(system_repository, snapshot.trade_date, run_dir, warnings or [])
     if is_month_end_trade_date(snapshot.trade_date):
         month = snapshot.trade_date[:6]
         monthly_path = build_monthly_review(RUNS_ROOT, month, repository.load_strategy_history("quality_overlay"))
@@ -285,6 +287,36 @@ def register_daily_artifacts(repository: SystemRepository, trade_date: str, run_
             title=title,
             file_path=run_dir / filename,
             tags=tags,
+        )
+
+
+def register_pipeline_steps(
+    repository: SystemRepository,
+    trade_date: str,
+    run_dir: Path,
+    warnings: list[str],
+    notification_status: str = "SKIPPED",
+) -> None:
+    """登记生产候选流水线的分步骤状态。"""
+    update_status = "WARNING" if warnings else "SUCCESS"
+    update_message = "; ".join(warnings) if warnings else "数据更新完成"
+    steps = [
+        (1, "data_update", update_status, update_message, ""),
+        (2, "data_validation", "SUCCESS", "增量数据质量校验通过", ""),
+        (3, "strategy_run", "SUCCESS", "Quality Alpha V1 运行完成", ""),
+        (4, "monitoring_dashboard", "SUCCESS", "监控指标与 dashboard 数据已刷新", ""),
+        (5, "report_generation", "SUCCESS", "日报、调仓计划、组合快照和指标已生成", run_dir),
+        (6, "notification", notification_status, "未请求推送" if notification_status == "SKIPPED" else "推送完成", ""),
+    ]
+    for sequence, step_name, status, message, artifact_path in steps:
+        repository.record_run_step(
+            "quality_overlay",
+            trade_date,
+            sequence,
+            step_name,
+            status,
+            message,
+            artifact_path,
         )
 
 
@@ -437,7 +469,7 @@ def main() -> None:
         validate_incremental_quality()
         snapshot, holdings, run, benchmark_curve, shanghai_curve = build_snapshot(warnings)
         update_monitoring_dashboard(run, benchmark_curve, shanghai_curve)
-        write_production_artifacts(snapshot, holdings, run, benchmark_curve)
+        write_production_artifacts(snapshot, holdings, run, benchmark_curve, warnings)
         QualityPaperStore(PAPER_PATH).save(snapshot)
         REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
         REPORT_PATH.write_text(render_report(snapshot, holdings, updated_dates), encoding="utf-8")
@@ -446,6 +478,15 @@ def main() -> None:
             if not args.bark_url:
                 raise SystemExit("--push需要--bark-url或BARK_PUSH_URL")
             push_report(snapshot, args.bark_url)
+            SystemRepository(RUNTIME_PATHS.system_state_path).record_run_step(
+                "quality_overlay",
+                snapshot.trade_date,
+                6,
+                "notification",
+                "SUCCESS",
+                "Bark 推送完成",
+                "",
+            )
     except Exception as exc:
         write_run_log(run_log_dir, "FAILED", str(exc))
         SystemRepository(RUNTIME_PATHS.system_state_path).record_strategy_run(

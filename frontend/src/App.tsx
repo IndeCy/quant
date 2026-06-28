@@ -13,6 +13,7 @@ import { RunsPage } from "./pages/runs/RunsPage";
 import { SettingsPage } from "./pages/settings/SettingsPage";
 import { StrategiesPage } from "./pages/strategies/StrategiesPage";
 import "./shared/styles/global.css";
+import "./shared/styles/features.css";
 
 function App() {
   const [data, setData] = useState<DashboardData | null>(null);

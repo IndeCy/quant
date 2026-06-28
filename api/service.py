@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from pathlib import Path
+import sqlite3
 from typing import Any
 
 import pandas as pd
@@ -64,9 +65,50 @@ class LocalApiService:
             return {**report, "content": "", "missing": True}
         return {**report, "content": path.read_text(encoding="utf-8"), "missing": False}
 
+    def data_health(self) -> dict[str, Any]:
+        """汇总本地数据文件的新鲜度。"""
+        return {
+            "runtime_root": str(self.paths.root),
+            "live_market_increment": {
+                "path": str(self.paths.live_market_increment_path),
+                "exists": self.paths.live_market_increment_path.exists(),
+                "latest_daily_date": _duckdb_max_date(self.paths.live_market_increment_path, "daily", "trade_date"),
+                "latest_adj_factor_date": _duckdb_max_date(self.paths.live_market_increment_path, "adj_factor", "trade_date"),
+            },
+            "benchmark_increment": {
+                "path": str(self.paths.benchmark_increment_path),
+                "exists": self.paths.benchmark_increment_path.exists(),
+                "latest_fund_date": _duckdb_max_date(self.paths.benchmark_increment_path, "fund_daily", "trade_date"),
+                "latest_fund_adj_date": _duckdb_max_date(self.paths.benchmark_increment_path, "fund_adj", "trade_date"),
+                "latest_index_date": _duckdb_max_date(self.paths.benchmark_increment_path, "index_daily", "trade_date"),
+            },
+            "monitoring": {
+                "path": str(self.paths.monitoring_path),
+                "exists": self.paths.monitoring_path.exists(),
+                "latest_strategy_date": _sqlite_max_date(self.paths.monitoring_path, "strategy_nav_daily", "trade_date"),
+                "latest_market_date": _sqlite_max_date(self.paths.monitoring_path, "market_state_daily", "trade_date"),
+            },
+            "system_state": {
+                "path": str(self.paths.system_state_path),
+                "exists": self.paths.system_state_path.exists(),
+                "latest_run_date": _sqlite_max_date(self.paths.system_state_path, "strategy_runs", "trade_date"),
+                "latest_report_date": _sqlite_max_date(self.paths.system_state_path, "report_index", "trade_date"),
+            },
+        }
+
     def runs(self, strategy_id: str | None = None, limit: int = 30) -> list[dict[str, Any]]:
         """返回运行记录。"""
         return self.system_repository.list_runs(strategy_id=strategy_id, limit=limit)
+
+    def run_detail(self, strategy_id: str, trade_date: str) -> dict[str, Any] | None:
+        """返回某次运行及其 pipeline 步骤。"""
+        run = self.system_repository.get_run(strategy_id, trade_date)
+        if run is None:
+            return None
+        return {
+            "run": run,
+            "steps": self.system_repository.list_run_steps(strategy_id, trade_date),
+        }
 
     def strategy_series(self, strategy_id: str) -> list[dict[str, Any]]:
         """返回策略净值、风险和执行成本曲线。"""
@@ -84,6 +126,32 @@ def _frame_records(frame: pd.DataFrame) -> list[dict[str, Any]]:
     if frame.empty:
         return []
     return _json_ready(frame.to_dict(orient="records"))
+
+
+def _duckdb_max_date(path: Path, table: str, column: str) -> str | None:
+    """安全读取 DuckDB 表最大日期，文件或表不存在时返回空。"""
+    if not path.exists():
+        return None
+    try:
+        import duckdb
+
+        with duckdb.connect(str(path), read_only=True) as con:
+            value = con.execute(f"SELECT MAX({column}) FROM {table}").fetchone()[0]
+    except Exception:
+        return None
+    return str(value) if value else None
+
+
+def _sqlite_max_date(path: Path, table: str, column: str) -> str | None:
+    """安全读取 SQLite 表最大日期，文件或表不存在时返回空。"""
+    if not path.exists():
+        return None
+    try:
+        with sqlite3.connect(path) as con:
+            value = con.execute(f"SELECT MAX({column}) FROM {table}").fetchone()[0]
+    except Exception:
+        return None
+    return str(value) if value else None
 
 
 def _json_ready(value: Any) -> Any:

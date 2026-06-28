@@ -69,3 +69,17 @@ def test_system_repository_loads_strategy_factor_definition(tmp_path: Path) -> N
     assert definition["status"] == "active"
     assert [item["factor_id"] for item in definition["factors"]] == ["roa", "roe"]
     assert sum(item["weight"] for item in definition["factors"]) == 1.0
+
+
+def test_system_repository_records_run_steps(tmp_path: Path) -> None:
+    """运行中心需要能回看每日 pipeline 分步骤状态。"""
+    repository = SystemRepository(tmp_path / "state" / "quant_system.sqlite")
+
+    repository.record_run_step("quality_overlay", "20260624", 1, "data_update", "SUCCESS", "增量完成")
+    repository.record_run_step("quality_overlay", "20260624", 2, "strategy_run", "SUCCESS", "策略完成")
+    repository.record_run_step("quality_overlay", "20260624", 2, "strategy_run", "FAILED", "重跑失败")
+
+    steps = repository.list_run_steps("quality_overlay", "20260624")
+    assert [item["step_name"] for item in steps] == ["data_update", "strategy_run"]
+    assert steps[1]["status"] == "FAILED"
+    assert steps[1]["message"] == "重跑失败"

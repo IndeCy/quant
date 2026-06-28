@@ -1,5 +1,5 @@
 import { getJson } from "../../shared/api/client";
-import type { StrategyRun } from "./model";
+import type { StrategyRun, StrategyRunDetail } from "./model";
 
 export function listRuns(strategyId?: string, limit = 30): Promise<StrategyRun[]> {
   const params = new URLSearchParams();
@@ -8,4 +8,8 @@ export function listRuns(strategyId?: string, limit = 30): Promise<StrategyRun[]
   }
   params.set("limit", String(limit));
   return getJson<StrategyRun[]>(`/api/runs?${params.toString()}`);
+}
+
+export function getRunDetail(strategyId: string, tradeDate: string): Promise<StrategyRunDetail> {
+  return getJson<StrategyRunDetail>(`/api/runs/${encodeURIComponent(strategyId)}/${encodeURIComponent(tradeDate)}`);
 }

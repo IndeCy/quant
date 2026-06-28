@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+import duckdb
 import pandas as pd
 from fastapi.testclient import TestClient
 
@@ -92,13 +93,57 @@ def test_local_api_service_reads_registered_report_content(tmp_path: Path) -> No
     assert content["content"] == "# 日报\n\n- 状态：正常\n"
 
 
+def test_local_api_service_reports_data_health(tmp_path: Path) -> None:
+    """数据健康接口应汇总行情、基准、监控和系统状态文件。"""
+    paths = _seed_runtime(tmp_path)
+    with duckdb.connect(str(paths.live_market_increment_path)) as con:
+        con.execute("CREATE TABLE daily(ts_code VARCHAR, trade_date VARCHAR)")
+        con.execute("CREATE TABLE adj_factor(ts_code VARCHAR, trade_date VARCHAR, adj_factor DOUBLE)")
+        con.execute("INSERT INTO daily VALUES ('000001.SZ', '20260624')")
+        con.execute("INSERT INTO adj_factor VALUES ('000001.SZ', '20260624', 1.0)")
+    with duckdb.connect(str(paths.benchmark_increment_path)) as con:
+        con.execute("CREATE TABLE fund_daily(ts_code VARCHAR, trade_date VARCHAR)")
+        con.execute("CREATE TABLE fund_adj(ts_code VARCHAR, trade_date VARCHAR, adj_factor DOUBLE)")
+        con.execute("CREATE TABLE index_daily(ts_code VARCHAR, trade_date VARCHAR)")
+        con.execute("INSERT INTO fund_daily VALUES ('510300.SH', '20260624')")
+        con.execute("INSERT INTO fund_adj VALUES ('510300.SH', '20260624', 1.0)")
+        con.execute("INSERT INTO index_daily VALUES ('000001.SH', '20260624')")
+    service = LocalApiService(paths)
+
+    health = service.data_health()
+
+    assert health["runtime_root"] == str(paths.root)
+    assert health["live_market_increment"]["latest_daily_date"] == "20260624"
+    assert health["live_market_increment"]["latest_adj_factor_date"] == "20260624"
+    assert health["benchmark_increment"]["latest_fund_date"] == "20260624"
+    assert health["benchmark_increment"]["latest_index_date"] == "20260624"
+    assert health["monitoring"]["latest_strategy_date"] == "20260624"
+
+
+def test_local_api_service_returns_run_detail_with_steps(tmp_path: Path) -> None:
+    """运行详情应返回运行记录和分步骤状态。"""
+    paths = _seed_runtime(tmp_path)
+    repository = SystemRepository(paths.system_state_path)
+    repository.record_run_step("quality_overlay", "20260624", 1, "data_update", "SUCCESS", "增量完成")
+    repository.record_run_step("quality_overlay", "20260624", 2, "report_generation", "SUCCESS", "报告完成")
+    service = LocalApiService(paths)
+
+    detail = service.run_detail("quality_overlay", "20260624")
+
+    assert detail is not None
+    assert detail["run"]["status"] == "SUCCESS"
+    assert [item["step_name"] for item in detail["steps"]] == ["data_update", "report_generation"]
+
+
 def test_fastapi_routes_delegate_to_service(tmp_path: Path) -> None:
     """FastAPI 路由层应复用同一套 service 方法。"""
     service = LocalApiService(_seed_runtime(tmp_path))
     client = TestClient(create_app(service))
 
     assert client.get("/api/health").json()["status"] == "ok"
+    assert client.get("/api/data/health").json()["runtime_root"].endswith("runtime")
     assert client.get("/api/strategies").json()[0]["strategy_id"] == "quality_overlay"
+    assert client.get("/api/runs/quality_overlay/20260624").json()["run"]["trade_date"] == "20260624"
     assert client.get("/api/series/strategy/quality_overlay").json()[-1]["trade_date"] == "20260624"
     assert client.get("/api/reports/missing").status_code == 404
     assert client.get("/unknown").status_code == 404

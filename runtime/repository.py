@@ -192,6 +192,55 @@ class SystemRepository:
             rows = con.execute(sql, params).fetchall()
         return [self._row_to_dict(row) for row in rows]
 
+    def get_run(self, strategy_id: str, trade_date: str) -> dict[str, Any] | None:
+        """读取某策略某日运行记录。"""
+        with self._connect() as con:
+            row = con.execute(
+                "SELECT * FROM strategy_runs WHERE strategy_id = ? AND trade_date = ?",
+                [strategy_id, trade_date],
+            ).fetchone()
+        return self._row_to_dict(row) if row else None
+
+    def record_run_step(
+        self,
+        strategy_id: str,
+        trade_date: str,
+        sequence: int,
+        step_name: str,
+        status: str,
+        message: str = "",
+        artifact_path: str | Path = "",
+    ) -> None:
+        """按策略、日期和步骤名幂等记录 pipeline 步骤状态。"""
+        with self._connect() as con:
+            con.execute(
+                """
+                INSERT INTO strategy_run_steps(
+                    strategy_id, trade_date, sequence, step_name, status, message, artifact_path
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(strategy_id, trade_date, step_name) DO UPDATE SET
+                    sequence=excluded.sequence,
+                    status=excluded.status,
+                    message=excluded.message,
+                    artifact_path=excluded.artifact_path,
+                    modified_at=CURRENT_TIMESTAMP
+                """,
+                [strategy_id, trade_date, int(sequence), step_name, status, message, str(artifact_path)],
+            )
+
+    def list_run_steps(self, strategy_id: str, trade_date: str) -> list[dict[str, Any]]:
+        """读取某次运行的 pipeline 步骤。"""
+        with self._connect() as con:
+            rows = con.execute(
+                """
+                SELECT * FROM strategy_run_steps
+                WHERE strategy_id = ? AND trade_date = ?
+                ORDER BY sequence, step_name
+                """,
+                [strategy_id, trade_date],
+            ).fetchall()
+        return [self._row_to_dict(row) for row in rows]
+
     def upsert_report(
         self,
         report_type: str,
@@ -286,6 +335,22 @@ class SystemRepository:
                 tags_json TEXT NOT NULL DEFAULT '[]',
                 created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+            )
+            """
+        )
+        con.execute(
+            """
+            CREATE TABLE IF NOT EXISTS strategy_run_steps (
+                strategy_id TEXT NOT NULL,
+                trade_date TEXT NOT NULL,
+                sequence INTEGER NOT NULL,
+                step_name TEXT NOT NULL,
+                status TEXT NOT NULL,
+                message TEXT NOT NULL DEFAULT '',
+                artifact_path TEXT NOT NULL DEFAULT '',
+                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (strategy_id, trade_date, step_name)
             )
             """
         )
