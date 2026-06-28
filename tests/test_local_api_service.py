@@ -63,6 +63,74 @@ def test_local_api_service_exposes_strategy_detail(tmp_path: Path) -> None:
     assert len(detail["factors"]) == 3
 
 
+def test_local_api_service_exposes_factor_detail(tmp_path: Path) -> None:
+    """因子详情应包含 as-of 配置和使用该因子的策略关系。"""
+    service = LocalApiService(_seed_runtime(tmp_path))
+
+    detail = service.factor_detail("roa")
+
+    assert detail is not None
+    assert detail["name"] == "ROA"
+    assert detail["config"]["as_of_field"] == "f_ann_date"
+    assert detail["strategies"][0]["strategy_id"] == "quality_overlay"
+    assert round(detail["strategies"][0]["weight"], 6) == round(1 / 3, 6)
+
+
+def test_local_api_service_saves_strategy_draft(tmp_path: Path) -> None:
+    """本地 API 可保存策略草案，但不触发生产运行。"""
+    service = LocalApiService(_seed_runtime(tmp_path))
+
+    saved = service.save_strategy_draft(
+        {
+            "draft_id": "draft_quality_two_factor",
+            "name": "Quality Two Factor Draft",
+            "description": "ROA 与 OCF 的研究草案",
+            "config": {"top_n": 20, "rebalance": "monthly"},
+            "factors": [
+                {"factor_id": "roa", "weight": 0.7, "transform": "winsorize_zscore", "enabled": True},
+                {"factor_id": "ocf_to_or", "weight": 0.3, "transform": "winsorize_zscore", "enabled": True},
+            ],
+        }
+    )
+
+    assert saved["draft_id"] == "draft_quality_two_factor"
+    assert saved["status"] == "draft"
+    assert len(service.strategy_drafts()) == 1
+
+
+def test_local_api_service_exposes_scheduler_status(tmp_path: Path) -> None:
+    """设置页需要读取每日自动运行任务状态。"""
+    service = LocalApiService(_seed_runtime(tmp_path))
+
+    status = service.scheduler_status()
+
+    assert status["job_store_path"].endswith("state/scheduler.sqlite")
+    assert status["start_command"].startswith("/Users/admin/recommend_analysis/.venv/bin/python3")
+    assert status["enabled"] is False
+
+
+def test_local_api_service_configures_scheduler_job(tmp_path: Path) -> None:
+    """设置页登记每日任务后，job store 中应出现 Quality Alpha 任务。"""
+    service = LocalApiService(_seed_runtime(tmp_path))
+
+    status = service.configure_scheduler_job({"hour": 17, "minute": 5, "skip_update": True})
+
+    assert status["enabled"] is True
+    assert status["schedule"] == "mon-fri 17:05 Asia/Shanghai"
+    assert "--skip-update" in status["start_command"]
+
+
+def test_local_api_service_exposes_backup_manifest(tmp_path: Path) -> None:
+    """设置页需要读取可迁移运行目录清单。"""
+    service = LocalApiService(_seed_runtime(tmp_path))
+
+    manifest = service.backup_manifest()
+
+    assert manifest["runtime_root"].endswith("runtime")
+    assert [item["name"] for item in manifest["items"]] == ["data", "state", "runs", "reports", "config", "logs"]
+    assert "tar -czf" in manifest["backup_command"]
+
+
 def test_local_api_service_lists_reports_and_series(tmp_path: Path) -> None:
     """报告索引和曲线数据应可直接供前端消费。"""
     service = LocalApiService(_seed_runtime(tmp_path))
@@ -141,8 +209,27 @@ def test_fastapi_routes_delegate_to_service(tmp_path: Path) -> None:
     client = TestClient(create_app(service))
 
     assert client.get("/api/health").json()["status"] == "ok"
+    assert client.get("/api/scheduler/status").json()["job_id"] == "quality_overlay_daily_pipeline"
+    scheduler_response = client.post("/api/scheduler/daily-job", json={"hour": 17, "minute": 5, "skip_update": True})
+    assert scheduler_response.status_code == 200
+    assert scheduler_response.json()["schedule"] == "mon-fri 17:05 Asia/Shanghai"
+    assert client.get("/api/backup/manifest").json()["items"][0]["name"] == "data"
     assert client.get("/api/data/health").json()["runtime_root"].endswith("runtime")
     assert client.get("/api/strategies").json()[0]["strategy_id"] == "quality_overlay"
+    assert client.get("/api/factors/roa").json()["strategies"][0]["strategy_id"] == "quality_overlay"
+    assert client.get("/api/factors/missing").status_code == 404
+    response = client.post(
+        "/api/strategy-drafts",
+        json={
+            "draft_id": "draft_quality_two_factor",
+            "name": "Quality Two Factor Draft",
+            "description": "ROA 与 OCF 的研究草案",
+            "config": {"top_n": 20},
+            "factors": [{"factor_id": "roa", "weight": 1.0, "transform": "winsorize_zscore", "enabled": True}],
+        },
+    )
+    assert response.status_code == 200
+    assert client.get("/api/strategy-drafts").json()[0]["draft_id"] == "draft_quality_two_factor"
     assert client.get("/api/runs/quality_overlay/20260624").json()["run"]["trade_date"] == "20260624"
     assert client.get("/api/series/strategy/quality_overlay").json()[-1]["trade_date"] == "20260624"
     assert client.get("/api/reports/missing").status_code == 404

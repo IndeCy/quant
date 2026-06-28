@@ -9,8 +9,10 @@ from typing import Any
 import pandas as pd
 
 from monitoring.repository import MonitoringRepository
+from runtime.backup import build_backup_manifest
 from runtime.paths import RuntimePaths, get_runtime_paths
 from runtime.repository import SystemRepository
+from runtime.scheduler import configure_daily_pipeline_job, load_scheduler_status
 from runtime.strategy_catalog import register_quality_alpha_v1
 
 
@@ -34,6 +36,30 @@ class LocalApiService:
             "reports_dir": str(self.paths.reports_dir),
         }
 
+    def scheduler_status(self) -> dict[str, Any]:
+        """返回本地每日调度器状态。"""
+        return _json_ready(load_scheduler_status(self.paths))
+
+    def configure_scheduler_job(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """登记本地每日调度任务，但不立即执行流水线。"""
+        hour = int(payload.get("hour", 16))
+        minute = int(payload.get("minute", 30))
+        if hour < 0 or hour > 23 or minute < 0 or minute > 59:
+            raise ValueError("hour must be 0-23 and minute must be 0-59")
+        return _json_ready(
+            configure_daily_pipeline_job(
+                self.paths,
+                hour=hour,
+                minute=minute,
+                skip_update=bool(payload.get("skip_update", False)),
+                push=bool(payload.get("push", False)),
+            )
+        )
+
+    def backup_manifest(self) -> dict[str, Any]:
+        """返回运行目录备份和迁移清单。"""
+        return _json_ready(build_backup_manifest(self.paths))
+
     def strategies(self) -> list[dict[str, Any]]:
         """返回策略列表。"""
         return self.system_repository.list_strategies()
@@ -50,6 +76,41 @@ class LocalApiService:
     def factors(self) -> list[dict[str, Any]]:
         """返回因子列表。"""
         return self.system_repository.list_factors()
+
+    def factor_detail(self, factor_id: str) -> dict[str, Any] | None:
+        """返回因子定义和使用该因子的策略关系。"""
+        definition = self.system_repository.load_factor_definition(factor_id)
+        return _json_ready(definition) if definition else None
+
+    def strategy_drafts(self) -> list[dict[str, Any]]:
+        """返回本地策略草案列表。"""
+        return self.system_repository.list_strategy_drafts()
+
+    def strategy_draft_detail(self, draft_id: str) -> dict[str, Any] | None:
+        """返回本地策略草案详情。"""
+        definition = self.system_repository.load_strategy_draft(draft_id)
+        return _json_ready(definition) if definition else None
+
+    def save_strategy_draft(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """保存本地策略草案，供前端维护因子组合。"""
+        draft_id = str(payload.get("draft_id") or "").strip()
+        name = str(payload.get("name") or "").strip()
+        if not draft_id or not name:
+            raise ValueError("draft_id and name are required")
+        factors = payload.get("factors") or []
+        if not isinstance(factors, list) or not factors:
+            raise ValueError("factors are required")
+        self.system_repository.upsert_strategy_draft(
+            draft_id=draft_id,
+            name=name,
+            description=str(payload.get("description") or ""),
+            config=dict(payload.get("config") or {}),
+            factors=factors,
+        )
+        detail = self.system_repository.load_strategy_draft(draft_id)
+        if detail is None:
+            raise RuntimeError("strategy draft was not saved")
+        return _json_ready(detail)
 
     def reports(self, strategy_id: str | None = None) -> list[dict[str, Any]]:
         """返回报告索引。"""

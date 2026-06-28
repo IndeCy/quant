@@ -7,6 +7,8 @@ from pathlib import Path
 import sqlite3
 from typing import Any, Iterable
 
+from runtime.repository_schema import init_system_schema
+
 
 class SystemRepository:
     """保存每日运行状态和报告索引，供后续前端统一读取。"""
@@ -179,6 +181,114 @@ class SystemRepository:
             rows = con.execute("SELECT * FROM factor_registry ORDER BY factor_id").fetchall()
         return [self._row_to_dict(row) for row in rows]
 
+    def load_factor_definition(self, factor_id: str) -> dict[str, Any] | None:
+        """读取因子定义及使用该因子的策略关系。"""
+        with self._connect() as con:
+            factor = con.execute(
+                "SELECT * FROM factor_registry WHERE factor_id = ?",
+                [factor_id],
+            ).fetchone()
+            if factor is None:
+                return None
+            strategies = con.execute(
+                """
+                SELECT
+                    s.strategy_id,
+                    s.name,
+                    s.status,
+                    l.weight,
+                    l.transform,
+                    l.enabled
+                FROM strategy_factor_link l
+                JOIN strategy_registry s ON l.strategy_id = s.strategy_id
+                WHERE l.factor_id = ?
+                ORDER BY s.strategy_id
+                """,
+                [factor_id],
+            ).fetchall()
+        result = self._row_to_dict(factor)
+        result["strategies"] = [self._row_to_dict(row) for row in strategies]
+        return result
+
+    def upsert_strategy_draft(
+        self,
+        draft_id: str,
+        name: str,
+        description: str = "",
+        config: dict[str, Any] | None = None,
+        factors: Iterable[dict[str, Any]] = (),
+    ) -> None:
+        """保存本地策略草案和因子组合，不影响生产策略。"""
+        rows = list(factors)
+        with self._connect() as con:
+            con.execute(
+                """
+                INSERT INTO strategy_drafts(
+                    draft_id, name, status, description, config_json
+                ) VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(draft_id) DO UPDATE SET
+                    name=excluded.name,
+                    status=excluded.status,
+                    description=excluded.description,
+                    config_json=excluded.config_json,
+                    modified_at=CURRENT_TIMESTAMP
+                """,
+                [
+                    draft_id,
+                    name,
+                    "draft",
+                    description,
+                    json.dumps(config or {}, ensure_ascii=False, sort_keys=True),
+                ],
+            )
+            con.execute("DELETE FROM strategy_draft_factors WHERE draft_id = ?", [draft_id])
+            con.executemany(
+                """
+                INSERT INTO strategy_draft_factors(
+                    draft_id, factor_id, weight, transform, enabled
+                ) VALUES (?, ?, ?, ?, ?)
+                """,
+                [
+                    (
+                        draft_id,
+                        str(item["factor_id"]),
+                        float(item.get("weight", 1.0)),
+                        str(item.get("transform", "winsorize_zscore")),
+                        1 if bool(item.get("enabled", True)) else 0,
+                    )
+                    for item in rows
+                ],
+            )
+
+    def load_strategy_draft(self, draft_id: str) -> dict[str, Any] | None:
+        """读取本地策略草案及其因子组合。"""
+        with self._connect() as con:
+            draft = con.execute(
+                "SELECT * FROM strategy_drafts WHERE draft_id = ?",
+                [draft_id],
+            ).fetchone()
+            if draft is None:
+                return None
+            factors = con.execute(
+                """
+                SELECT d.factor_id, f.name, f.category, f.direction, d.weight, d.transform, d.enabled
+                FROM strategy_draft_factors d
+                LEFT JOIN factor_registry f ON d.factor_id = f.factor_id
+                WHERE d.draft_id = ?
+                ORDER BY d.factor_id
+                """,
+                [draft_id],
+            ).fetchall()
+        result = self._row_to_dict(draft)
+        result["factors"] = [self._row_to_dict(row) for row in factors]
+        return result
+
+    def list_strategy_drafts(self) -> list[dict[str, Any]]:
+        """读取本地策略草案列表。"""
+        with self._connect() as con:
+            rows = con.execute("SELECT * FROM strategy_drafts ORDER BY modified_at DESC, draft_id").fetchall()
+        return [self._row_to_dict(row) for row in rows]
+
     def list_runs(self, strategy_id: str | None = None, limit: int = 30) -> list[dict[str, Any]]:
         """按日期倒序读取运行记录。"""
         sql = "SELECT * FROM strategy_runs"
@@ -309,96 +419,7 @@ class SystemRepository:
         return self._row_to_dict(row) if row else None
 
     def _init_schema(self, con: sqlite3.Connection) -> None:
-        con.execute(
-            """
-            CREATE TABLE IF NOT EXISTS strategy_runs (
-                strategy_id TEXT NOT NULL,
-                trade_date TEXT NOT NULL,
-                status TEXT NOT NULL,
-                run_dir TEXT NOT NULL,
-                message TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (strategy_id, trade_date)
-            )
-            """
-        )
-        con.execute(
-            """
-            CREATE TABLE IF NOT EXISTS report_index (
-                report_id TEXT NOT NULL PRIMARY KEY,
-                report_type TEXT NOT NULL,
-                strategy_id TEXT NOT NULL,
-                trade_date TEXT NOT NULL,
-                title TEXT NOT NULL,
-                file_path TEXT NOT NULL,
-                tags_json TEXT NOT NULL DEFAULT '[]',
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        con.execute(
-            """
-            CREATE TABLE IF NOT EXISTS strategy_run_steps (
-                strategy_id TEXT NOT NULL,
-                trade_date TEXT NOT NULL,
-                sequence INTEGER NOT NULL,
-                step_name TEXT NOT NULL,
-                status TEXT NOT NULL,
-                message TEXT NOT NULL DEFAULT '',
-                artifact_path TEXT NOT NULL DEFAULT '',
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (strategy_id, trade_date, step_name)
-            )
-            """
-        )
-        con.execute(
-            """
-            CREATE TABLE IF NOT EXISTS factor_registry (
-                factor_id TEXT NOT NULL PRIMARY KEY,
-                name TEXT NOT NULL,
-                category TEXT NOT NULL,
-                direction TEXT NOT NULL,
-                source TEXT NOT NULL,
-                description TEXT NOT NULL DEFAULT '',
-                enabled INTEGER NOT NULL DEFAULT 1,
-                config_json TEXT NOT NULL DEFAULT '{}',
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        con.execute(
-            """
-            CREATE TABLE IF NOT EXISTS strategy_registry (
-                strategy_id TEXT NOT NULL PRIMARY KEY,
-                name TEXT NOT NULL,
-                status TEXT NOT NULL,
-                strategy_type TEXT NOT NULL,
-                description TEXT NOT NULL DEFAULT '',
-                config_json TEXT NOT NULL DEFAULT '{}',
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        con.execute(
-            """
-            CREATE TABLE IF NOT EXISTS strategy_factor_link (
-                strategy_id TEXT NOT NULL,
-                factor_id TEXT NOT NULL,
-                weight REAL NOT NULL,
-                transform TEXT NOT NULL,
-                enabled INTEGER NOT NULL DEFAULT 1,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY (strategy_id, factor_id)
-            )
-            """
-        )
-        con.execute("CREATE INDEX IF NOT EXISTS idx_report_strategy_date ON report_index(strategy_id, trade_date)")
+        init_system_schema(con)
 
     def _row_to_dict(self, row: sqlite3.Row) -> dict[str, Any]:
         result = dict(row)

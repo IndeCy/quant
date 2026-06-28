@@ -83,3 +83,63 @@ def test_system_repository_records_run_steps(tmp_path: Path) -> None:
     assert [item["step_name"] for item in steps] == ["data_update", "strategy_run"]
     assert steps[1]["status"] == "FAILED"
     assert steps[1]["message"] == "重跑失败"
+
+
+def test_system_repository_loads_factor_definition_with_strategy_usage(tmp_path: Path) -> None:
+    """因子详情需要展示被哪些策略使用，支撑后续因子组合维护。"""
+    repository = SystemRepository(tmp_path / "state" / "quant_system.sqlite")
+    repository.upsert_factor(
+        "roa",
+        "ROA",
+        "quality",
+        "higher_is_better",
+        "fina_indicator",
+        config={"as_of_field": "f_ann_date"},
+    )
+    repository.upsert_strategy("quality_overlay", "Quality Alpha V1", "active", "factor_topn_monthly")
+    repository.replace_strategy_factors(
+        "quality_overlay",
+        [{"factor_id": "roa", "weight": 0.6, "transform": "winsorize_zscore"}],
+    )
+
+    definition = repository.load_factor_definition("roa")
+
+    assert definition is not None
+    assert definition["factor_id"] == "roa"
+    assert definition["config"]["as_of_field"] == "f_ann_date"
+    assert definition["strategies"] == [
+        {
+            "strategy_id": "quality_overlay",
+            "name": "Quality Alpha V1",
+            "status": "active",
+            "weight": 0.6,
+            "transform": "winsorize_zscore",
+            "enabled": True,
+        }
+    ]
+
+
+def test_system_repository_saves_strategy_draft_with_factor_weights(tmp_path: Path) -> None:
+    """策略草案只保存组合定义，不影响生产策略注册表。"""
+    repository = SystemRepository(tmp_path / "state" / "quant_system.sqlite")
+
+    repository.upsert_strategy_draft(
+        draft_id="draft_quality_two_factor",
+        name="Quality Two Factor Draft",
+        description="ROA 与 OCF 的研究草案",
+        config={"top_n": 20, "rebalance": "monthly"},
+        factors=[
+            {"factor_id": "roa", "weight": 0.7, "transform": "winsorize_zscore", "enabled": True},
+            {"factor_id": "ocf_to_or", "weight": 0.3, "transform": "winsorize_zscore", "enabled": True},
+        ],
+    )
+
+    draft = repository.load_strategy_draft("draft_quality_two_factor")
+
+    assert draft is not None
+    assert draft["draft_id"] == "draft_quality_two_factor"
+    assert draft["status"] == "draft"
+    assert draft["config"]["top_n"] == 20
+    assert [item["factor_id"] for item in draft["factors"]] == ["ocf_to_or", "roa"]
+    assert sum(item["weight"] for item in draft["factors"]) == 1.0
+    assert repository.list_strategy_drafts()[0]["name"] == "Quality Two Factor Draft"

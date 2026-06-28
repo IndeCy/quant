@@ -1,39 +1,170 @@
+import { useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 
 import type { DashboardData } from "../../app/types";
-import { formatPercent } from "../../shared/lib/formatters";
+import { saveStrategyDraft } from "../../entities/strategyDraft/api";
+import type { StrategyDraft, StrategyDraftPayload } from "../../entities/strategyDraft/model";
+import { validateStrategyDraftWeights } from "../../entities/strategyDraft/validation";
+import { formatNumber, formatPercent } from "../../shared/lib/formatters";
 import { PageHeader } from "../../shared/ui/PageHeader";
 
 export function StrategiesPage() {
   const data = useOutletContext<DashboardData>();
+  const strategy = data.strategy;
+  const factorWeightTotal = (strategy.factors ?? []).reduce((total, factor) => total + (factor.weight ?? 0), 0);
+  const [drafts, setDrafts] = useState<StrategyDraft[]>(data.strategyDrafts);
+  const [draftFactors, setDraftFactors] = useState<StrategyDraftPayload["factors"]>(
+    data.factors.map((factor) => ({
+      factor_id: factor.factor_id,
+      weight: Number((1 / Math.max(data.factors.length, 1)).toFixed(6)),
+      transform: "winsorize_zscore",
+      enabled: true
+    }))
+  );
+  const [draftName, setDraftName] = useState("Quality Factor Draft");
+  const [draftMessage, setDraftMessage] = useState("");
+  const validation = useMemo(() => validateStrategyDraftWeights(draftFactors), [draftFactors]);
+
+  function updateDraftFactor(factorId: string, patch: Partial<StrategyDraftPayload["factors"][number]>) {
+    setDraftFactors((items) => items.map((item) => (item.factor_id === factorId ? { ...item, ...patch } : item)));
+  }
+
+  async function handleSaveDraft() {
+    const result = validateStrategyDraftWeights(draftFactors);
+    if (!result.valid) {
+      setDraftMessage(result.message);
+      return;
+    }
+    const saved = await saveStrategyDraft({
+      draft_id: "local_factor_draft",
+      name: draftName,
+      description: "本地因子组合草案，仅用于研究维护，不进入生产运行。",
+      config: { top_n: 20, rebalance: "monthly", source: "frontend_draft" },
+      factors: draftFactors
+    });
+    setDrafts((items) => [saved, ...items.filter((item) => item.draft_id !== saved.draft_id)]);
+    setDraftMessage("草案已保存到本地状态库");
+  }
+
   return (
     <>
       <PageHeader title="策略" description="维护策略定义、运行状态、风险层和当前核心指标。" />
-      <section className="panel table-panel">
-        <table>
-          <thead>
-            <tr>
-              <th>策略</th>
-              <th>状态</th>
-              <th>类型</th>
-              <th>最新日期</th>
-              <th>累计收益</th>
-              <th>当前回撤</th>
-            </tr>
-          </thead>
-          <tbody>
-            {data.strategies.map((strategy) => (
-              <tr key={strategy.strategy_id}>
-                <td>{strategy.name}</td>
-                <td>{strategy.status}</td>
-                <td>{strategy.strategy_type}</td>
-                <td>{data.strategy.latest_metrics?.trade_date ?? "-"}</td>
-                <td>{formatPercent(data.strategy.latest_metrics?.cumulative_return)}</td>
-                <td>{formatPercent(data.strategy.latest_metrics?.drawdown)}</td>
+      <div className="management-layout">
+        <section className="panel table-panel">
+          <h2>策略库</h2>
+          <table>
+            <thead>
+              <tr>
+                <th>策略</th>
+                <th>状态</th>
+                <th>类型</th>
+                <th>最新日期</th>
+                <th>累计收益</th>
+                <th>当前回撤</th>
               </tr>
+            </thead>
+            <tbody>
+              {data.strategies.map((item) => (
+                <tr key={item.strategy_id}>
+                  <td>{item.name}</td>
+                  <td>{item.status}</td>
+                  <td>{item.strategy_type}</td>
+                  <td>{strategy.latest_metrics?.trade_date ?? "-"}</td>
+                  <td>{formatPercent(strategy.latest_metrics?.cumulative_return)}</td>
+                  <td>{formatPercent(strategy.latest_metrics?.drawdown)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </section>
+
+        <aside className="panel detail-panel">
+          <div className="detail-heading">
+            <div>
+              <h2>{strategy.name}</h2>
+              <p>{strategy.description}</p>
+            </div>
+            <span className={`status ${strategy.status === "active" ? "success" : "neutral"}`}>{strategy.status}</span>
+          </div>
+          <div className="config-grid">
+            {Object.entries(strategy.config ?? {}).map(([key, value]) => (
+              <div key={key}>
+                <span>{key}</span>
+                <strong>{String(value)}</strong>
+              </div>
             ))}
-          </tbody>
-        </table>
+            <div>
+              <span>factor_weight_total</span>
+              <strong>{formatNumber(factorWeightTotal, 3)}</strong>
+            </div>
+          </div>
+          <h2>因子组合</h2>
+          <div className="mini-table">
+            {(strategy.factors ?? []).map((factor) => (
+              <div key={factor.factor_id} className="mini-row">
+                <span>{factor.name}</span>
+                <strong>{formatPercent(factor.weight)}</strong>
+                <em>{factor.transform ?? "-"}</em>
+              </div>
+            ))}
+          </div>
+        </aside>
+      </div>
+      <section className="panel draft-editor">
+        <div className="detail-heading">
+          <div>
+            <h2>本地策略草案</h2>
+            <p>用现有因子组合一个研究草案；保存后只进入 SQLite 状态库，不影响每日生产策略。</p>
+          </div>
+          <span className={`status ${validation.valid ? "success" : "warning"}`}>{validation.message}</span>
+        </div>
+        <div className="draft-form">
+          <label>
+            <span>草案名称</span>
+            <input value={draftName} onChange={(event) => setDraftName(event.target.value)} />
+          </label>
+          <button type="button" onClick={handleSaveDraft}>
+            保存草案
+          </button>
+        </div>
+        {draftMessage ? <p className={validation.valid ? "success-message" : "inline-error"}>{draftMessage}</p> : null}
+        <div className="mini-table">
+          {draftFactors.map((item) => {
+            const factor = data.factors.find((candidate) => candidate.factor_id === item.factor_id);
+            return (
+              <div key={item.factor_id} className="draft-row">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={item.enabled}
+                    onChange={(event) => updateDraftFactor(item.factor_id, { enabled: event.target.checked })}
+                  />
+                  <span>{factor?.name ?? item.factor_id}</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={item.weight}
+                  onChange={(event) => updateDraftFactor(item.factor_id, { weight: Number(event.target.value) })}
+                />
+                <em>{item.transform}</em>
+              </div>
+            );
+          })}
+        </div>
+        <h2>已保存草案</h2>
+        <div className="mini-table">
+          {drafts.length === 0 ? <p className="muted-text">暂无草案</p> : null}
+          {drafts.map((draft) => (
+            <div key={draft.draft_id} className="mini-row">
+              <span>{draft.name}</span>
+              <strong>{draft.status}</strong>
+              <em>{draft.factors.length} 个因子</em>
+            </div>
+          ))}
+        </div>
       </section>
     </>
   );

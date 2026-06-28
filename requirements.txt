@@ -8,3 +8,5 @@ tushare>=1.4.29
 fastapi>=0.138.1
 uvicorn>=0.49.0
 httpx2>=2.5.0
+APScheduler>=3.10.4
+SQLAlchemy>=2.0.0
