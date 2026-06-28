@@ -1,0 +1,17 @@
+{
+  "trade_date": "20260624",
+  "selection_date": "20260529",
+  "portfolio_nav": 5.232485025443582,
+  "benchmark_nav": 1.6471005305739577,
+  "daily_return": 0.00165970654737424,
+  "month_return": -0.049608407764081486,
+  "ytd_return": 0.06820548621449474,
+  "excess_return": 3.5853844948696243,
+  "current_drawdown": -0.09625313595964047,
+  "volatility20": 0.19875029201959404,
+  "risk_state": "NORMAL",
+  "target_exposure": 1.0,
+  "total_execution_cost": 233231.60602277442,
+  "failed_order_count": 294,
+  "turnover_notional": 176121833.03151476
+}
