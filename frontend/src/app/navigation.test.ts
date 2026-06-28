@@ -10,6 +10,7 @@ describe("navigationItems", () => {
       "/factors",
       "/runs",
       "/reports",
+      "/research",
       "/data",
       "/risk",
       "/settings"
@@ -23,6 +24,7 @@ describe("navigationItems", () => {
       "因子",
       "运行",
       "报告",
+      "研究",
       "数据",
       "风险",
       "设置"

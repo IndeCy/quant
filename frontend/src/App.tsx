@@ -8,6 +8,7 @@ import { DashboardPage } from "./pages/dashboard/DashboardPage";
 import { DataHealthPage } from "./pages/data/DataHealthPage";
 import { FactorsPage } from "./pages/factors/FactorsPage";
 import { ReportsPage } from "./pages/reports/ReportsPage";
+import { ResearchPage } from "./pages/research/ResearchPage";
 import { RiskPage } from "./pages/risk/RiskPage";
 import { RunsPage } from "./pages/runs/RunsPage";
 import { SettingsPage } from "./pages/settings/SettingsPage";
@@ -42,6 +43,7 @@ function App() {
         { path: "factors", element: <FactorsPage /> },
         { path: "runs", element: <RunsPage /> },
         { path: "reports", element: <ReportsPage /> },
+        { path: "research", element: <ResearchPage /> },
         { path: "data", element: <DataHealthPage /> },
         { path: "risk", element: <RiskPage /> },
         { path: "settings", element: <SettingsPage /> }

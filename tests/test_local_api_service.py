@@ -131,6 +131,17 @@ def test_local_api_service_exposes_backup_manifest(tmp_path: Path) -> None:
     assert "tar -czf" in manifest["backup_command"]
 
 
+def test_local_api_service_exposes_research_todos(tmp_path: Path) -> None:
+    """研究入口需要读取项目待办资料库。"""
+    service = LocalApiService(_seed_runtime(tmp_path))
+
+    todos = service.research_todos()
+
+    assert todos["title"] == "待办资料库"
+    assert todos["path"].endswith("docs/todos.md")
+    assert "alphaXiv" in todos["content"]
+
+
 def test_local_api_service_lists_reports_and_series(tmp_path: Path) -> None:
     """报告索引和曲线数据应可直接供前端消费。"""
     service = LocalApiService(_seed_runtime(tmp_path))
@@ -214,6 +225,7 @@ def test_fastapi_routes_delegate_to_service(tmp_path: Path) -> None:
     assert scheduler_response.status_code == 200
     assert scheduler_response.json()["schedule"] == "mon-fri 17:05 Asia/Shanghai"
     assert client.get("/api/backup/manifest").json()["items"][0]["name"] == "data"
+    assert "待办资料库" in client.get("/api/research/todos").json()["content"]
     assert client.get("/api/data/health").json()["runtime_root"].endswith("runtime")
     assert client.get("/api/strategies").json()[0]["strategy_id"] == "quality_overlay"
     assert client.get("/api/factors/roa").json()["strategies"][0]["strategy_id"] == "quality_overlay"

@@ -290,6 +290,26 @@
   margin-top: 14px;
 }
 
+.research-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(340px, 420px);
+  gap: 14px;
+  align-items: start;
+}
+
+.research-todos {
+  margin-top: 14px;
+}
+
+.research-todos pre {
+  margin: 0;
+  color: #1f2937;
+  font-size: 13px;
+  line-height: 1.62;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
 .path-block {
   display: flex;
   flex-direction: column;
@@ -355,7 +375,8 @@
   .runs-layout,
   .health-grid,
   .management-layout,
-  .settings-grid {
+  .settings-grid,
+  .research-grid {
     grid-template-columns: 1fr;
   }
 

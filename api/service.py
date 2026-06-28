@@ -60,6 +60,18 @@ class LocalApiService:
         """返回运行目录备份和迁移清单。"""
         return _json_ready(build_backup_manifest(self.paths))
 
+    def research_todos(self) -> dict[str, Any]:
+        """返回项目研究待办资料库。"""
+        path = Path(__file__).resolve().parents[1] / "docs" / "todos.md"
+        if not path.exists():
+            return {"title": "待办资料库", "path": str(path), "content": "", "missing": True}
+        return {
+            "title": "待办资料库",
+            "path": str(path),
+            "content": path.read_text(encoding="utf-8"),
+            "missing": False,
+        }
+
     def strategies(self) -> list[dict[str, Any]]:
         """返回策略列表。"""
         return self.system_repository.list_strategies()

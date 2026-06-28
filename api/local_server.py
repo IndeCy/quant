@@ -45,6 +45,11 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
         """返回运行目录备份和迁移清单。"""
         return api_service.backup_manifest()
 
+    @app.get("/api/research/todos")
+    def research_todos() -> dict[str, Any]:
+        """返回研究待办资料库。"""
+        return api_service.research_todos()
+
     @app.get("/api/strategies")
     def strategies() -> list[dict[str, Any]]:
         """返回策略列表。"""
