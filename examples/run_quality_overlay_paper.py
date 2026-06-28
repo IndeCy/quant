@@ -37,16 +37,20 @@ from monitoring.dashboard_data import build_dashboard_payload, write_dashboard_f
 from monitoring.metrics import build_market_monitor_frame, build_strategy_monitor_frame
 from monitoring.repository import MonitoringRepository
 from pipeline.production_daily import build_monthly_review, is_month_end_trade_date, write_daily_artifacts, write_run_log
+from runtime.paths import get_runtime_paths
+from runtime.repository import SystemRepository
+from runtime.strategy_catalog import register_quality_alpha_v1
 
 
-INCREMENT_PATH = Path("data/live_market_increment.duckdb")
-BENCHMARK_INCREMENT_PATH = Path("data/benchmark_increment.duckdb")
-PAPER_PATH = Path("data/quality_overlay_paper.sqlite3")
-MONITORING_PATH = Path("data/monitoring.sqlite3")
-REPORT_PATH = Path("reports/quality_overlay_paper_latest.md")
-DASHBOARD_JSON_PATH = Path("reports/dashboard_data.json")
-DASHBOARD_HTML_PATH = Path("reports/dashboard.html")
-RUNS_ROOT = Path("runs")
+RUNTIME_PATHS = get_runtime_paths()
+INCREMENT_PATH = RUNTIME_PATHS.live_market_increment_path
+BENCHMARK_INCREMENT_PATH = RUNTIME_PATHS.benchmark_increment_path
+PAPER_PATH = RUNTIME_PATHS.quality_overlay_paper_path
+MONITORING_PATH = RUNTIME_PATHS.monitoring_path
+REPORT_PATH = RUNTIME_PATHS.latest_report_path
+DASHBOARD_JSON_PATH = RUNTIME_PATHS.dashboard_json_path
+DASHBOARD_HTML_PATH = RUNTIME_PATHS.dashboard_html_path
+RUNS_ROOT = RUNTIME_PATHS.runs_dir
 VOL_WINDOW = 20
 VOL_THRESHOLD = 0.45
 REDUCED_EXPOSURE = 0.30
@@ -241,10 +245,47 @@ def write_production_artifacts(
         previous_snapshot=previous,
     )
     repository = MonitoringRepository(MONITORING_PATH)
+    system_repository = SystemRepository(RUNTIME_PATHS.system_state_path)
+    register_quality_alpha_v1(system_repository)
+    register_daily_artifacts(system_repository, snapshot.trade_date, run_dir)
+    system_repository.record_strategy_run(
+        "quality_overlay",
+        snapshot.trade_date,
+        "SUCCESS",
+        run_dir,
+        "daily pipeline completed",
+    )
     if is_month_end_trade_date(snapshot.trade_date):
         month = snapshot.trade_date[:6]
-        build_monthly_review(RUNS_ROOT, month, repository.load_strategy_history("quality_overlay"))
+        monthly_path = build_monthly_review(RUNS_ROOT, month, repository.load_strategy_history("quality_overlay"))
+        system_repository.upsert_report(
+            report_type="monthly_review",
+            strategy_id="quality_overlay",
+            trade_date=snapshot.trade_date,
+            title=f"{month}月度复盘",
+            file_path=monthly_path,
+            tags=["monthly", "review"],
+        )
     return run_dir
+
+
+def register_daily_artifacts(repository: SystemRepository, trade_date: str, run_dir: Path) -> None:
+    """把每日固定产物登记到系统状态库，供前端和报告中心统一读取。"""
+    artifacts = [
+        ("daily_report", "每日策略报告", "daily_report.md", ["daily", "report"]),
+        ("rebalance_plan", "调仓建议", "rebalance_plan.csv", ["daily", "rebalance"]),
+        ("portfolio_snapshot", "组合快照", "portfolio_snapshot.csv", ["daily", "portfolio"]),
+        ("strategy_metrics", "策略指标", "strategy_metrics.json", ["daily", "metrics"]),
+    ]
+    for report_type, title, filename, tags in artifacts:
+        repository.upsert_report(
+            report_type=report_type,
+            strategy_id="quality_overlay",
+            trade_date=trade_date,
+            title=title,
+            file_path=run_dir / filename,
+            tags=tags,
+        )
 
 
 def load_dashboard_benchmarks(con) -> tuple[pd.Series, pd.Series, str]:
@@ -407,6 +448,13 @@ def main() -> None:
             push_report(snapshot, args.bark_url)
     except Exception as exc:
         write_run_log(run_log_dir, "FAILED", str(exc))
+        SystemRepository(RUNTIME_PATHS.system_state_path).record_strategy_run(
+            "quality_overlay",
+            run_date,
+            "FAILED",
+            run_log_dir,
+            str(exc),
+        )
         raise
 
 
