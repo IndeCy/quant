@@ -25,7 +25,7 @@ def test_register_quality_alpha_v1_records_factor_composition(tmp_path: Path) ->
 
 
 def test_register_mainline_chain_b_records_shadow_live_definition(tmp_path: Path) -> None:
-    """主线链动策略应登记为影子实盘观察策略，不挂接基本面因子。"""
+    """主线链动策略应登记为影子实盘观察策略，并暴露信号组件。"""
     repository = SystemRepository(tmp_path / "state" / "quant_system.sqlite")
 
     register_mainline_chain_b(repository)
@@ -40,7 +40,13 @@ def test_register_mainline_chain_b_records_shadow_live_definition(tmp_path: Path
     assert definition["config"]["momentum_windows"] == [60, 120]
     assert definition["config"]["chain_momentum_window"] == 60
     assert definition["config"]["entrypoint"] == "examples/post_close_mainline_chain_observer.py"
-    assert definition["factors"] == []
+    assert [item["factor_id"] for item in definition["factors"]] == [
+        "mainline_chain_gate",
+        "mainline_chain_strength_60d",
+        "mainline_stock_momentum_120d",
+        "mainline_stock_momentum_60d",
+    ]
+    assert round(sum(item["weight"] for item in definition["factors"]), 6) == 1.0
 
 
 def test_register_builtin_strategies_exposes_quality_and_mainline(tmp_path: Path) -> None:

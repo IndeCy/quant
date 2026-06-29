@@ -70,6 +70,10 @@ class RuntimePaths:
         return self.data_dir / "quality_overlay_paper.sqlite3"
 
     @property
+    def paper_trading_path(self) -> Path:
+        return self.data_dir / "paper_trading.sqlite3"
+
+    @property
     def monitoring_path(self) -> Path:
         return self.data_dir / "monitoring.sqlite3"
 

@@ -9,6 +9,7 @@ from typing import Any
 
 import pandas as pd
 
+from monitoring.mainline_adapter import sync_mainline_chain_monitoring
 from monitoring.repository import MonitoringRepository
 from runtime.backup import build_backup_manifest
 from runtime.logs import list_log_files, read_log_file
@@ -28,6 +29,7 @@ class LocalApiService:
         self.system_repository = SystemRepository(self.paths.system_state_path)
         register_builtin_strategies(self.system_repository)
         self.monitoring_repository = MonitoringRepository(self.paths.monitoring_path)
+        sync_mainline_chain_monitoring(self.paths, self.monitoring_repository, self.system_repository)
 
     def health(self) -> dict[str, Any]:
         """返回运行目录和关键数据库是否存在。"""

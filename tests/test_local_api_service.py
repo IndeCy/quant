@@ -8,6 +8,7 @@ from fastapi.testclient import TestClient
 
 from api.local_server import create_app
 from api.service import LocalApiService
+from backtest.paper_trading import PaperTradingStore
 from monitoring.metrics import build_market_monitor_frame, build_strategy_monitor_frame
 from monitoring.repository import MonitoringRepository
 from runtime.paths import RuntimePaths
@@ -61,6 +62,58 @@ def test_local_api_service_exposes_strategy_detail(tmp_path: Path) -> None:
     assert detail["latest_run"]["status"] == "SUCCESS"
     assert detail["latest_metrics"]["trade_date"] == "20260624"
     assert len(detail["factors"]) == 3
+
+
+def test_local_api_service_assetizes_mainline_chain_snapshots(tmp_path: Path) -> None:
+    """服务启动时应把主线链动模拟盘快照同步为可观测策略指标。"""
+    paths = _seed_runtime(tmp_path)
+    store = PaperTradingStore(paths.paper_trading_path)
+    account_id = store.create_account(
+        "主线链动策略",
+        "Mainline_Chain_Momentum",
+        1_000_000,
+        "000001.SH",
+        "上证指数",
+        "2026-06-05",
+    )
+    store.record_daily_snapshot(
+        account_id,
+        "2026-06-05",
+        total_value=1_000_000,
+        cash=100_000,
+        position_value=900_000,
+        strategy_return=0.0,
+        benchmark_return=0.0,
+        excess_return=0.0,
+        strongest_chain="通信AI",
+        rebalance_signal="NONE",
+        target_symbols=["601138.SH"],
+    )
+    store.record_daily_snapshot(
+        account_id,
+        "2026-06-06",
+        total_value=1_030_000,
+        cash=100_000,
+        position_value=930_000,
+        strategy_return=0.03,
+        benchmark_return=0.01,
+        excess_return=0.02,
+        strongest_chain="半导体",
+        rebalance_signal="REBALANCE",
+        target_symbols=["600584.SH"],
+    )
+    store.close()
+
+    service = LocalApiService(paths)
+
+    detail = service.strategy_detail("mainline_chain_b")
+    history = service.strategy_series("mainline_chain_b")
+    runs = service.runs("mainline_chain_b")
+
+    assert detail is not None
+    assert detail["latest_metrics"]["trade_date"] == "20260606"
+    assert len(history) == 2
+    assert runs[0]["message"] == "最强产业链: 半导体, 信号: REBALANCE"
 
 
 def test_local_api_service_exposes_factor_detail(tmp_path: Path) -> None:
