@@ -131,6 +131,17 @@ def test_local_api_service_exposes_backup_manifest(tmp_path: Path) -> None:
     assert "tar -czf" in manifest["backup_command"]
 
 
+def test_local_api_service_exposes_service_manifest(tmp_path: Path) -> None:
+    """设置页需要展示本地服务启动命令和 launchd 模板。"""
+    service = LocalApiService(_seed_runtime(tmp_path))
+
+    manifest = service.service_manifest()
+
+    assert manifest["runtime_root"].endswith("runtime")
+    assert [item["name"] for item in manifest["services"]] == ["api", "frontend", "scheduler"]
+    assert "launchd_plist" in manifest["services"][0]
+
+
 def test_local_api_service_exposes_research_todos(tmp_path: Path) -> None:
     """研究入口需要读取项目待办资料库。"""
     service = LocalApiService(_seed_runtime(tmp_path))
@@ -225,6 +236,7 @@ def test_fastapi_routes_delegate_to_service(tmp_path: Path) -> None:
     assert scheduler_response.status_code == 200
     assert scheduler_response.json()["schedule"] == "mon-fri 17:05 Asia/Shanghai"
     assert client.get("/api/backup/manifest").json()["items"][0]["name"] == "data"
+    assert client.get("/api/services/manifest").json()["services"][0]["name"] == "api"
     assert "待办资料库" in client.get("/api/research/todos").json()["content"]
     assert client.get("/api/data/health").json()["runtime_root"].endswith("runtime")
     assert client.get("/api/strategies").json()[0]["strategy_id"] == "quality_overlay"

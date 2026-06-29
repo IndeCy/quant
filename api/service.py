@@ -13,6 +13,7 @@ from runtime.backup import build_backup_manifest
 from runtime.paths import RuntimePaths, get_runtime_paths
 from runtime.repository import SystemRepository
 from runtime.scheduler import configure_daily_pipeline_job, load_scheduler_status
+from runtime.service_manager import build_service_manifest
 from runtime.strategy_catalog import register_quality_alpha_v1
 
 
@@ -59,6 +60,10 @@ class LocalApiService:
     def backup_manifest(self) -> dict[str, Any]:
         """返回运行目录备份和迁移清单。"""
         return _json_ready(build_backup_manifest(self.paths))
+
+    def service_manifest(self) -> dict[str, Any]:
+        """返回本地常驻服务启动命令和 launchd 模板。"""
+        return _json_ready(build_service_manifest(self.paths))
 
     def research_todos(self) -> dict[str, Any]:
         """返回项目研究待办资料库。"""

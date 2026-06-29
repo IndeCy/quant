@@ -5,6 +5,7 @@ import { listReports } from "../entities/report/api";
 import { getResearchTodos } from "../entities/research/api";
 import { listRuns } from "../entities/run/api";
 import { getSchedulerStatus } from "../entities/scheduler/api";
+import { getServiceManifest } from "../entities/service/api";
 import { getStrategy, getStrategySeries, listStrategies } from "../entities/strategy/api";
 import { listStrategyDrafts } from "../entities/strategyDraft/api";
 
@@ -19,6 +20,7 @@ export async function loadDashboardData() {
     researchTodos,
     runs,
     schedulerStatus,
+    serviceManifest,
     strategyDrafts,
     strategySeries,
     marketSeries
@@ -31,6 +33,7 @@ export async function loadDashboardData() {
     getResearchTodos(),
     listRuns(strategyId),
     getSchedulerStatus(),
+    getServiceManifest(),
     listStrategyDrafts(),
     getStrategySeries(strategyId),
     getMarketSeries("510300")
@@ -44,6 +47,7 @@ export async function loadDashboardData() {
     researchTodos,
     runs,
     schedulerStatus,
+    serviceManifest,
     strategyDrafts,
     strategySeries,
     marketSeries

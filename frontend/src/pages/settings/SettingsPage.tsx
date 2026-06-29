@@ -7,6 +7,7 @@ import { configureSchedulerJob } from "../../entities/scheduler/api";
 import { validateSchedulerConfig } from "../../entities/scheduler/config";
 import type { SchedulerStatus } from "../../entities/scheduler/model";
 import { schedulerNextRunLabel, schedulerStateLabel } from "../../entities/scheduler/status";
+import { formatCommand } from "../../entities/service/format";
 import { PageHeader } from "../../shared/ui/PageHeader";
 
 export function SettingsPage() {
@@ -18,6 +19,7 @@ export function SettingsPage() {
   const [push, setPush] = useState(false);
   const [schedulerMessage, setSchedulerMessage] = useState("");
   const backup = data.backupManifest;
+  const serviceManifest = data.serviceManifest;
   const schedulerValidation = validateSchedulerConfig(hour, minute);
 
   async function handleConfigureScheduler() {
@@ -156,6 +158,39 @@ export function SettingsPage() {
               ))}
             </tbody>
           </table>
+        </div>
+      </section>
+      <section className="panel backup-panel">
+        <div className="detail-heading">
+          <div>
+            <h2>常驻服务模板</h2>
+            <p>这里生成 API、前端和调度器的启动命令与 launchd 模板，确认后再安装到 Mac mini。</p>
+          </div>
+          <span className="status neutral">{serviceManifest.services.length} 项</span>
+        </div>
+        <div className="service-list">
+          {serviceManifest.services.map((service) => (
+            <div key={service.name} className="service-block">
+              <div className="detail-heading">
+                <div>
+                  <h2>{service.name}</h2>
+                  <p>{service.label}</p>
+                </div>
+              </div>
+              <div className="path-block">
+                <span>启动命令</span>
+                <code>{formatCommand(service.command)}</code>
+              </div>
+              <div className="path-block">
+                <span>工作目录</span>
+                <code>{service.cwd}</code>
+              </div>
+              <div className="path-block">
+                <span>launchd 模板</span>
+                <code>{service.launchd_plist}</code>
+              </div>
+            </div>
+          ))}
         </div>
       </section>
     </>
