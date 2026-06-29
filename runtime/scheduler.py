@@ -16,6 +16,7 @@ from runtime.paths import RuntimePaths, get_runtime_paths
 
 
 DAILY_PIPELINE_JOB_ID = "quality_overlay_daily_pipeline"
+MAINLINE_CHAIN_DAILY_JOB_ID = "mainline_chain_daily_pipeline"
 DEFAULT_HOUR = 16
 DEFAULT_MINUTE = 30
 
@@ -34,6 +35,17 @@ def build_daily_pipeline_command(
     command = [python_executable, "examples/run_quality_overlay_paper.py"]
     if skip_update:
         command.append("--skip-update")
+    if push:
+        command.append("--push")
+    return command
+
+
+def build_mainline_chain_daily_command(
+    python_executable: str = sys.executable,
+    push: bool = False,
+) -> list[str]:
+    """构造主线链动每日观察命令，观察后会同步监控指标。"""
+    command = [python_executable, "scripts/run_mainline_chain_daily.py"]
     if push:
         command.append("--push")
     return command
@@ -76,6 +88,61 @@ def install_daily_pipeline_job(
     )
 
 
+def install_mainline_chain_daily_job(
+    scheduler: BackgroundScheduler,
+    paths: RuntimePaths | None = None,
+    hour: int = DEFAULT_HOUR,
+    minute: int = DEFAULT_MINUTE,
+    push: bool = False,
+) -> Job:
+    """登记每日盘后主线链动影子实盘观察任务。"""
+    runtime_paths = paths or get_runtime_paths()
+    command = build_mainline_chain_daily_command(push=push)
+    return scheduler.add_job(
+        run_daily_pipeline,
+        trigger="cron",
+        day_of_week="mon-fri",
+        hour=hour,
+        minute=minute,
+        id=MAINLINE_CHAIN_DAILY_JOB_ID,
+        replace_existing=True,
+        kwargs={
+            "command": command,
+            "cwd": str(project_root()),
+            "log_path": str(runtime_paths.logs_dir / "scheduler.log"),
+        },
+    )
+
+
+def install_daily_pipeline_jobs(
+    scheduler: BackgroundScheduler,
+    paths: RuntimePaths | None = None,
+    hour: int = DEFAULT_HOUR,
+    minute: int = DEFAULT_MINUTE,
+    skip_update: bool = False,
+    push: bool = False,
+) -> list[Job]:
+    """登记所有每日盘后任务，统一由本地调度器托管。"""
+    runtime_paths = paths or get_runtime_paths()
+    return [
+        install_daily_pipeline_job(
+            scheduler,
+            runtime_paths,
+            hour=hour,
+            minute=minute,
+            skip_update=skip_update,
+            push=push,
+        ),
+        install_mainline_chain_daily_job(
+            scheduler,
+            runtime_paths,
+            hour=hour,
+            minute=minute,
+            push=push,
+        ),
+    ]
+
+
 def load_scheduler_status(paths: RuntimePaths | None = None) -> dict[str, object]:
     """读取每日调度状态，不执行流水线。"""
     runtime_paths = paths or get_runtime_paths()
@@ -87,6 +154,7 @@ def load_scheduler_status(paths: RuntimePaths | None = None) -> dict[str, object
     start_flags = ""
     try:
         job = scheduler.get_job(DAILY_PIPELINE_JOB_ID)
+        jobs = scheduler.get_jobs()
         next_run = job.next_run_time.isoformat() if job and job.next_run_time else None
         if job is not None:
             schedule = _describe_cron_schedule(job)
@@ -106,6 +174,7 @@ def load_scheduler_status(paths: RuntimePaths | None = None) -> dict[str, object
             f"{sys.executable} scripts/run_local_scheduler.py --hour {start_hour} --minute {start_minute}{start_flags}"
         ),
         "log_path": str(runtime_paths.logs_dir / "scheduler.log"),
+        "jobs": [_job_status(item) for item in _ordered_daily_jobs(jobs)],
     }
 
 
@@ -121,7 +190,7 @@ def configure_daily_pipeline_job(
     scheduler = create_scheduler(runtime_paths)
     scheduler.start(paused=True)
     try:
-        install_daily_pipeline_job(
+        install_daily_pipeline_jobs(
             scheduler,
             runtime_paths,
             hour=hour,
@@ -170,6 +239,25 @@ def _start_flags_from_job(job: Job) -> str:
     if "--push" in command:
         flags.append("--push")
     return "" if not flags else " " + " ".join(flags)
+
+
+def _job_status(job: Job) -> dict[str, object]:
+    """把 APScheduler job 转成设置页可展示的稳定结构。"""
+    return {
+        "job_id": job.id,
+        "next_run_time": job.next_run_time.isoformat() if job.next_run_time else None,
+        "schedule": _describe_cron_schedule(job),
+        "command": job.kwargs.get("command", []),
+    }
+
+
+def _ordered_daily_jobs(jobs: list[Job]) -> list[Job]:
+    """按页面观测优先级排序每日任务。"""
+    order = {
+        DAILY_PIPELINE_JOB_ID: 0,
+        MAINLINE_CHAIN_DAILY_JOB_ID: 1,
+    }
+    return sorted(jobs, key=lambda value: (order.get(value.id, 99), value.id))
 
 
 def run_daily_pipeline(command: list[str], cwd: str, log_path: str) -> None:

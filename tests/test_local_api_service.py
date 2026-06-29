@@ -160,6 +160,7 @@ def test_local_api_service_exposes_scheduler_status(tmp_path: Path) -> None:
     assert status["job_store_path"].endswith("state/scheduler.sqlite")
     assert status["start_command"].startswith("/Users/admin/recommend_analysis/.venv/bin/python3")
     assert status["enabled"] is False
+    assert status["jobs"] == []
 
 
 def test_local_api_service_configures_scheduler_job(tmp_path: Path) -> None:
@@ -171,6 +172,10 @@ def test_local_api_service_configures_scheduler_job(tmp_path: Path) -> None:
     assert status["enabled"] is True
     assert status["schedule"] == "mon-fri 17:05 Asia/Shanghai"
     assert "--skip-update" in status["start_command"]
+    assert [item["job_id"] for item in status["jobs"]] == [
+        "quality_overlay_daily_pipeline",
+        "mainline_chain_daily_pipeline",
+    ]
 
 
 def test_local_api_service_exposes_backup_manifest(tmp_path: Path) -> None:
@@ -328,10 +333,13 @@ def test_fastapi_routes_delegate_to_service(tmp_path: Path) -> None:
     client = TestClient(create_app(service))
 
     assert client.get("/api/health").json()["status"] == "ok"
-    assert client.get("/api/scheduler/status").json()["job_id"] == "quality_overlay_daily_pipeline"
+    scheduler_status = client.get("/api/scheduler/status").json()
+    assert scheduler_status["job_id"] == "quality_overlay_daily_pipeline"
+    assert scheduler_status["jobs"] == []
     scheduler_response = client.post("/api/scheduler/daily-job", json={"hour": 17, "minute": 5, "skip_update": True})
     assert scheduler_response.status_code == 200
     assert scheduler_response.json()["schedule"] == "mon-fri 17:05 Asia/Shanghai"
+    assert len(scheduler_response.json()["jobs"]) == 2
     assert client.get("/api/backup/manifest").json()["items"][0]["name"] == "data"
     assert client.get("/api/services/manifest").json()["services"][0]["name"] == "api"
     assert client.get("/api/services/status").json()["services"][1]["name"] == "frontend"

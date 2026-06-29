@@ -11,7 +11,7 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from runtime.paths import get_runtime_paths
-from runtime.scheduler import create_scheduler, install_daily_pipeline_job, write_scheduler_heartbeat
+from runtime.scheduler import create_scheduler, install_daily_pipeline_jobs, write_scheduler_heartbeat
 
 
 def main() -> None:
@@ -24,7 +24,7 @@ def main() -> None:
     args = parser.parse_args()
     paths = get_runtime_paths()
     scheduler = create_scheduler(paths)
-    job = install_daily_pipeline_job(
+    jobs = install_daily_pipeline_jobs(
         scheduler,
         paths,
         hour=args.hour,
@@ -34,7 +34,8 @@ def main() -> None:
     )
     scheduler.start()
     write_scheduler_heartbeat(paths)
-    print(f"local scheduler started: {job.id} at {args.hour:02d}:{args.minute:02d}")
+    job_ids = ", ".join(job.id for job in jobs)
+    print(f"local scheduler started: {job_ids} at {args.hour:02d}:{args.minute:02d}")
     try:
         while True:
             time.sleep(60)
