@@ -27,6 +27,11 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
         """返回本地运行目录健康状态。"""
         return api_service.health()
 
+    @app.get("/api/readiness")
+    def readiness() -> dict[str, Any]:
+        """返回生产候选系统运行就绪度。"""
+        return api_service.readiness()
+
     @app.get("/api/scheduler/status")
     def scheduler_status() -> dict[str, Any]:
         """返回每日自动运行调度状态。"""

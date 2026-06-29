@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
 import sqlite3
 from typing import Any
@@ -12,6 +13,7 @@ from monitoring.repository import MonitoringRepository
 from runtime.backup import build_backup_manifest
 from runtime.logs import list_log_files, read_log_file
 from runtime.paths import RuntimePaths, get_runtime_paths
+from runtime.readiness import build_readiness_report
 from runtime.repository import SystemRepository
 from runtime.scheduler import configure_daily_pipeline_job, load_scheduler_status
 from runtime.service_manager import build_service_manifest, build_service_status
@@ -69,6 +71,17 @@ class LocalApiService:
     def service_status(self) -> dict[str, Any]:
         """返回本地常驻服务巡检状态。"""
         return _json_ready(build_service_status(self.paths))
+
+    def readiness(self) -> dict[str, Any]:
+        """返回生产候选系统运行就绪度。"""
+        return _json_ready(
+            build_readiness_report(
+                token_present=bool(os.getenv("TUSHARE_TOKEN", "").strip()),
+                data_health=self.data_health(),
+                scheduler_status=self.scheduler_status(),
+                service_status=self.service_status(),
+            )
+        )
 
     def logs(self) -> list[dict[str, Any]]:
         """返回运行日志索引。"""

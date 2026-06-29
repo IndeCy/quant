@@ -2,6 +2,7 @@ import type { BackupManifest } from "../entities/backup/model";
 import type { FactorDefinition } from "../entities/factor/model";
 import type { RuntimeLog } from "../entities/log/model";
 import type { MarketMetric } from "../entities/market/model";
+import type { ReadinessReport } from "../entities/readiness/model";
 import type { ReportIndex } from "../entities/report/model";
 import type { ResearchTodos } from "../entities/research/model";
 import type { StrategyRun } from "../entities/run/model";
@@ -25,4 +26,5 @@ export interface DashboardData {
   strategyDrafts: StrategyDraft[];
   strategySeries: StrategyMetric[];
   marketSeries: MarketMetric[];
+  readiness: ReadinessReport;
 }

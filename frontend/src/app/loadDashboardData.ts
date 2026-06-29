@@ -2,6 +2,7 @@ import { getBackupManifest } from "../entities/backup/api";
 import { listFactors } from "../entities/factor/api";
 import { listLogs } from "../entities/log/api";
 import { getMarketSeries } from "../entities/market/api";
+import { getReadinessReport } from "../entities/readiness/api";
 import { listReports } from "../entities/report/api";
 import { getResearchTodos } from "../entities/research/api";
 import { listRuns } from "../entities/run/api";
@@ -26,7 +27,8 @@ export async function loadDashboardData() {
     serviceStatus,
     strategyDrafts,
     strategySeries,
-    marketSeries
+    marketSeries,
+    readiness
   ] = await Promise.all([
     listStrategies(),
     getBackupManifest(),
@@ -41,7 +43,8 @@ export async function loadDashboardData() {
     getServiceStatus(),
     listStrategyDrafts(),
     getStrategySeries(strategyId),
-    getMarketSeries("510300")
+    getMarketSeries("510300"),
+    getReadinessReport()
   ]);
   return {
     strategies,
@@ -57,6 +60,7 @@ export async function loadDashboardData() {
     serviceStatus,
     strategyDrafts,
     strategySeries,
-    marketSeries
+    marketSeries,
+    readiness
   };
 }

@@ -220,6 +220,23 @@ h2 {
   padding: 16px;
 }
 
+.panel-title-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.panel-title-row h2 {
+  margin-bottom: 0;
+}
+
+.readiness-panel .status {
+  min-width: 92px;
+  height: 30px;
+}
+
 .chart {
   width: 100%;
   height: 336px;

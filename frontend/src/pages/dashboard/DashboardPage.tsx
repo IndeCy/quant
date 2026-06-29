@@ -6,6 +6,7 @@ import { FactorCompositionPanel } from "./components/FactorCompositionPanel";
 import { MetricGrid } from "./components/MetricGrid";
 import { RecentReportsPanel } from "./components/RecentReportsPanel";
 import { RecentRunsPanel } from "./components/RecentRunsPanel";
+import { ReadinessPanel } from "./components/ReadinessPanel";
 import { StrategyDefinitionPanel } from "./components/StrategyDefinitionPanel";
 
 export function DashboardPage() {
@@ -47,6 +48,7 @@ export function DashboardPage() {
           />
         </section>
         <aside className="column side">
+          <ReadinessPanel report={data.readiness} />
           <StrategyDefinitionPanel strategy={data.strategy} />
           <FactorCompositionPanel factors={data.strategy.factors ?? []} />
           <RecentRunsPanel runs={data.runs} />

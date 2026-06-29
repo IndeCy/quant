@@ -166,6 +166,17 @@ def test_local_api_service_exposes_runtime_logs(tmp_path: Path) -> None:
     assert content["content"] == "api ok\n"
 
 
+def test_local_api_service_exposes_readiness_report(tmp_path: Path, monkeypatch) -> None:
+    """总览页需要读取生产候选运行就绪度。"""
+    monkeypatch.setenv("TUSHARE_TOKEN", "token")
+    service = LocalApiService(_seed_runtime(tmp_path))
+
+    report = service.readiness()
+
+    assert report["status"] in {"READY", "NOT_READY"}
+    assert [item["name"] for item in report["checks"]][:3] == ["tushare_token", "live_market_data", "benchmark_data"]
+
+
 def test_local_api_service_exposes_research_todos(tmp_path: Path) -> None:
     """研究入口需要读取项目待办资料库。"""
     service = LocalApiService(_seed_runtime(tmp_path))
@@ -263,6 +274,7 @@ def test_fastapi_routes_delegate_to_service(tmp_path: Path) -> None:
     assert client.get("/api/services/manifest").json()["services"][0]["name"] == "api"
     assert client.get("/api/services/status").json()["services"][1]["name"] == "frontend"
     assert client.get("/api/logs").status_code == 200
+    assert client.get("/api/readiness").json()["checks"][0]["name"] == "tushare_token"
     assert "待办资料库" in client.get("/api/research/todos").json()["content"]
     assert client.get("/api/data/health").json()["runtime_root"].endswith("runtime")
     assert client.get("/api/strategies").json()[0]["strategy_id"] == "quality_overlay"
