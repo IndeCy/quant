@@ -9,7 +9,8 @@ const checkLabels: Record<string, string> = {
   system_state_db: "系统状态库",
   scheduler_job: "每日任务",
   api_service: "API 服务",
-  frontend_service: "前端服务"
+  frontend_service: "前端服务",
+  scheduler_service: "调度器服务"
 };
 
 export function ReadinessPanel({ report }: { report: ReadinessReport }) {

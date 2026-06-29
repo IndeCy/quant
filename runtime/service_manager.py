@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 import socket
 import sys
@@ -9,7 +10,6 @@ from typing import Any
 import xml.sax.saxutils
 
 from runtime.paths import RuntimePaths, get_runtime_paths
-from runtime.scheduler import load_scheduler_status
 
 
 def project_root() -> Path:
@@ -112,9 +112,8 @@ def build_service_manifest(paths: RuntimePaths | None = None) -> dict[str, Any]:
 
 
 def build_service_status(paths: RuntimePaths | None = None) -> dict[str, Any]:
-    """巡检本地 API、前端和调度任务状态。"""
+    """巡检本地 API、前端和调度器进程状态。"""
     runtime_paths = paths or get_runtime_paths()
-    scheduler = load_scheduler_status(runtime_paths)
     return {
         "runtime_root": str(runtime_paths.root),
         "services": [
@@ -130,8 +129,8 @@ def build_service_status(paths: RuntimePaths | None = None) -> dict[str, Any]:
             },
             {
                 "name": "scheduler",
-                "check": "apscheduler:quality_overlay_daily_pipeline",
-                "running": bool(scheduler["enabled"]),
+                "check": "heartbeat:scheduler",
+                "running": _is_fresh_file(runtime_paths.scheduler_heartbeat_path),
             },
         ],
     }
@@ -148,3 +147,12 @@ def _is_tcp_open(host: str, port: int) -> bool:
             return True
     except OSError:
         return False
+
+
+def _is_fresh_file(path: Path, max_age_seconds: int = 180) -> bool:
+    """检查 heartbeat 文件是否仍然新鲜。"""
+    if not path.exists():
+        return False
+    modified_at = datetime.fromtimestamp(path.stat().st_mtime)
+    age = (datetime.now() - modified_at).total_seconds()
+    return age <= max_age_seconds

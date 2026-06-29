@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from runtime.paths import RuntimePaths
+from runtime.scheduler import configure_daily_pipeline_job
 from runtime.service_manager import build_launchd_plist, build_service_commands, build_service_status
 
 
@@ -36,13 +37,25 @@ def test_build_launchd_plist_contains_quant_home_and_command(tmp_path: Path) -> 
 
 
 def test_build_service_status_reports_configured_checks(tmp_path: Path) -> None:
-    """服务状态巡检应覆盖端口服务和调度任务。"""
+    """服务状态巡检应覆盖端口服务和调度器进程。"""
     paths = RuntimePaths(tmp_path / "runtime")
+    configure_daily_pipeline_job(paths)
     status = build_service_status(paths)
 
     names = [item["name"] for item in status["services"]]
     assert names == ["api", "frontend", "scheduler"]
     assert status["services"][0]["check"] == "tcp:127.0.0.1:8765"
     assert status["services"][1]["check"] == "tcp:127.0.0.1:5173"
-    assert status["services"][2]["check"] == "apscheduler:quality_overlay_daily_pipeline"
+    assert status["services"][2]["check"] == "heartbeat:scheduler"
     assert status["services"][2]["running"] is False
+
+
+def test_build_service_status_marks_scheduler_running_only_with_fresh_heartbeat(tmp_path: Path) -> None:
+    """仅登记任务不代表调度器进程存活，必须有新鲜 heartbeat。"""
+    paths = RuntimePaths(tmp_path / "runtime")
+    paths.ensure_directories()
+    paths.scheduler_heartbeat_path.write_text("2026-06-29T16:00:00+08:00\n", encoding="utf-8")
+
+    status = build_service_status(paths)
+
+    assert status["services"][2]["running"] is True

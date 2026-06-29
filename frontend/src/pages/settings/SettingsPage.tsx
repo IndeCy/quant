@@ -1,19 +1,22 @@
 import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 
-import type { DashboardData } from "../../app/types";
+import type { DashboardContext } from "../../app/types";
 import { formatBytes } from "../../entities/backup/format";
+import { getReadinessReport } from "../../entities/readiness/api";
 import { configureSchedulerJob } from "../../entities/scheduler/api";
 import { validateSchedulerConfig } from "../../entities/scheduler/config";
 import type { SchedulerStatus } from "../../entities/scheduler/model";
 import { schedulerNextRunLabel, schedulerStateLabel } from "../../entities/scheduler/status";
 import { formatCommand } from "../../entities/service/format";
 import { serviceStatusLabel } from "../../entities/service/status";
+import { ReadinessPanel } from "../dashboard/components/ReadinessPanel";
 import { PageHeader } from "../../shared/ui/PageHeader";
 
 export function SettingsPage() {
-  const data = useOutletContext<DashboardData>();
+  const data = useOutletContext<DashboardContext>();
   const [scheduler, setScheduler] = useState<SchedulerStatus>(data.schedulerStatus);
+  const [readiness, setReadiness] = useState(data.readiness);
   const [hour, setHour] = useState(16);
   const [minute, setMinute] = useState(30);
   const [skipUpdate, setSkipUpdate] = useState(false);
@@ -29,9 +32,16 @@ export function SettingsPage() {
       setSchedulerMessage(schedulerValidation.message);
       return;
     }
-    const updated = await configureSchedulerJob({ hour, minute, skip_update: skipUpdate, push });
-    setScheduler(updated);
-    setSchedulerMessage("每日任务已登记到本地调度状态库");
+    try {
+      const updated = await configureSchedulerJob({ hour, minute, skip_update: skipUpdate, push });
+      const updatedReadiness = await getReadinessReport();
+      setScheduler(updated);
+      setReadiness(updatedReadiness);
+      data.updateRuntimeStatus(updated, updatedReadiness);
+      setSchedulerMessage("每日任务已登记到本地调度状态库，生产就绪度已同步刷新");
+    } catch (error) {
+      setSchedulerMessage(error instanceof Error ? error.message : String(error));
+    }
   }
 
   return (
@@ -104,26 +114,29 @@ export function SettingsPage() {
           ) : null}
         </section>
 
-        <section className="panel detail-panel">
-          <div className="detail-heading">
-            <div>
-              <h2>迁移边界</h2>
-              <p>第一阶段本地访问即可，所有可变数据集中在运行目录，降低后续迁移成本。</p>
+        <div className="detail-panel">
+          <ReadinessPanel report={readiness} />
+          <section className="panel detail-panel">
+            <div className="detail-heading">
+              <div>
+                <h2>迁移边界</h2>
+                <p>第一阶段本地访问即可，所有可变数据集中在运行目录，降低后续迁移成本。</p>
+              </div>
             </div>
-          </div>
-          <div className="path-block">
-            <span>运行目录</span>
-            <code>{data.strategy.latest_run?.run_dir ? data.strategy.latest_run.run_dir.replace(/\/runs\/.+$/, "") : "-"}</code>
-          </div>
-          <div className="path-block">
-            <span>运行产物</span>
-            <code>{data.strategy.latest_run?.run_dir ?? "-"}</code>
-          </div>
-          <div className="path-block">
-            <span>当前状态</span>
-            <code>本地只读配置页，写入能力仅限策略草案。</code>
-          </div>
-        </section>
+            <div className="path-block">
+              <span>运行目录</span>
+              <code>{data.strategy.latest_run?.run_dir ? data.strategy.latest_run.run_dir.replace(/\/runs\/.+$/, "") : "-"}</code>
+            </div>
+            <div className="path-block">
+              <span>运行产物</span>
+              <code>{data.strategy.latest_run?.run_dir ?? "-"}</code>
+            </div>
+            <div className="path-block">
+              <span>当前状态</span>
+              <code>本地只读配置页，写入能力仅限策略草案和调度登记。</code>
+            </div>
+          </section>
+        </div>
       </div>
       <section className="panel backup-panel">
         <div className="detail-heading">

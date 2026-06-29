@@ -82,6 +82,10 @@ class RuntimePaths:
         return self.state_dir / "scheduler.sqlite"
 
     @property
+    def scheduler_heartbeat_path(self) -> Path:
+        return self.state_dir / "scheduler.heartbeat"
+
+    @property
     def latest_report_path(self) -> Path:
         return self.reports_dir / "quality_overlay_paper_latest.md"
 

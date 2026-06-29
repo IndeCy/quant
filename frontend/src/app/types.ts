@@ -28,3 +28,8 @@ export interface DashboardData {
   marketSeries: MarketMetric[];
   readiness: ReadinessReport;
 }
+
+export interface DashboardContext extends DashboardData {
+  refreshData: () => Promise<void>;
+  updateRuntimeStatus: (schedulerStatus: SchedulerStatus, readiness: ReadinessReport) => void;
+}

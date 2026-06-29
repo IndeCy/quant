@@ -14,7 +14,13 @@ def test_build_readiness_report_marks_ready_when_core_checks_pass() -> None:
             "system_state": {"exists": True, "latest_run_date": "20260626"},
         },
         scheduler_status={"enabled": True},
-        service_status={"services": [{"name": "api", "running": True}, {"name": "frontend", "running": True}]},
+        service_status={
+            "services": [
+                {"name": "api", "running": True},
+                {"name": "frontend", "running": True},
+                {"name": "scheduler", "running": True},
+            ]
+        },
     )
 
     assert report["status"] == "READY"
@@ -37,4 +43,11 @@ def test_build_readiness_report_marks_not_ready_for_missing_token_and_data() -> 
 
     assert report["status"] == "NOT_READY"
     failed = [item["name"] for item in report["checks"] if item["status"] == "FAIL"]
-    assert failed == ["tushare_token", "live_market_data", "benchmark_data", "scheduler_job", "frontend_service"]
+    assert failed == [
+        "tushare_token",
+        "live_market_data",
+        "benchmark_data",
+        "scheduler_job",
+        "frontend_service",
+        "scheduler_service",
+    ]

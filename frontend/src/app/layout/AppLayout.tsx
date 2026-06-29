@@ -1,11 +1,11 @@
 import { Outlet } from "react-router-dom";
 
-import type { DashboardData } from "../types";
+import type { DashboardContext } from "../types";
 import { Sidebar } from "./Sidebar";
 import { TopStatusBar } from "./TopStatusBar";
 
 interface AppLayoutProps {
-  data: DashboardData;
+  data: DashboardContext;
 }
 
 export function AppLayout({ data }: AppLayoutProps) {

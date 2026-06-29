@@ -135,6 +135,16 @@ def configure_daily_pipeline_job(
     return load_scheduler_status(runtime_paths)
 
 
+def write_scheduler_heartbeat(paths: RuntimePaths | None = None) -> None:
+    """写入调度器进程心跳，供本地服务巡检判断进程是否存活。"""
+    runtime_paths = paths or get_runtime_paths()
+    runtime_paths.ensure_directories()
+    runtime_paths.scheduler_heartbeat_path.write_text(
+        f"{datetime.now().isoformat(timespec='seconds')}\n",
+        encoding="utf-8",
+    )
+
+
 def _describe_cron_schedule(job: Job) -> str:
     """从 CronTrigger 中提取面向设置页的简短描述。"""
     values = {field.name: str(field) for field in getattr(job.trigger, "fields", [])}

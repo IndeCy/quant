@@ -10,7 +10,8 @@ import time
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from runtime.scheduler import create_scheduler, install_daily_pipeline_job
+from runtime.paths import get_runtime_paths
+from runtime.scheduler import create_scheduler, install_daily_pipeline_job, write_scheduler_heartbeat
 
 
 def main() -> None:
@@ -21,19 +22,23 @@ def main() -> None:
     parser.add_argument("--skip-update", action="store_true")
     parser.add_argument("--push", action="store_true")
     args = parser.parse_args()
-    scheduler = create_scheduler()
+    paths = get_runtime_paths()
+    scheduler = create_scheduler(paths)
     job = install_daily_pipeline_job(
         scheduler,
+        paths,
         hour=args.hour,
         minute=args.minute,
         skip_update=args.skip_update,
         push=args.push,
     )
     scheduler.start()
+    write_scheduler_heartbeat(paths)
     print(f"local scheduler started: {job.id} at {args.hour:02d}:{args.minute:02d}")
     try:
         while True:
-            time.sleep(3600)
+            time.sleep(60)
+            write_scheduler_heartbeat(paths)
     except KeyboardInterrupt:
         scheduler.shutdown()
 

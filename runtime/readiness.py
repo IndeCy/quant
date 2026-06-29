@@ -23,6 +23,7 @@ def build_readiness_report(
     service_map = {item.get("name"): bool(item.get("running")) for item in service_status.get("services", [])}
     checks.append(_check("api_service", service_map.get("api", False), "API 服务运行中", "API 服务未运行"))
     checks.append(_check("frontend_service", service_map.get("frontend", False), "前端服务运行中", "前端服务未运行"))
+    checks.append(_check("scheduler_service", service_map.get("scheduler", False), "调度器运行中", "调度器未运行"))
     return {
         "status": "READY" if all(item["status"] == "PASS" for item in checks) else "NOT_READY",
         "checks": checks,

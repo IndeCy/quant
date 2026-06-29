@@ -3,7 +3,10 @@ import { createBrowserRouter, RouterProvider } from "react-router-dom";
 
 import { AppLayout } from "./app/layout/AppLayout";
 import { loadDashboardData } from "./app/loadDashboardData";
-import type { DashboardData } from "./app/types";
+import { mergeRuntimeStatus } from "./app/state";
+import type { DashboardContext, DashboardData } from "./app/types";
+import type { ReadinessReport } from "./entities/readiness/model";
+import type { SchedulerStatus } from "./entities/scheduler/model";
 import { DashboardPage } from "./pages/dashboard/DashboardPage";
 import { DataHealthPage } from "./pages/data/DataHealthPage";
 import { FactorsPage } from "./pages/factors/FactorsPage";
@@ -34,10 +37,25 @@ function App() {
     return <div className="state">加载中</div>;
   }
 
+  async function refreshData() {
+    const next = await loadDashboardData();
+    setData(next);
+  }
+
+  function updateRuntimeStatus(schedulerStatus: SchedulerStatus, readiness: ReadinessReport) {
+    setData((current) => (current ? mergeRuntimeStatus(current, schedulerStatus, readiness) : current));
+  }
+
+  const context: DashboardContext = {
+    ...data,
+    refreshData,
+    updateRuntimeStatus
+  };
+
   const router = createBrowserRouter([
     {
       path: "/",
-      element: <AppLayout data={data} />,
+      element: <AppLayout data={context} />,
       children: [
         { index: true, element: <DashboardPage /> },
         { path: "strategies", element: <StrategiesPage /> },
