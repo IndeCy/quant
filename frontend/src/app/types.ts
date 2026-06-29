@@ -1,5 +1,6 @@
 import type { BackupManifest } from "../entities/backup/model";
 import type { FactorDefinition } from "../entities/factor/model";
+import type { RuntimeLog } from "../entities/log/model";
 import type { MarketMetric } from "../entities/market/model";
 import type { ReportIndex } from "../entities/report/model";
 import type { ResearchTodos } from "../entities/research/model";
@@ -14,6 +15,7 @@ export interface DashboardData {
   backupManifest: BackupManifest;
   strategy: StrategyDefinition;
   factors: FactorDefinition[];
+  logs: RuntimeLog[];
   reports: ReportIndex[];
   researchTodos: ResearchTodos;
   runs: StrategyRun[];

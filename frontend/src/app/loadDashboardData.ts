@@ -1,5 +1,6 @@
 import { getBackupManifest } from "../entities/backup/api";
 import { listFactors } from "../entities/factor/api";
+import { listLogs } from "../entities/log/api";
 import { getMarketSeries } from "../entities/market/api";
 import { listReports } from "../entities/report/api";
 import { getResearchTodos } from "../entities/research/api";
@@ -16,6 +17,7 @@ export async function loadDashboardData() {
     backupManifest,
     strategy,
     factors,
+    logs,
     reports,
     researchTodos,
     runs,
@@ -30,6 +32,7 @@ export async function loadDashboardData() {
     getBackupManifest(),
     getStrategy(strategyId),
     listFactors(),
+    listLogs(),
     listReports(strategyId),
     getResearchTodos(),
     listRuns(strategyId),
@@ -45,6 +48,7 @@ export async function loadDashboardData() {
     backupManifest,
     strategy,
     factors,
+    logs,
     reports,
     researchTodos,
     runs,

@@ -152,6 +152,20 @@ def test_local_api_service_exposes_service_status(tmp_path: Path) -> None:
     assert status["services"][0]["check"] == "tcp:127.0.0.1:8765"
 
 
+def test_local_api_service_exposes_runtime_logs(tmp_path: Path) -> None:
+    """运行日志应通过 API 统一索引和读取。"""
+    paths = _seed_runtime(tmp_path)
+    (paths.logs_dir / "api.log").write_text("api ok\n", encoding="utf-8")
+    service = LocalApiService(paths)
+
+    logs = service.logs()
+    content = service.log_content(logs[0]["log_id"])
+
+    assert logs[0]["name"] == "api.log"
+    assert content is not None
+    assert content["content"] == "api ok\n"
+
+
 def test_local_api_service_exposes_research_todos(tmp_path: Path) -> None:
     """研究入口需要读取项目待办资料库。"""
     service = LocalApiService(_seed_runtime(tmp_path))
@@ -248,6 +262,7 @@ def test_fastapi_routes_delegate_to_service(tmp_path: Path) -> None:
     assert client.get("/api/backup/manifest").json()["items"][0]["name"] == "data"
     assert client.get("/api/services/manifest").json()["services"][0]["name"] == "api"
     assert client.get("/api/services/status").json()["services"][1]["name"] == "frontend"
+    assert client.get("/api/logs").status_code == 200
     assert "待办资料库" in client.get("/api/research/todos").json()["content"]
     assert client.get("/api/data/health").json()["runtime_root"].endswith("runtime")
     assert client.get("/api/strategies").json()[0]["strategy_id"] == "quality_overlay"

@@ -55,6 +55,19 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
         """返回本地常驻服务巡检状态。"""
         return api_service.service_status()
 
+    @app.get("/api/logs")
+    def logs() -> list[dict[str, Any]]:
+        """返回运行日志索引。"""
+        return api_service.logs()
+
+    @app.get("/api/logs/{log_id}")
+    def log_content(log_id: str) -> dict[str, Any]:
+        """返回运行日志内容。"""
+        content = api_service.log_content(log_id)
+        if content is None:
+            raise HTTPException(status_code=404, detail="log not found")
+        return content
+
     @app.get("/api/research/todos")
     def research_todos() -> dict[str, Any]:
         """返回研究待办资料库。"""

@@ -7,6 +7,7 @@ import type { DashboardData } from "./app/types";
 import { DashboardPage } from "./pages/dashboard/DashboardPage";
 import { DataHealthPage } from "./pages/data/DataHealthPage";
 import { FactorsPage } from "./pages/factors/FactorsPage";
+import { LogsPage } from "./pages/logs/LogsPage";
 import { ReportsPage } from "./pages/reports/ReportsPage";
 import { ResearchPage } from "./pages/research/ResearchPage";
 import { RiskPage } from "./pages/risk/RiskPage";
@@ -42,6 +43,7 @@ function App() {
         { path: "strategies", element: <StrategiesPage /> },
         { path: "factors", element: <FactorsPage /> },
         { path: "runs", element: <RunsPage /> },
+        { path: "logs", element: <LogsPage /> },
         { path: "reports", element: <ReportsPage /> },
         { path: "research", element: <ResearchPage /> },
         { path: "data", element: <DataHealthPage /> },

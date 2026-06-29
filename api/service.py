@@ -10,6 +10,7 @@ import pandas as pd
 
 from monitoring.repository import MonitoringRepository
 from runtime.backup import build_backup_manifest
+from runtime.logs import list_log_files, read_log_file
 from runtime.paths import RuntimePaths, get_runtime_paths
 from runtime.repository import SystemRepository
 from runtime.scheduler import configure_daily_pipeline_job, load_scheduler_status
@@ -68,6 +69,14 @@ class LocalApiService:
     def service_status(self) -> dict[str, Any]:
         """返回本地常驻服务巡检状态。"""
         return _json_ready(build_service_status(self.paths))
+
+    def logs(self) -> list[dict[str, Any]]:
+        """返回运行日志索引。"""
+        return _json_ready(list_log_files(self.paths))
+
+    def log_content(self, log_id: str) -> dict[str, Any] | None:
+        """返回运行日志内容。"""
+        return _json_ready(read_log_file(self.paths, log_id))
 
     def research_todos(self) -> dict[str, Any]:
         """返回项目研究待办资料库。"""
