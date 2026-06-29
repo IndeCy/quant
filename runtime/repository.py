@@ -395,6 +395,19 @@ class SystemRepository:
             rows = con.execute(sql, params).fetchall()
         return [self._row_to_dict(row) for row in rows]
 
+    def list_run_artifacts(self, strategy_id: str, trade_date: str) -> list[dict[str, Any]]:
+        """读取某次运行登记的全部产物。"""
+        with self._connect() as con:
+            rows = con.execute(
+                """
+                SELECT * FROM report_index
+                WHERE strategy_id = ? AND trade_date = ?
+                ORDER BY report_type ASC, title ASC
+                """,
+                [strategy_id, trade_date],
+            ).fetchall()
+        return [self._row_to_dict(row) for row in rows]
+
     def get_report(self, report_id: str) -> dict[str, Any] | None:
         """按报告ID读取单条报告索引。"""
         with self._connect() as con:

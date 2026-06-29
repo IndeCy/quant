@@ -214,6 +214,10 @@
   word-break: break-word;
 }
 
+.artifact-row {
+  grid-template-columns: minmax(120px, 1fr) 112px minmax(160px, 1.2fr);
+}
+
 .draft-editor {
   margin-top: 14px;
 }

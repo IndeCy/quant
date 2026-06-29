@@ -212,6 +212,7 @@ class LocalApiService:
         return {
             "run": run,
             "steps": self.system_repository.list_run_steps(strategy_id, trade_date),
+            "artifacts": self.system_repository.list_run_artifacts(strategy_id, trade_date),
         }
 
     def strategy_series(self, strategy_id: str) -> list[dict[str, Any]]:

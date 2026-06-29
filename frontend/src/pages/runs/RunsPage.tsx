@@ -4,6 +4,7 @@ import { useOutletContext } from "react-router-dom";
 import type { DashboardData } from "../../app/types";
 import { getRunDetail } from "../../entities/run/api";
 import type { StrategyRunDetail } from "../../entities/run/model";
+import { runStepTone } from "../../entities/run/status";
 import { PageHeader } from "../../shared/ui/PageHeader";
 
 export function RunsPage() {
@@ -73,13 +74,24 @@ function RunDetailPanel({ detail }: { detail: StrategyRunDetail | null }) {
       <div className="step-list">
         {detail.steps.map((step) => (
           <div className="step-row" key={step.step_name}>
-            <span className={`step-dot ${step.status.toLowerCase()}`} />
+            <span className={`step-dot ${runStepTone(step.status)}`} />
             <div>
               <strong>{step.step_name}</strong>
               <p>{step.message || "-"}</p>
               {step.artifact_path ? <small>{step.artifact_path}</small> : null}
             </div>
             <em>{step.status}</em>
+          </div>
+        ))}
+      </div>
+      <h2>运行产物</h2>
+      <div className="mini-table">
+        {detail.artifacts.length === 0 ? <p className="muted-text">暂无登记产物</p> : null}
+        {detail.artifacts.map((artifact) => (
+          <div className="mini-row artifact-row" key={artifact.report_id}>
+            <span>{artifact.title}</span>
+            <strong>{artifact.report_type}</strong>
+            <em>{artifact.file_path}</em>
           </div>
         ))}
       </div>

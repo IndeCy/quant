@@ -19,4 +19,13 @@ export interface StrategyRunStep {
 export interface StrategyRunDetail {
   run: StrategyRun;
   steps: StrategyRunStep[];
+  artifacts: Array<{
+    report_id: string;
+    report_type: string;
+    strategy_id: string;
+    trade_date: string;
+    title: string;
+    file_path: string;
+    tags: string[];
+  }>;
 }

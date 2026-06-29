@@ -246,11 +246,19 @@ def test_local_api_service_reports_data_health(tmp_path: Path) -> None:
 
 
 def test_local_api_service_returns_run_detail_with_steps(tmp_path: Path) -> None:
-    """运行详情应返回运行记录和分步骤状态。"""
+    """运行详情应返回运行记录、分步骤状态和当日产物。"""
     paths = _seed_runtime(tmp_path)
     repository = SystemRepository(paths.system_state_path)
     repository.record_run_step("quality_overlay", "20260624", 1, "data_update", "SUCCESS", "增量完成")
     repository.record_run_step("quality_overlay", "20260624", 2, "report_generation", "SUCCESS", "报告完成")
+    repository.upsert_report(
+        "rebalance_plan",
+        "quality_overlay",
+        "20260624",
+        "调仓建议",
+        paths.runs_dir / "20260624" / "rebalance_plan.csv",
+        tags=["daily", "execution"],
+    )
     service = LocalApiService(paths)
 
     detail = service.run_detail("quality_overlay", "20260624")
@@ -258,6 +266,7 @@ def test_local_api_service_returns_run_detail_with_steps(tmp_path: Path) -> None
     assert detail is not None
     assert detail["run"]["status"] == "SUCCESS"
     assert [item["step_name"] for item in detail["steps"]] == ["data_update", "report_generation"]
+    assert [item["report_type"] for item in detail["artifacts"]] == ["daily_report", "rebalance_plan"]
 
 
 def test_fastapi_routes_delegate_to_service(tmp_path: Path) -> None:
