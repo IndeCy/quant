@@ -3,6 +3,7 @@ import { useOutletContext } from "react-router-dom";
 
 import type { DashboardData } from "../../app/types";
 import { saveStrategyDraft } from "../../entities/strategyDraft/api";
+import { createDraftFactorsFromAvailableFactors } from "../../entities/strategyDraft/factory";
 import type { StrategyDraft, StrategyDraftPayload } from "../../entities/strategyDraft/model";
 import { validateStrategyDraftWeights } from "../../entities/strategyDraft/validation";
 import { formatNumber, formatPercent } from "../../shared/lib/formatters";
@@ -14,12 +15,7 @@ export function StrategiesPage() {
   const factorWeightTotal = (strategy.factors ?? []).reduce((total, factor) => total + (factor.weight ?? 0), 0);
   const [drafts, setDrafts] = useState<StrategyDraft[]>(data.strategyDrafts);
   const [draftFactors, setDraftFactors] = useState<StrategyDraftPayload["factors"]>(
-    data.factors.map((factor) => ({
-      factor_id: factor.factor_id,
-      weight: Number((1 / Math.max(data.factors.length, 1)).toFixed(6)),
-      transform: "winsorize_zscore",
-      enabled: true
-    }))
+    createDraftFactorsFromAvailableFactors(data.factors, strategy.factors ?? [])
   );
   const [draftName, setDraftName] = useState("Quality Factor Draft");
   const [draftMessage, setDraftMessage] = useState("");
@@ -27,6 +23,12 @@ export function StrategiesPage() {
 
   function updateDraftFactor(factorId: string, patch: Partial<StrategyDraftPayload["factors"][number]>) {
     setDraftFactors((items) => items.map((item) => (item.factor_id === factorId ? { ...item, ...patch } : item)));
+  }
+
+  function handleCloneActiveStrategy() {
+    setDraftFactors(createDraftFactorsFromAvailableFactors(data.factors, strategy.factors ?? []));
+    setDraftName(`${strategy.name} Draft`);
+    setDraftMessage("已复制当前生产策略因子组合，可在草案中调整");
   }
 
   async function handleSaveDraft() {
@@ -123,6 +125,9 @@ export function StrategiesPage() {
             <span>草案名称</span>
             <input value={draftName} onChange={(event) => setDraftName(event.target.value)} />
           </label>
+          <button type="button" className="secondary-button" onClick={handleCloneActiveStrategy}>
+            复制当前策略
+          </button>
           <button type="button" onClick={handleSaveDraft}>
             保存草案
           </button>

@@ -48,3 +48,6 @@ data/*
 frontend/node_modules/
 frontend/dist/
 frontend/tsconfig.tsbuildinfo
+
+# 本地常驻进程心跳文件，运行时自动刷新，不属于可迁移业务数据
+state/*.heartbeat

@@ -256,6 +256,12 @@
   cursor: pointer;
 }
 
+.draft-form button.secondary-button {
+  border: 1px solid #d8e0eb;
+  background: #ffffff;
+  color: #334155;
+}
+
 .draft-row {
   grid-template-columns: minmax(160px, 1fr) 120px minmax(120px, 0.8fr);
   padding: 10px 0;
