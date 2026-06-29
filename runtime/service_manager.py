@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 from pathlib import Path
+import socket
 import sys
 from typing import Any
 import xml.sax.saxutils
 
 from runtime.paths import RuntimePaths, get_runtime_paths
+from runtime.scheduler import load_scheduler_status
 
 
 def project_root() -> Path:
@@ -109,5 +111,40 @@ def build_service_manifest(paths: RuntimePaths | None = None) -> dict[str, Any]:
     return {"runtime_root": str(runtime_paths.root), "services": services}
 
 
+def build_service_status(paths: RuntimePaths | None = None) -> dict[str, Any]:
+    """巡检本地 API、前端和调度任务状态。"""
+    runtime_paths = paths or get_runtime_paths()
+    scheduler = load_scheduler_status(runtime_paths)
+    return {
+        "runtime_root": str(runtime_paths.root),
+        "services": [
+            {
+                "name": "api",
+                "check": "tcp:127.0.0.1:8765",
+                "running": _is_tcp_open("127.0.0.1", 8765),
+            },
+            {
+                "name": "frontend",
+                "check": "tcp:127.0.0.1:5173",
+                "running": _is_tcp_open("127.0.0.1", 5173),
+            },
+            {
+                "name": "scheduler",
+                "check": "apscheduler:quality_overlay_daily_pipeline",
+                "running": bool(scheduler["enabled"]),
+            },
+        ],
+    }
+
+
 def _escape(value: str) -> str:
     return xml.sax.saxutils.escape(value, {'"': "&quot;"})
+
+
+def _is_tcp_open(host: str, port: int) -> bool:
+    """检查本机端口是否可连接。"""
+    try:
+        with socket.create_connection((host, port), timeout=0.3):
+            return True
+    except OSError:
+        return False

@@ -8,6 +8,7 @@ import { validateSchedulerConfig } from "../../entities/scheduler/config";
 import type { SchedulerStatus } from "../../entities/scheduler/model";
 import { schedulerNextRunLabel, schedulerStateLabel } from "../../entities/scheduler/status";
 import { formatCommand } from "../../entities/service/format";
+import { serviceStatusLabel } from "../../entities/service/status";
 import { PageHeader } from "../../shared/ui/PageHeader";
 
 export function SettingsPage() {
@@ -20,6 +21,7 @@ export function SettingsPage() {
   const [schedulerMessage, setSchedulerMessage] = useState("");
   const backup = data.backupManifest;
   const serviceManifest = data.serviceManifest;
+  const serviceStatus = data.serviceStatus;
   const schedulerValidation = validateSchedulerConfig(hour, minute);
 
   async function handleConfigureScheduler() {
@@ -176,6 +178,13 @@ export function SettingsPage() {
                   <h2>{service.name}</h2>
                   <p>{service.label}</p>
                 </div>
+                <span className={`status ${serviceStatus.services.find((item) => item.name === service.name)?.running ? "success" : "warning"}`}>
+                  {serviceStatusLabel(Boolean(serviceStatus.services.find((item) => item.name === service.name)?.running))}
+                </span>
+              </div>
+              <div className="path-block">
+                <span>巡检</span>
+                <code>{serviceStatus.services.find((item) => item.name === service.name)?.check ?? "-"}</code>
               </div>
               <div className="path-block">
                 <span>启动命令</span>

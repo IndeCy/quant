@@ -5,7 +5,7 @@ import type { ReportIndex } from "../entities/report/model";
 import type { ResearchTodos } from "../entities/research/model";
 import type { StrategyRun } from "../entities/run/model";
 import type { SchedulerStatus } from "../entities/scheduler/model";
-import type { ServiceManifest } from "../entities/service/model";
+import type { ServiceManifest, ServiceStatusManifest } from "../entities/service/model";
 import type { StrategyDefinition, StrategyMetric } from "../entities/strategy/model";
 import type { StrategyDraft } from "../entities/strategyDraft/model";
 
@@ -19,6 +19,7 @@ export interface DashboardData {
   runs: StrategyRun[];
   schedulerStatus: SchedulerStatus;
   serviceManifest: ServiceManifest;
+  serviceStatus: ServiceStatusManifest;
   strategyDrafts: StrategyDraft[];
   strategySeries: StrategyMetric[];
   marketSeries: MarketMetric[];

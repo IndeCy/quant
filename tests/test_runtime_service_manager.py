@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from runtime.paths import RuntimePaths
-from runtime.service_manager import build_launchd_plist, build_service_commands
+from runtime.service_manager import build_launchd_plist, build_service_commands, build_service_status
 
 
 def test_build_service_commands_describes_local_processes(tmp_path: Path) -> None:
@@ -33,3 +33,16 @@ def test_build_launchd_plist_contains_quant_home_and_command(tmp_path: Path) -> 
     assert "<string>com.quant.api</string>" in plist
     assert "<key>QUANT_HOME</key>" in plist
     assert "<string>python-test</string>" in plist
+
+
+def test_build_service_status_reports_configured_checks(tmp_path: Path) -> None:
+    """服务状态巡检应覆盖端口服务和调度任务。"""
+    paths = RuntimePaths(tmp_path / "runtime")
+    status = build_service_status(paths)
+
+    names = [item["name"] for item in status["services"]]
+    assert names == ["api", "frontend", "scheduler"]
+    assert status["services"][0]["check"] == "tcp:127.0.0.1:8765"
+    assert status["services"][1]["check"] == "tcp:127.0.0.1:5173"
+    assert status["services"][2]["check"] == "apscheduler:quality_overlay_daily_pipeline"
+    assert status["services"][2]["running"] is False

@@ -50,6 +50,11 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
         """返回本地常驻服务启动命令和 launchd 模板。"""
         return api_service.service_manifest()
 
+    @app.get("/api/services/status")
+    def service_status() -> dict[str, Any]:
+        """返回本地常驻服务巡检状态。"""
+        return api_service.service_status()
+
     @app.get("/api/research/todos")
     def research_todos() -> dict[str, Any]:
         """返回研究待办资料库。"""

@@ -142,6 +142,16 @@ def test_local_api_service_exposes_service_manifest(tmp_path: Path) -> None:
     assert "launchd_plist" in manifest["services"][0]
 
 
+def test_local_api_service_exposes_service_status(tmp_path: Path) -> None:
+    """设置页需要读取本地服务巡检状态。"""
+    service = LocalApiService(_seed_runtime(tmp_path))
+
+    status = service.service_status()
+
+    assert [item["name"] for item in status["services"]] == ["api", "frontend", "scheduler"]
+    assert status["services"][0]["check"] == "tcp:127.0.0.1:8765"
+
+
 def test_local_api_service_exposes_research_todos(tmp_path: Path) -> None:
     """研究入口需要读取项目待办资料库。"""
     service = LocalApiService(_seed_runtime(tmp_path))
@@ -237,6 +247,7 @@ def test_fastapi_routes_delegate_to_service(tmp_path: Path) -> None:
     assert scheduler_response.json()["schedule"] == "mon-fri 17:05 Asia/Shanghai"
     assert client.get("/api/backup/manifest").json()["items"][0]["name"] == "data"
     assert client.get("/api/services/manifest").json()["services"][0]["name"] == "api"
+    assert client.get("/api/services/status").json()["services"][1]["name"] == "frontend"
     assert "待办资料库" in client.get("/api/research/todos").json()["content"]
     assert client.get("/api/data/health").json()["runtime_root"].endswith("runtime")
     assert client.get("/api/strategies").json()[0]["strategy_id"] == "quality_overlay"
