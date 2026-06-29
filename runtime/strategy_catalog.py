@@ -43,3 +43,37 @@ def register_quality_alpha_v1(repository: SystemRepository) -> None:
             {"factor_id": "ocf_to_or", "weight": 1 / 3, "transform": "winsorize_zscore"},
         ],
     )
+
+
+def register_mainline_chain_b(repository: SystemRepository) -> None:
+    """登记主线链动 B 策略元数据，不改变既有观察和交易逻辑。"""
+    repository.upsert_strategy(
+        strategy_id="mainline_chain_b",
+        name="主线链动策略",
+        status="shadow_live",
+        strategy_type="industry_chain_momentum",
+        description="产业链强度轮动，选择当前最强产业链并在链内按60/120日动量等权持有Top5。",
+        config={
+            "entrypoint": "examples/post_close_mainline_chain_observer.py",
+            "observer": "backtest.mainline_observer.observe_account",
+            "execution": "backtest.mainline_rebalance_executor.execute_due_rebalance",
+            "strategy_class": "backtest.chain_selection.ChainStockSelectionStrategy",
+            "mode": "multi_chain",
+            "top_n": 5,
+            "rebalance_frequency": 5,
+            "momentum_windows": [60, 120],
+            "chain_momentum_window": 60,
+            "chain_gate_symbol": "市场基线",
+            "benchmark": "上证指数",
+            "data_cache": "data/market_cache.sqlite3",
+            "paper_account_id": 1,
+            "automation_name": "主线链动策略盘后观察",
+            "adjust_policy": "qfq_for_signal_none_for_valuation",
+        },
+    )
+
+
+def register_builtin_strategies(repository: SystemRepository) -> None:
+    """登记当前系统内置策略，供策略目录和前端运行中心统一读取。"""
+    register_quality_alpha_v1(repository)
+    register_mainline_chain_b(repository)

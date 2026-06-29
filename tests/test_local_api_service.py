@@ -286,7 +286,9 @@ def test_fastapi_routes_delegate_to_service(tmp_path: Path) -> None:
     assert client.get("/api/readiness").json()["checks"][0]["name"] == "tushare_token"
     assert "待办资料库" in client.get("/api/research/todos").json()["content"]
     assert client.get("/api/data/health").json()["runtime_root"].endswith("runtime")
-    assert client.get("/api/strategies").json()[0]["strategy_id"] == "quality_overlay"
+    strategy_ids = [item["strategy_id"] for item in client.get("/api/strategies").json()]
+    assert "quality_overlay" in strategy_ids
+    assert "mainline_chain_b" in strategy_ids
     assert client.get("/api/factors/roa").json()["strategies"][0]["strategy_id"] == "quality_overlay"
     assert client.get("/api/factors/missing").status_code == 404
     response = client.post(

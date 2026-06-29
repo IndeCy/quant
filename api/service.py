@@ -17,7 +17,7 @@ from runtime.readiness import build_readiness_report
 from runtime.repository import SystemRepository
 from runtime.scheduler import configure_daily_pipeline_job, load_scheduler_status
 from runtime.service_manager import build_service_manifest, build_service_status
-from runtime.strategy_catalog import register_quality_alpha_v1
+from runtime.strategy_catalog import register_builtin_strategies
 
 
 class LocalApiService:
@@ -26,7 +26,7 @@ class LocalApiService:
     def __init__(self, paths: RuntimePaths | None = None) -> None:
         self.paths = paths or get_runtime_paths()
         self.system_repository = SystemRepository(self.paths.system_state_path)
-        register_quality_alpha_v1(self.system_repository)
+        register_builtin_strategies(self.system_repository)
         self.monitoring_repository = MonitoringRepository(self.paths.monitoring_path)
 
     def health(self) -> dict[str, Any]:

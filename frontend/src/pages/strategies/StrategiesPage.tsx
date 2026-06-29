@@ -2,6 +2,9 @@ import { useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 
 import type { DashboardData } from "../../app/types";
+import { getStrategy } from "../../entities/strategy/api";
+import { strategyMetricText } from "../../entities/strategy/display";
+import type { StrategyDefinition } from "../../entities/strategy/model";
 import { saveStrategyDraft } from "../../entities/strategyDraft/api";
 import { createDraftFactorsFromAvailableFactors } from "../../entities/strategyDraft/factory";
 import type { StrategyDraft, StrategyDraftPayload } from "../../entities/strategyDraft/model";
@@ -11,11 +14,12 @@ import { PageHeader } from "../../shared/ui/PageHeader";
 
 export function StrategiesPage() {
   const data = useOutletContext<DashboardData>();
-  const strategy = data.strategy;
-  const factorWeightTotal = (strategy.factors ?? []).reduce((total, factor) => total + (factor.weight ?? 0), 0);
+  const [selectedStrategy, setSelectedStrategy] = useState<StrategyDefinition>(data.strategy);
+  const [strategyError, setStrategyError] = useState("");
+  const factorWeightTotal = (selectedStrategy.factors ?? []).reduce((total, factor) => total + (factor.weight ?? 0), 0);
   const [drafts, setDrafts] = useState<StrategyDraft[]>(data.strategyDrafts);
   const [draftFactors, setDraftFactors] = useState<StrategyDraftPayload["factors"]>(
-    createDraftFactorsFromAvailableFactors(data.factors, strategy.factors ?? [])
+    createDraftFactorsFromAvailableFactors(data.factors, selectedStrategy.factors ?? [])
   );
   const [draftName, setDraftName] = useState("Quality Factor Draft");
   const [draftMessage, setDraftMessage] = useState("");
@@ -26,9 +30,18 @@ export function StrategiesPage() {
   }
 
   function handleCloneActiveStrategy() {
-    setDraftFactors(createDraftFactorsFromAvailableFactors(data.factors, strategy.factors ?? []));
-    setDraftName(`${strategy.name} Draft`);
+    setDraftFactors(createDraftFactorsFromAvailableFactors(data.factors, selectedStrategy.factors ?? []));
+    setDraftName(`${selectedStrategy.name} Draft`);
     setDraftMessage("已复制当前生产策略因子组合，可在草案中调整");
+  }
+
+  async function openStrategy(strategyId: string) {
+    setStrategyError("");
+    try {
+      setSelectedStrategy(await getStrategy(strategyId));
+    } catch (error) {
+      setStrategyError(error instanceof Error ? error.message : String(error));
+    }
   }
 
   async function handleSaveDraft() {
@@ -66,30 +79,34 @@ export function StrategiesPage() {
               </tr>
             </thead>
             <tbody>
-              {data.strategies.map((item) => (
-                <tr key={item.strategy_id}>
-                  <td>{item.name}</td>
-                  <td>{item.status}</td>
-                  <td>{item.strategy_type}</td>
-                  <td>{strategy.latest_metrics?.trade_date ?? "-"}</td>
-                  <td>{formatPercent(strategy.latest_metrics?.cumulative_return)}</td>
-                  <td>{formatPercent(strategy.latest_metrics?.drawdown)}</td>
-                </tr>
-              ))}
+              {data.strategies.map((item) => {
+                const metrics = item.strategy_id === selectedStrategy.strategy_id ? selectedStrategy.latest_metrics : null;
+                return (
+                  <tr key={item.strategy_id} className="clickable-row" onClick={() => openStrategy(item.strategy_id)}>
+                    <td>{item.name}</td>
+                    <td>{item.status}</td>
+                    <td>{item.strategy_type}</td>
+                    <td>{strategyMetricText(metrics, "trade_date")}</td>
+                    <td>{strategyMetricText(metrics, "cumulative_return")}</td>
+                    <td>{strategyMetricText(metrics, "drawdown")}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+          {strategyError ? <p className="inline-error">{strategyError}</p> : null}
         </section>
 
         <aside className="panel detail-panel">
           <div className="detail-heading">
             <div>
-              <h2>{strategy.name}</h2>
-              <p>{strategy.description}</p>
+              <h2>{selectedStrategy.name}</h2>
+              <p>{selectedStrategy.description}</p>
             </div>
-            <span className={`status ${strategy.status === "active" ? "success" : "neutral"}`}>{strategy.status}</span>
+            <span className={`status ${selectedStrategy.status === "active" ? "success" : "neutral"}`}>{selectedStrategy.status}</span>
           </div>
           <div className="config-grid">
-            {Object.entries(strategy.config ?? {}).map(([key, value]) => (
+            {Object.entries(selectedStrategy.config ?? {}).map(([key, value]) => (
               <div key={key}>
                 <span>{key}</span>
                 <strong>{String(value)}</strong>
@@ -102,7 +119,8 @@ export function StrategiesPage() {
           </div>
           <h2>因子组合</h2>
           <div className="mini-table">
-            {(strategy.factors ?? []).map((factor) => (
+            {(selectedStrategy.factors ?? []).length === 0 ? <p className="muted-text">该策略暂无登记因子组合</p> : null}
+            {(selectedStrategy.factors ?? []).map((factor) => (
               <div key={factor.factor_id} className="mini-row">
                 <span>{factor.name}</span>
                 <strong>{formatPercent(factor.weight)}</strong>
