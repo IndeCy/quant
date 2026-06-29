@@ -2,20 +2,33 @@ import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 
 import type { DashboardData } from "../../app/types";
+import { getReportContent } from "../../entities/report/api";
+import type { ReportContent } from "../../entities/report/model";
 import { getRunDetail } from "../../entities/run/api";
+import { runArtifactTypeLabel } from "../../entities/run/artifact";
 import type { StrategyRunDetail } from "../../entities/run/model";
 import { runStepTone } from "../../entities/run/status";
 import { PageHeader } from "../../shared/ui/PageHeader";
+import { ReportViewer } from "../reports/components/ReportViewer";
 
 export function RunsPage() {
   const data = useOutletContext<DashboardData>();
   const [detail, setDetail] = useState<StrategyRunDetail | null>(null);
+  const [selectedArtifact, setSelectedArtifact] = useState<ReportContent | null>(null);
   const [error, setError] = useState("");
 
   const openRun = (strategyId: string, tradeDate: string) => {
     setError("");
+    setSelectedArtifact(null);
     getRunDetail(strategyId, tradeDate)
       .then(setDetail)
+      .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)));
+  };
+
+  const openArtifact = (reportId: string) => {
+    setError("");
+    getReportContent(reportId)
+      .then(setSelectedArtifact)
       .catch((reason: unknown) => setError(reason instanceof Error ? reason.message : String(reason)));
   };
 
@@ -48,13 +61,22 @@ export function RunsPage() {
           </table>
           {error ? <p className="inline-error">{error}</p> : null}
         </section>
-        <RunDetailPanel detail={detail} />
+        <div className="detail-panel">
+          <RunDetailPanel detail={detail} onOpenArtifact={openArtifact} />
+          <ReportViewer report={selectedArtifact} />
+        </div>
       </div>
     </>
   );
 }
 
-function RunDetailPanel({ detail }: { detail: StrategyRunDetail | null }) {
+function RunDetailPanel({
+  detail,
+  onOpenArtifact
+}: {
+  detail: StrategyRunDetail | null;
+  onOpenArtifact: (reportId: string) => void;
+}) {
   if (!detail) {
     return (
       <section className="panel run-detail empty-viewer">
@@ -88,11 +110,11 @@ function RunDetailPanel({ detail }: { detail: StrategyRunDetail | null }) {
       <div className="mini-table">
         {detail.artifacts.length === 0 ? <p className="muted-text">暂无登记产物</p> : null}
         {detail.artifacts.map((artifact) => (
-          <div className="mini-row artifact-row" key={artifact.report_id}>
+          <button className="mini-row artifact-row artifact-button" key={artifact.report_id} type="button" onClick={() => onOpenArtifact(artifact.report_id)}>
             <span>{artifact.title}</span>
-            <strong>{artifact.report_type}</strong>
+            <strong>{runArtifactTypeLabel(artifact.report_type)}</strong>
             <em>{artifact.file_path}</em>
-          </div>
+          </button>
         ))}
       </div>
     </section>

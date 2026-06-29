@@ -218,6 +218,18 @@
   grid-template-columns: minmax(120px, 1fr) 112px minmax(160px, 1.2fr);
 }
 
+.artifact-button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+}
+
+.artifact-button:hover {
+  background: #f8fafc;
+}
+
 .draft-editor {
   margin-top: 14px;
 }
