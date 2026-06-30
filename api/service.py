@@ -136,6 +136,10 @@ class LocalApiService:
         """保存可运行策略实例配置。"""
         return self.system_repository.upsert_strategy_instance(payload)
 
+    def strategy_instance_state(self, strategy_id: str) -> dict[str, Any]:
+        """返回策略实例最近一次 paper NAV 和目标持仓。"""
+        return _json_ready(self.system_repository.load_strategy_instance_state(strategy_id))
+
     def strategies(self) -> list[dict[str, Any]]:
         """返回策略列表。"""
         return self.system_repository.list_strategies()

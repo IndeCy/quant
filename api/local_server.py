@@ -122,6 +122,11 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.get("/api/strategy-instances/{strategy_id}/state")
+    def strategy_instance_state(strategy_id: str) -> dict[str, Any]:
+        """返回策略实例最近一次 paper 状态。"""
+        return api_service.strategy_instance_state(strategy_id)
+
     @app.get("/api/strategies")
     def strategies() -> list[dict[str, Any]]:
         """返回策略列表。"""

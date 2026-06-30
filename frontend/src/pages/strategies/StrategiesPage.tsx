@@ -1,11 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 
 import type { DashboardContext } from "../../app/types";
-import { getStrategy, saveStrategyInstance } from "../../entities/strategy/api";
+import { getStrategy, getStrategyInstanceState, saveStrategyInstance } from "../../entities/strategy/api";
 import { strategyMetricText } from "../../entities/strategy/display";
 import { buildFactorTopNInstance, createEditableFactors, validateEditableFactors } from "../../entities/strategy/instanceFactory";
-import type { StrategyDefinition } from "../../entities/strategy/model";
+import type { StrategyDefinition, StrategyInstanceState } from "../../entities/strategy/model";
 import { saveStrategyDraft } from "../../entities/strategyDraft/api";
 import { createDraftFactorsFromAvailableFactors } from "../../entities/strategyDraft/factory";
 import type { StrategyDraft, StrategyDraftPayload } from "../../entities/strategyDraft/model";
@@ -33,9 +33,28 @@ export function StrategiesPage() {
   const [instanceBenchmark, setInstanceBenchmark] = useState("510300");
   const [instanceRiskOverlay, setInstanceRiskOverlay] = useState("vol_20_45_to_30");
   const [instanceFactors, setInstanceFactors] = useState(createEditableFactors(data.factors));
+  const [instanceStates, setInstanceStates] = useState<Record<string, StrategyInstanceState>>({});
   const [instanceMessage, setInstanceMessage] = useState("");
   const validation = useMemo(() => validateStrategyDraftWeights(draftFactors), [draftFactors]);
   const instanceValidation = useMemo(() => validateEditableFactors(instanceFactors), [instanceFactors]);
+
+  useEffect(() => {
+    let active = true;
+    Promise.all(instances.map((instance) => getStrategyInstanceState(instance.strategy_id)))
+      .then((states) => {
+        if (active) {
+          setInstanceStates(Object.fromEntries(states.map((state) => [state.strategy_id, state])));
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setInstanceStates({});
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [instances]);
 
   function updateDraftFactor(factorId: string, patch: Partial<StrategyDraftPayload["factors"][number]>) {
     setDraftFactors((items) => items.map((item) => (item.factor_id === factorId ? { ...item, ...patch } : item)));
@@ -306,10 +325,16 @@ export function StrategiesPage() {
         <h2>已登记策略实例</h2>
         <div className="mini-table">
           {instances.map((instance) => (
-            <div key={instance.strategy_id} className="mini-row">
+            <div key={instance.strategy_id} className="mini-row instance-row">
               <span>{instance.name}</span>
               <strong>{instance.enabled ? "自动运行" : "停用"}</strong>
-              <em>{instance.template_id}</em>
+              <em>
+                {instanceStates[instance.strategy_id]?.nav
+                  ? `NAV ${formatNumber(instanceStates[instance.strategy_id].nav ?? 0, 3)} / ${
+                      instanceStates[instance.strategy_id].holdings.length
+                    }只`
+                  : instance.template_id}
+              </em>
             </div>
           ))}
         </div>

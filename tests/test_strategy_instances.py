@@ -55,3 +55,12 @@ def test_builtin_strategies_are_registered_as_instances(tmp_path: Path) -> None:
     assert [item["strategy_id"] for item in instances] == ["mainline_chain_b", "quality_overlay"]
     assert instances[0]["template_id"] == "industry_chain_momentum"
     assert instances[1]["template_id"] == "factor_topn_monthly"
+
+
+def test_strategy_instance_state_returns_empty_before_first_run(tmp_path: Path) -> None:
+    """策略实例尚未运行时，状态查询应返回空持仓而不是报错。"""
+    repository = SystemRepository(tmp_path / "state" / "quant_system.sqlite")
+
+    state = repository.load_strategy_instance_state("paper_test")
+
+    assert state == {"strategy_id": "paper_test", "trade_date": None, "nav": None, "holdings": []}

@@ -464,6 +464,7 @@ def test_fastapi_routes_delegate_to_service(tmp_path: Path) -> None:
     assert instance_response.status_code == 200
     strategy_instances = client.get("/api/strategy-instances").json()
     assert "quality_roa_ocf_v2" in [item["strategy_id"] for item in strategy_instances]
+    assert client.get("/api/strategy-instances/quality_roa_ocf_v2/state").json()["holdings"] == []
     assert client.get("/api/data/health").json()["runtime_root"].endswith("runtime")
     strategy_ids = [item["strategy_id"] for item in client.get("/api/strategies").json()]
     assert "quality_overlay" in strategy_ids

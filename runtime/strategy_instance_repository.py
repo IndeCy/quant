@@ -71,3 +71,39 @@ class StrategyInstanceRepositoryMixin:
         with self._connect() as con:
             rows = con.execute(sql, params).fetchall()
         return [self._row_to_dict(row) for row in rows]
+
+    def load_strategy_instance_state(self, strategy_id: str) -> dict[str, Any]:
+        """读取策略实例最近一次 paper 状态和持仓。"""
+        with self._connect() as con:
+            if not _table_exists(con, "strategy_instance_state"):
+                return {"strategy_id": strategy_id, "trade_date": None, "nav": None, "holdings": []}
+            state = con.execute(
+                """
+                SELECT strategy_id, trade_date, nav
+                FROM strategy_instance_state
+                WHERE strategy_id = ?
+                """,
+                [strategy_id],
+            ).fetchone()
+            holdings = []
+            if _table_exists(con, "strategy_instance_holdings"):
+                rows = con.execute(
+                    """
+                    SELECT symbol, weight, last_close
+                    FROM strategy_instance_holdings
+                    WHERE strategy_id = ?
+                    ORDER BY symbol
+                    """,
+                    [strategy_id],
+                ).fetchall()
+                holdings = [self._row_to_dict(row) for row in rows]
+        if state is None:
+            return {"strategy_id": strategy_id, "trade_date": None, "nav": None, "holdings": []}
+        result = self._row_to_dict(state)
+        result["holdings"] = holdings
+        return result
+
+
+def _table_exists(con: Any, table: str) -> bool:
+    row = con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name = ?", [table]).fetchone()
+    return row is not None

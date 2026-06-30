@@ -63,3 +63,14 @@ export interface StrategyInstance {
   created_at?: string;
   modified_at?: string;
 }
+
+export interface StrategyInstanceState {
+  strategy_id: string;
+  trade_date: string | null;
+  nav: number | null;
+  holdings: Array<{
+    symbol: string;
+    weight: number;
+    last_close: number;
+  }>;
+}
