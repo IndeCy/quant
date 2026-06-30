@@ -13,8 +13,8 @@ Shadow Live / Paper 观察，不做自动下单，不做收益优化，不重构
 
 1. 支持多个生产观察策略在同一前端中切换和对比。
 2. Dashboard 不再硬编码 Quality Alpha V1。
-3. 主线链动策略进入首页总览、净值曲线、风险指标、运行记录。
-4. Quality Alpha V1 与主线链动策略可以共享页面结构，但保留各自业务语义。
+3. 所有已登记且有监控数据的策略进入首页总览、净值曲线、风险指标、运行记录。
+4. 不同策略可以共享页面结构，但保留各自业务语义。
 5. 数据更新、策略运行、报告与监控指标在页面上可追踪。
 6. 后续可扩展到更多策略、策略组合、账户视角和 Agent 研究入口。
 
@@ -44,13 +44,12 @@ Shadow Live / Paper 观察，不做自动下单，不做收益优化，不重构
 - Logs
 - Settings
 
-新增全局策略上下文：
+新增全局策略上下文。这里必须是策略目录驱动，不允许在前端写死具体策略 ID：
 
-- `ALL`：全部策略总览
-- `quality_overlay`：Quality Alpha V1
-- `mainline_chain_b`：主线链动策略
+- `ALL`：全部策略总览，唯一允许前端内置的特殊值。
+- 其他选项：全部来自 `GET /api/strategies`，使用 `strategy_id`、`name`、`status`、`strategy_type` 动态生成。
 
-策略选择器建议放在顶部状态栏，作为全局控制项。页面本身也可以在局部提供筛选，但全局选择器是主入口。
+策略选择器建议放在顶部状态栏，作为全局控制项。页面本身也可以在局部提供筛选，但全局选择器是主入口。后续新增策略只需要登记到后端策略目录和监控库，前端不应为了新增策略改代码。
 
 ## 页面设计
 
@@ -65,10 +64,10 @@ Dashboard 支持两种模式。
 模块：
 
 - 策略总览卡片：每个策略一张卡，展示最新日期、累计收益、当日收益、当前回撤、20日波动率、仓位、最近运行状态。
-- 多策略净值对比：Quality 与主线链动在同一折线图中展示 `nav`。
+- 多策略净值对比：把当前策略目录中所有有历史净值的策略展示到同一折线图中。
 - 多策略风险对比：展示 `drawdown`、`volatility_20`、`exposure`。
 - 今日运行状态：展示数据更新任务和各策略任务最近一次运行结果。
-- 操作关注区：展示调仓信号、失败订单数、风险层状态或主线链动信号。
+- 操作关注区：展示调仓信号、失败订单数、风险层状态或策略最近运行消息。
 
 #### 单策略模式
 
@@ -84,7 +83,7 @@ Dashboard 支持两种模式。
 - 最近运行记录。
 - 最近报告。
 
-Quality Alpha V1 展示为“因子组合”；主线链动展示为“信号组件”。两者使用同一组件模型，不在页面硬编码业务文案。
+组件展示由 `factor.category` 和 `strategy_type` 决定，不按策略 ID 写死。Quality Alpha V1 可显示为“因子组合”，主线链动可显示为“信号组件”，未来新增策略也按元数据自动展示。
 
 ### Strategies
 
@@ -104,7 +103,7 @@ Quality Alpha V1 展示为“因子组合”；主线链动展示为“信号组
 - 默认展示所有任务。
 - 按策略筛选。
 - `system_data_update` 单独作为系统任务展示。
-- 策略任务包括 `quality_overlay` 和 `mainline_chain_b`。
+- 策略任务来自策略目录。系统任务如 `system_data_update` 单独展示，不混成普通策略。
 
 ### Reports
 
@@ -113,7 +112,7 @@ Quality Alpha V1 展示为“因子组合”；主线链动展示为“信号组
 - 默认展示所有报告。
 - 按策略筛选。
 - Quality 日报继续展示。
-- 主线链动第一阶段先展示运行记录和监控指标；后续再补独立观察报告。
+- 没有独立报告的策略，第一阶段先展示运行记录和监控指标；后续再补策略专属报告。
 
 ### Risk
 
@@ -124,13 +123,14 @@ Quality Alpha V1 展示为“因子组合”；主线链动展示为“信号组
 
 ## 前端数据模型
 
-新增或调整本地前端状态：
+新增或调整本地前端状态。除 `ALL` 外，`selectedStrategyId` 必须来自后端策略目录：
 
 ```ts
 type SelectedStrategyId = "ALL" | string;
 
 interface StrategyWorkspaceState {
   selectedStrategyId: SelectedStrategyId;
+  strategyIds: string[];
   strategyDetails: Record<string, StrategyDefinition>;
   strategySeriesMap: Record<string, StrategyMetric[]>;
 }
@@ -147,6 +147,12 @@ interface DashboardData {
   strategySeriesMap: Record<string, StrategyMetric[]>;
 }
 ```
+
+前端约束：
+
+1. 不出现 `if strategy_id === "quality_overlay"` 这类策略特判，除非是在测试数据中构造样例。
+2. 默认单策略可选择策略目录中的第一个 `status === "active"` 策略；如果没有 active，则选择第一个有 `latest_metrics` 的策略。
+3. 新增策略后，只要 `/api/strategies/{id}` 与 `/api/series/strategy/{id}` 有数据，Dashboard 和 Strategies 页必须自动出现。
 
 ## 数据流
 
@@ -180,7 +186,7 @@ interface DashboardData {
 
 - 前端启动时加载所有策略详情和历史曲线。
 - Quality 仍可作为默认单策略视角。
-- 主线链动数据进入前端上下文。
+- 当前已登记策略数据进入前端上下文；后续新增策略自动进入。
 
 验证：
 
@@ -189,7 +195,7 @@ interface DashboardData {
 
 ### Phase 2：全局策略切换器
 
-目标：顶部状态栏支持 `全部策略 / 单策略` 切换。
+目标：顶部状态栏支持 `全部策略 / 策略目录动态选项` 切换。
 
 改动：
 
@@ -199,12 +205,13 @@ interface DashboardData {
 
 结果：
 
-- 用户可以切换当前观察策略。
+- 用户可以切换当前观察策略，选项完全来自策略目录。
 - Dashboard、Runs、Reports 读取同一全局策略上下文。
+- 后续新增策略不需要修改前端代码。
 
 ### Phase 3：Dashboard 多策略总览
 
-目标：首页能同时看到 Quality 和主线链动。
+目标：首页能同时看到策略目录里的所有可观测策略。
 
 改动：
 
@@ -229,7 +236,7 @@ interface DashboardData {
 结果：
 
 - 策略列表每行都有真实最新指标。
-- 选中主线链动时能看到它的曲线、信号组件和运行记录。
+- 选中任意已登记策略时，都能看到它的曲线、组件元数据和运行记录。
 
 ### Phase 5：Runs / Reports 多策略过滤
 
@@ -253,7 +260,7 @@ interface DashboardData {
 后续可做：
 
 - 后端多策略 overview 聚合接口。
-- 主线链动独立日报。
+- 非 Quality 策略的独立日报。
 - 策略组合/账户视角。
 - Agent 研究入口与人工复盘入口。
 - 多策略资金分配与组合风险预算。
@@ -282,10 +289,10 @@ cd frontend && npm test && npm run build:pre
 
 ## 验收标准
 
-1. Dashboard 能看到 Quality Alpha V1 和主线链动策略。
-2. Dashboard 可以在全部策略和单策略之间切换。
-3. 主线链动有总览指标、净值曲线、风险指标、运行记录。
-4. Quality 不再是页面唯一中心。
-5. 页面没有把主线链动误展示成基本面因子策略。
-6. `npm test` 和 `npm run build:pre` 通过。
-
+1. Dashboard 能看到策略目录中所有具备监控数据的策略。
+2. Dashboard 可以在全部策略和任意单策略之间切换。
+3. 新增策略登记到策略目录后，前端不改代码也能进入选择器和总览。
+4. 当前主线链动验收样例有总览指标、净值曲线、风险指标、运行记录。
+5. Quality 不再是页面唯一中心。
+6. 页面没有把非基本面因子策略误展示成基本面因子策略。
+7. `npm test` 和 `npm run build:pre` 通过。
