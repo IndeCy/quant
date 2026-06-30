@@ -140,6 +140,14 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
         """返回因子列表。"""
         return api_service.factors()
 
+    @app.post("/api/factors")
+    def save_factor(payload: dict[str, Any]) -> dict[str, Any]:
+        """保存正式因子定义。"""
+        try:
+            return api_service.save_factor(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.get("/api/factors/{factor_id}")
     def factor_detail(factor_id: str) -> dict[str, Any]:
         """返回因子定义和使用该因子的策略。"""

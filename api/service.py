@@ -153,6 +153,26 @@ class LocalApiService:
         """返回因子列表。"""
         return self.system_repository.list_factors()
 
+    def save_factor(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """保存正式因子定义，只登记元数据，不生成因子计算逻辑。"""
+        factor_id = str(payload.get("factor_id") or "").strip()
+        name = str(payload.get("name") or "").strip()
+        if not factor_id or not name:
+            raise ValueError("factor_id and name are required")
+        self.system_repository.upsert_factor(
+            factor_id=factor_id,
+            name=name,
+            category=str(payload.get("category") or "custom"),
+            direction=str(payload.get("direction") or "unknown"),
+            source=str(payload.get("source") or "manual"),
+            description=str(payload.get("description") or ""),
+            config=dict(payload.get("config") or {}),
+        )
+        detail = self.system_repository.load_factor_definition(factor_id)
+        if detail is None:
+            raise RuntimeError("factor was not saved")
+        return _json_ready(detail)
+
     def factor_detail(self, factor_id: str) -> dict[str, Any] | None:
         """返回因子定义和使用该因子的策略关系。"""
         definition = self.system_repository.load_factor_definition(factor_id)
