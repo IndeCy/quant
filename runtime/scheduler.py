@@ -15,10 +15,12 @@ from apscheduler.schedulers.base import STATE_STOPPED
 from runtime.paths import RuntimePaths, get_runtime_paths
 
 
+DATA_UPDATE_JOB_ID = "daily_data_update_pipeline"
 DAILY_PIPELINE_JOB_ID = "quality_overlay_daily_pipeline"
 MAINLINE_CHAIN_DAILY_JOB_ID = "mainline_chain_daily_pipeline"
 DEFAULT_HOUR = 16
 DEFAULT_MINUTE = 30
+DEFAULT_STRATEGY_DELAY_MINUTES = 10
 
 
 def project_root() -> Path:
@@ -38,6 +40,11 @@ def build_daily_pipeline_command(
     if push:
         command.append("--push")
     return command
+
+
+def build_daily_data_update_command(python_executable: str = sys.executable) -> list[str]:
+    """构造统一数据更新命令，策略任务只读取更新后的缓存。"""
+    return [python_executable, "scripts/run_daily_data_update.py"]
 
 
 def build_mainline_chain_daily_command(
@@ -88,6 +95,31 @@ def install_daily_pipeline_job(
     )
 
 
+def install_daily_data_update_job(
+    scheduler: BackgroundScheduler,
+    paths: RuntimePaths | None = None,
+    hour: int = DEFAULT_HOUR,
+    minute: int = DEFAULT_MINUTE,
+) -> Job:
+    """登记每日盘后统一数据更新任务。"""
+    runtime_paths = paths or get_runtime_paths()
+    command = build_daily_data_update_command()
+    return scheduler.add_job(
+        run_daily_pipeline,
+        trigger="cron",
+        day_of_week="mon-fri",
+        hour=hour,
+        minute=minute,
+        id=DATA_UPDATE_JOB_ID,
+        replace_existing=True,
+        kwargs={
+            "command": command,
+            "cwd": str(project_root()),
+            "log_path": str(runtime_paths.logs_dir / "scheduler.log"),
+        },
+    )
+
+
 def install_mainline_chain_daily_job(
     scheduler: BackgroundScheduler,
     paths: RuntimePaths | None = None,
@@ -124,20 +156,27 @@ def install_daily_pipeline_jobs(
 ) -> list[Job]:
     """登记所有每日盘后任务，统一由本地调度器托管。"""
     runtime_paths = paths or get_runtime_paths()
+    strategy_hour, strategy_minute = _add_minutes(hour, minute, DEFAULT_STRATEGY_DELAY_MINUTES)
     return [
-        install_daily_pipeline_job(
+        install_daily_data_update_job(
             scheduler,
             runtime_paths,
             hour=hour,
             minute=minute,
-            skip_update=skip_update,
+        ),
+        install_daily_pipeline_job(
+            scheduler,
+            runtime_paths,
+            hour=strategy_hour,
+            minute=strategy_minute,
+            skip_update=True,
             push=push,
         ),
         install_mainline_chain_daily_job(
             scheduler,
             runtime_paths,
-            hour=hour,
-            minute=minute,
+            hour=strategy_hour,
+            minute=strategy_minute,
             push=push,
         ),
     ]
@@ -155,10 +194,13 @@ def load_scheduler_status(paths: RuntimePaths | None = None) -> dict[str, object
     try:
         job = scheduler.get_job(DAILY_PIPELINE_JOB_ID)
         jobs = scheduler.get_jobs()
-        next_run = job.next_run_time.isoformat() if job and job.next_run_time else None
-        if job is not None:
-            schedule = _describe_cron_schedule(job)
-            start_hour, start_minute = _cron_hour_minute(job)
+        data_job = scheduler.get_job(DATA_UPDATE_JOB_ID)
+        pipeline_job = data_job or job
+        next_run = pipeline_job.next_run_time.isoformat() if pipeline_job and pipeline_job.next_run_time else None
+        if pipeline_job is not None:
+            schedule = _describe_cron_schedule(pipeline_job)
+            start_hour, start_minute = _cron_hour_minute(pipeline_job)
+        if job is not None and data_job is None:
             start_flags = _start_flags_from_job(job)
     finally:
         if scheduler.state != STATE_STOPPED:
@@ -254,10 +296,17 @@ def _job_status(job: Job) -> dict[str, object]:
 def _ordered_daily_jobs(jobs: list[Job]) -> list[Job]:
     """按页面观测优先级排序每日任务。"""
     order = {
-        DAILY_PIPELINE_JOB_ID: 0,
-        MAINLINE_CHAIN_DAILY_JOB_ID: 1,
+        DATA_UPDATE_JOB_ID: 0,
+        DAILY_PIPELINE_JOB_ID: 1,
+        MAINLINE_CHAIN_DAILY_JOB_ID: 2,
     }
     return sorted(jobs, key=lambda value: (order.get(value.id, 99), value.id))
+
+
+def _add_minutes(hour: int, minute: int, delta: int) -> tuple[int, int]:
+    """在当天时间上增加分钟数，避免策略与数据更新同时启动。"""
+    total = (hour * 60 + minute + delta) % (24 * 60)
+    return total // 60, total % 60
 
 
 def run_daily_pipeline(command: list[str], cwd: str, log_path: str) -> None:

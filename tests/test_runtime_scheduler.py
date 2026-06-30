@@ -5,6 +5,7 @@ import sys
 
 from runtime.paths import RuntimePaths
 from runtime.scheduler import (
+    build_daily_data_update_command,
     build_daily_pipeline_command,
     build_mainline_chain_daily_command,
     create_scheduler,
@@ -21,6 +22,13 @@ def test_build_daily_pipeline_command_uses_existing_script(tmp_path: Path) -> No
     assert command[:2] == ["python-test", "examples/run_quality_overlay_paper.py"]
     assert "--skip-update" in command
     assert "--push" not in command
+
+
+def test_build_daily_data_update_command_uses_dedicated_script(tmp_path: Path) -> None:
+    """数据更新应从策略执行中拆出，成为独立前置任务。"""
+    command = build_daily_data_update_command("python-test")
+
+    assert command == ["python-test", "scripts/run_daily_data_update.py"]
 
 
 def test_build_mainline_chain_daily_command_uses_wrapper_script(tmp_path: Path) -> None:
@@ -44,8 +52,8 @@ def test_install_daily_pipeline_job_registers_quality_cron_job(tmp_path: Path) -
     assert "--skip-update" in job.kwargs["command"]
 
 
-def test_install_daily_pipeline_jobs_registers_quality_and_mainline(tmp_path: Path) -> None:
-    """每日调度应同时登记 Quality 和主线链动两个观测任务。"""
+def test_install_daily_pipeline_jobs_registers_data_then_parallel_strategies(tmp_path: Path) -> None:
+    """每日调度应先更新数据，再并行登记两个策略观测任务。"""
     paths = RuntimePaths(tmp_path / "runtime")
     paths.ensure_directories()
     scheduler = create_scheduler(paths)
@@ -53,14 +61,24 @@ def test_install_daily_pipeline_jobs_registers_quality_and_mainline(tmp_path: Pa
     jobs = install_daily_pipeline_jobs(scheduler, paths, hour=16, minute=10, skip_update=True)
 
     assert [job.id for job in jobs] == [
+        "daily_data_update_pipeline",
         "quality_overlay_daily_pipeline",
         "mainline_chain_daily_pipeline",
     ]
+    assert jobs[0].kwargs["command"][:2] == [
+        sys.executable,
+        "scripts/run_daily_data_update.py",
+    ]
     assert jobs[1].kwargs["command"][:2] == [
+        sys.executable,
+        "examples/run_quality_overlay_paper.py",
+    ]
+    assert "--skip-update" in jobs[1].kwargs["command"]
+    assert jobs[2].kwargs["command"][:2] == [
         sys.executable,
         "scripts/run_mainline_chain_daily.py",
     ]
-    assert jobs[1].kwargs["log_path"].endswith("logs/scheduler.log")
+    assert jobs[2].kwargs["log_path"].endswith("logs/scheduler.log")
 
 
 def test_load_scheduler_status_reports_registered_daily_job(tmp_path: Path) -> None:
@@ -79,8 +97,13 @@ def test_load_scheduler_status_reports_registered_daily_job(tmp_path: Path) -> N
     assert status["job_id"] == "quality_overlay_daily_pipeline"
     assert status["job_store_exists"] is True
     assert status["schedule"] == "mon-fri 16:10 Asia/Shanghai"
+    assert "T16:10:00" in str(status["next_run_time"])
     assert "scripts/run_local_scheduler.py" in status["start_command"]
     assert [item["job_id"] for item in status["jobs"]] == [
+        "daily_data_update_pipeline",
         "quality_overlay_daily_pipeline",
         "mainline_chain_daily_pipeline",
     ]
+    assert status["jobs"][0]["schedule"] == "mon-fri 16:10 Asia/Shanghai"
+    assert status["jobs"][1]["schedule"] == "mon-fri 16:20 Asia/Shanghai"
+    assert status["jobs"][2]["schedule"] == "mon-fri 16:20 Asia/Shanghai"
