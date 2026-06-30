@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 
-import type { DashboardData } from "../../app/types";
+import type { DashboardContext } from "../../app/types";
 import { getReportContent } from "../../entities/report/api";
 import type { ReportContent } from "../../entities/report/model";
 import { getRunDetail } from "../../entities/run/api";
@@ -12,10 +12,11 @@ import { PageHeader } from "../../shared/ui/PageHeader";
 import { ReportViewer } from "../reports/components/ReportViewer";
 
 export function RunsPage() {
-  const data = useOutletContext<DashboardData>();
+  const data = useOutletContext<DashboardContext>();
   const [detail, setDetail] = useState<StrategyRunDetail | null>(null);
   const [selectedArtifact, setSelectedArtifact] = useState<ReportContent | null>(null);
   const [error, setError] = useState("");
+  const runs = data.selectedStrategyId === "ALL" ? data.runs : data.runs.filter((run) => run.strategy_id === data.selectedStrategyId);
 
   const openRun = (strategyId: string, tradeDate: string) => {
     setError("");
@@ -48,7 +49,7 @@ export function RunsPage() {
               </tr>
             </thead>
             <tbody>
-              {data.runs.map((run) => (
+              {runs.map((run) => (
                 <tr key={`${run.strategy_id}-${run.trade_date}`} className="clickable-row" onClick={() => openRun(run.strategy_id, run.trade_date)}>
                   <td>{run.trade_date}</td>
                   <td>{run.strategy_id}</td>
@@ -59,6 +60,7 @@ export function RunsPage() {
               ))}
             </tbody>
           </table>
+          {runs.length === 0 ? <p className="muted-text">当前策略暂无运行记录</p> : null}
           {error ? <p className="inline-error">{error}</p> : null}
         </section>
         <div className="detail-panel">

@@ -1,16 +1,20 @@
 import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 
-import type { DashboardData } from "../../app/types";
+import type { DashboardContext } from "../../app/types";
 import { getReportContent } from "../../entities/report/api";
 import type { ReportContent } from "../../entities/report/model";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import { ReportViewer } from "./components/ReportViewer";
 
 export function ReportsPage() {
-  const data = useOutletContext<DashboardData>();
+  const data = useOutletContext<DashboardContext>();
   const [selected, setSelected] = useState<ReportContent | null>(null);
   const [error, setError] = useState("");
+  const reports =
+    data.selectedStrategyId === "ALL"
+      ? data.reports
+      : data.reports.filter((report) => report.strategy_id === data.selectedStrategyId);
 
   const openReport = (reportId: string) => {
     setError("");
@@ -34,7 +38,7 @@ export function ReportsPage() {
               </tr>
             </thead>
             <tbody>
-              {data.reports.map((report) => (
+              {reports.map((report) => (
                 <tr key={report.report_id} className="clickable-row" onClick={() => openReport(report.report_id)}>
                   <td>{report.trade_date}</td>
                   <td>{report.title}</td>
@@ -44,6 +48,7 @@ export function ReportsPage() {
               ))}
             </tbody>
           </table>
+          {reports.length === 0 ? <p className="muted-text">当前策略暂无登记报告</p> : null}
           {error ? <p className="inline-error">{error}</p> : null}
         </section>
         <ReportViewer report={selected} />

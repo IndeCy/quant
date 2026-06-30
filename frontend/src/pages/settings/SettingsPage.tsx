@@ -26,6 +26,7 @@ export function SettingsPage() {
   const serviceManifest = data.serviceManifest;
   const serviceStatus = data.serviceStatus;
   const schedulerValidation = validateSchedulerConfig(hour, minute);
+  const selectedStrategy = data.selectedStrategyId === "ALL" ? data.strategy : data.strategyDetails[data.selectedStrategyId] ?? data.strategy;
 
   async function handleConfigureScheduler() {
     if (!schedulerValidation.valid) {
@@ -125,11 +126,11 @@ export function SettingsPage() {
             </div>
             <div className="path-block">
               <span>运行目录</span>
-              <code>{data.strategy.latest_run?.run_dir ? data.strategy.latest_run.run_dir.replace(/\/runs\/.+$/, "") : "-"}</code>
+              <code>{selectedStrategy.latest_run?.run_dir ? selectedStrategy.latest_run.run_dir.replace(/\/runs\/.+$/, "") : "-"}</code>
             </div>
             <div className="path-block">
               <span>运行产物</span>
-              <code>{data.strategy.latest_run?.run_dir ?? "-"}</code>
+              <code>{selectedStrategy.latest_run?.run_dir ?? "-"}</code>
             </div>
             <div className="path-block">
               <span>当前状态</span>

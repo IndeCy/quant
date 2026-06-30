@@ -17,6 +17,7 @@ def test_build_service_commands_describes_local_processes(tmp_path: Path) -> Non
     assert commands[0]["command"][:3] == ["python-test", "-m", "api.local_server"]
     assert commands[1]["cwd"].endswith("frontend")
     assert commands[2]["command"][1] == "scripts/run_local_scheduler.py"
+    assert "--push" in commands[2]["command"]
 
 
 def test_build_launchd_plist_contains_quant_home_and_command(tmp_path: Path) -> None:

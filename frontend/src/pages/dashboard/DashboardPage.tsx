@@ -15,6 +15,10 @@ export function DashboardPage() {
   const data = useOutletContext<DashboardContext>();
   const selectedStrategy = data.selectedStrategyId === "ALL" ? data.strategy : data.strategyDetails[data.selectedStrategyId] ?? data.strategy;
   const selectedSeries = data.selectedStrategyId === "ALL" ? data.strategySeries : data.strategySeriesMap[selectedStrategy.strategy_id] ?? [];
+  const selectedRuns =
+    data.selectedStrategyId === "ALL" ? data.runs : data.runs.filter((run) => run.strategy_id === selectedStrategy.strategy_id);
+  const selectedReports =
+    data.selectedStrategyId === "ALL" ? data.reports : data.reports.filter((report) => report.strategy_id === selectedStrategy.strategy_id);
   const dates = selectedSeries.map((item) => item.trade_date);
   const allDates = Array.from(
     new Set(data.strategies.flatMap((strategy) => data.strategySeriesMap[strategy.strategy_id]?.map((item) => item.trade_date) ?? []))
@@ -83,8 +87,8 @@ export function DashboardPage() {
           <ReadinessPanel report={data.readiness} />
           <StrategyDefinitionPanel strategy={selectedStrategy} />
           <FactorCompositionPanel factors={selectedStrategy.factors ?? []} />
-          <RecentRunsPanel runs={data.runs} />
-          <RecentReportsPanel reports={data.reports} />
+          <RecentRunsPanel runs={selectedRuns} />
+          <RecentReportsPanel reports={selectedReports} />
         </aside>
       </div>
     </>

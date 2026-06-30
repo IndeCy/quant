@@ -20,7 +20,8 @@ describe("mergeRuntimeStatus", () => {
       next_run_time: "2026-06-30T16:30:00+08:00",
       schedule: "mon-fri 16:30 Asia/Shanghai",
       start_command: "python scripts/run_local_scheduler.py",
-      log_path: "/tmp/scheduler.log"
+      log_path: "/tmp/scheduler.log",
+      jobs: []
     };
     const readiness: ReadinessReport = {
       status: "READY",

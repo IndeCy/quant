@@ -7,6 +7,7 @@ export interface SchedulerStatus {
   schedule: string;
   start_command: string;
   log_path: string;
+  jobs: SchedulerJob[];
 }
 
 export interface SchedulerConfigPayload {
@@ -14,4 +15,11 @@ export interface SchedulerConfigPayload {
   minute: number;
   skip_update: boolean;
   push: boolean;
+}
+
+export interface SchedulerJob {
+  job_id: string;
+  next_run_time: string | null;
+  schedule: string;
+  command: string[];
 }

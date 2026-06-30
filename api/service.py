@@ -10,6 +10,7 @@ from typing import Any
 import pandas as pd
 
 from monitoring.mainline_adapter import sync_mainline_chain_monitoring
+from monitoring.mainline_backtest import sync_mainline_chain_backtest_history
 from monitoring.repository import MonitoringRepository
 from runtime.backup import build_backup_manifest
 from runtime.logs import list_log_files, read_log_file
@@ -32,6 +33,7 @@ class LocalApiService:
         register_builtin_strategies(self.system_repository)
         register_builtin_strategy_instances(self.system_repository)
         self.monitoring_repository = MonitoringRepository(self.paths.monitoring_path)
+        sync_mainline_chain_backtest_history(self.paths, self.monitoring_repository)
         sync_mainline_chain_monitoring(self.paths, self.monitoring_repository, self.system_repository)
 
     def health(self) -> dict[str, Any]:

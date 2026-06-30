@@ -15,6 +15,7 @@ import { ReportsPage } from "./pages/reports/ReportsPage";
 import { ResearchPage } from "./pages/research/ResearchPage";
 import { RiskPage } from "./pages/risk/RiskPage";
 import { RunsPage } from "./pages/runs/RunsPage";
+import { SchedulerPage } from "./pages/scheduler/SchedulerPage";
 import { SettingsPage } from "./pages/settings/SettingsPage";
 import { StrategiesPage } from "./pages/strategies/StrategiesPage";
 import "./shared/styles/global.css";
@@ -65,6 +66,7 @@ function App() {
         { path: "strategies", element: <StrategiesPage /> },
         { path: "factors", element: <FactorsPage /> },
         { path: "runs", element: <RunsPage /> },
+        { path: "scheduler", element: <SchedulerPage /> },
         { path: "logs", element: <LogsPage /> },
         { path: "reports", element: <ReportsPage /> },
         { path: "research", element: <ResearchPage /> },

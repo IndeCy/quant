@@ -44,7 +44,7 @@ def build_service_commands(
             "name": "scheduler",
             "label": "com.quant.scheduler",
             "cwd": str(root),
-            "command": [python_executable, "scripts/run_local_scheduler.py", "--hour", "16", "--minute", "30"],
+            "command": [python_executable, "scripts/run_local_scheduler.py", "--hour", "16", "--minute", "30", "--push"],
             "log_path": str(runtime_paths.logs_dir / "scheduler.log"),
         },
     ]

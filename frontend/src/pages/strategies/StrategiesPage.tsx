@@ -39,6 +39,16 @@ export function StrategiesPage() {
   const instanceValidation = useMemo(() => validateEditableFactors(instanceFactors), [instanceFactors]);
 
   useEffect(() => {
+    if (data.selectedStrategyId === "ALL") {
+      return;
+    }
+    const next = data.strategyDetails[data.selectedStrategyId];
+    if (next) {
+      setSelectedStrategy(next);
+    }
+  }, [data.selectedStrategyId, data.strategyDetails]);
+
+  useEffect(() => {
     let active = true;
     Promise.all(instances.map((instance) => getStrategyInstanceState(instance.strategy_id)))
       .then((states) => {
@@ -73,7 +83,9 @@ export function StrategiesPage() {
   async function openStrategy(strategyId: string) {
     setStrategyError("");
     try {
-      setSelectedStrategy(await getStrategy(strategyId));
+      const next = await getStrategy(strategyId);
+      setSelectedStrategy(next);
+      data.selectStrategy(strategyId);
     } catch (error) {
       setStrategyError(error instanceof Error ? error.message : String(error));
     }
@@ -138,7 +150,7 @@ export function StrategiesPage() {
             </thead>
             <tbody>
               {data.strategies.map((item) => {
-                const metrics = item.strategy_id === selectedStrategy.strategy_id ? selectedStrategy.latest_metrics : null;
+                const metrics = data.strategyDetails[item.strategy_id]?.latest_metrics ?? item.latest_metrics ?? null;
                 return (
                   <tr key={item.strategy_id} className="clickable-row" onClick={() => openStrategy(item.strategy_id)}>
                     <td>{item.name}</td>
