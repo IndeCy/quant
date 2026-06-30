@@ -4,11 +4,17 @@ import { listLogs } from "../entities/log/api";
 import { getMarketSeries } from "../entities/market/api";
 import { getReadinessReport } from "../entities/readiness/api";
 import { listReports } from "../entities/report/api";
-import { getResearchTodos } from "../entities/research/api";
+import { getResearchTodos, listFactorIdeas, listStrategyIdeas } from "../entities/research/api";
 import { listRuns } from "../entities/run/api";
 import { getSchedulerStatus } from "../entities/scheduler/api";
 import { getServiceManifest, getServiceStatus } from "../entities/service/api";
-import { getStrategy, getStrategySeries, listStrategies } from "../entities/strategy/api";
+import {
+  getStrategy,
+  getStrategySeries,
+  listStrategies,
+  listStrategyInstances,
+  listStrategyTemplates
+} from "../entities/strategy/api";
 import { listStrategyDrafts } from "../entities/strategyDraft/api";
 import { chooseDefaultStrategyId } from "./state";
 
@@ -26,11 +32,15 @@ export async function loadDashboardData() {
     logs,
     reports,
     researchTodos,
+    factorIdeas,
+    strategyIdeas,
     runs,
     schedulerStatus,
     serviceManifest,
     serviceStatus,
     strategyDrafts,
+    strategyTemplates,
+    strategyInstances,
     marketSeries,
     readiness
   ] = await Promise.all([
@@ -39,11 +49,15 @@ export async function loadDashboardData() {
     listLogs(),
     listReports(strategyId),
     getResearchTodos(),
+    listFactorIdeas(),
+    listStrategyIdeas(),
     listRuns(strategyId),
     getSchedulerStatus(),
     getServiceManifest(),
     getServiceStatus(),
     listStrategyDrafts(),
+    listStrategyTemplates(),
+    listStrategyInstances(),
     getMarketSeries("510300"),
     getReadinessReport()
   ]);
@@ -57,11 +71,15 @@ export async function loadDashboardData() {
     logs,
     reports,
     researchTodos,
+    factorIdeas,
+    strategyIdeas,
     runs,
     schedulerStatus,
     serviceManifest,
     serviceStatus,
     strategyDrafts,
+    strategyTemplates,
+    strategyInstances,
     strategySeries,
     strategyDetails,
     strategySeriesMap,

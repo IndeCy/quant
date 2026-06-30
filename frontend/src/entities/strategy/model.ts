@@ -32,3 +32,34 @@ export interface StrategyMetric {
   total_execution_cost: number;
   failed_order_count: number;
 }
+
+export interface StrategyTemplate {
+  template_id: string;
+  name: string;
+  description?: string;
+  required_sections: string[];
+  supported_status: string[];
+}
+
+export interface StrategyInstanceFactor {
+  factor_id: string;
+  weight: number;
+  transform: string;
+}
+
+export interface StrategyInstance {
+  strategy_id: string;
+  name: string;
+  template_id: string;
+  status: string;
+  enabled: boolean;
+  universe: string;
+  filters: string[];
+  factors: StrategyInstanceFactor[];
+  construction: Record<string, string | number | boolean>;
+  risk_overlay: string;
+  benchmark: string;
+  config?: Record<string, string | number | boolean>;
+  created_at?: string;
+  modified_at?: string;
+}

@@ -346,51 +346,6 @@
   align-items: start;
 }
 
-.strategy-overview-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin-bottom: 14px;
-}
-
-.strategy-card {
-  min-height: 132px;
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  background: #ffffff;
-  padding: 14px;
-  text-align: left;
-  cursor: pointer;
-}
-
-.strategy-card:hover {
-  border-color: #9db7dc;
-  box-shadow: 0 8px 22px rgba(15, 23, 42, 0.08);
-}
-
-.strategy-card strong {
-  display: block;
-  margin: 7px 0 14px;
-  color: #172033;
-  font-size: 16px;
-}
-
-.card-kicker {
-  color: #64748b;
-  font-size: 12px;
-  font-weight: 800;
-  text-transform: uppercase;
-}
-
-.strategy-card-metrics {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 8px;
-  color: #334155;
-  font-size: 13px;
-  font-weight: 800;
-}
-
 .research-todos {
   margin-top: 14px;
 }
@@ -503,7 +458,4 @@
     grid-template-columns: 1fr;
   }
 
-  .strategy-overview-grid {
-    grid-template-columns: 1fr;
-  }
 }

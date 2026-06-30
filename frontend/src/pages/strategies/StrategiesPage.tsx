@@ -1,9 +1,10 @@
 import { useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 
-import type { DashboardData } from "../../app/types";
-import { getStrategy } from "../../entities/strategy/api";
+import type { DashboardContext } from "../../app/types";
+import { getStrategy, saveStrategyInstance } from "../../entities/strategy/api";
 import { strategyMetricText } from "../../entities/strategy/display";
+import { buildFactorTopNInstance, createEditableFactors, validateEditableFactors } from "../../entities/strategy/instanceFactory";
 import type { StrategyDefinition } from "../../entities/strategy/model";
 import { saveStrategyDraft } from "../../entities/strategyDraft/api";
 import { createDraftFactorsFromAvailableFactors } from "../../entities/strategyDraft/factory";
@@ -13,7 +14,7 @@ import { formatNumber, formatPercent } from "../../shared/lib/formatters";
 import { PageHeader } from "../../shared/ui/PageHeader";
 
 export function StrategiesPage() {
-  const data = useOutletContext<DashboardData>();
+  const data = useOutletContext<DashboardContext>();
   const [selectedStrategy, setSelectedStrategy] = useState<StrategyDefinition>(data.strategy);
   const [strategyError, setStrategyError] = useState("");
   const factorWeightTotal = (selectedStrategy.factors ?? []).reduce((total, factor) => total + (factor.weight ?? 0), 0);
@@ -23,10 +24,25 @@ export function StrategiesPage() {
   );
   const [draftName, setDraftName] = useState("Quality Factor Draft");
   const [draftMessage, setDraftMessage] = useState("");
+  const [instances, setInstances] = useState(data.strategyInstances);
+  const [instanceName, setInstanceName] = useState("Quality Custom Paper");
+  const [instanceId, setInstanceId] = useState("quality_custom_paper");
+  const [instanceStatus, setInstanceStatus] = useState("paper");
+  const [instanceEnabled, setInstanceEnabled] = useState(true);
+  const [instanceTopN, setInstanceTopN] = useState(20);
+  const [instanceBenchmark, setInstanceBenchmark] = useState("510300");
+  const [instanceRiskOverlay, setInstanceRiskOverlay] = useState("vol_20_45_to_30");
+  const [instanceFactors, setInstanceFactors] = useState(createEditableFactors(data.factors));
+  const [instanceMessage, setInstanceMessage] = useState("");
   const validation = useMemo(() => validateStrategyDraftWeights(draftFactors), [draftFactors]);
+  const instanceValidation = useMemo(() => validateEditableFactors(instanceFactors), [instanceFactors]);
 
   function updateDraftFactor(factorId: string, patch: Partial<StrategyDraftPayload["factors"][number]>) {
     setDraftFactors((items) => items.map((item) => (item.factor_id === factorId ? { ...item, ...patch } : item)));
+  }
+
+  function updateInstanceFactor(factorId: string, patch: Partial<(typeof instanceFactors)[number]>) {
+    setInstanceFactors((items) => items.map((item) => (item.factor_id === factorId ? { ...item, ...patch } : item)));
   }
 
   function handleCloneActiveStrategy() {
@@ -59,6 +75,29 @@ export function StrategiesPage() {
     });
     setDrafts((items) => [saved, ...items.filter((item) => item.draft_id !== saved.draft_id)]);
     setDraftMessage("草案已保存到本地状态库");
+  }
+
+  async function handleSaveInstance() {
+    const result = validateEditableFactors(instanceFactors);
+    if (!result.valid) {
+      setInstanceMessage(result.message);
+      return;
+    }
+    const saved = await saveStrategyInstance(
+      buildFactorTopNInstance({
+        strategyId: instanceId,
+        name: instanceName,
+        status: instanceStatus,
+        enabled: instanceEnabled,
+        factors: instanceFactors,
+        topN: instanceTopN,
+        benchmark: instanceBenchmark,
+        riskOverlay: instanceRiskOverlay
+      })
+    );
+    setInstances((items) => [saved, ...items.filter((item) => item.strategy_id !== saved.strategy_id)]);
+    setInstanceMessage("策略实例已保存，启用后会进入每日批处理队列");
+    await data.refreshData();
   }
 
   return (
@@ -185,6 +224,92 @@ export function StrategiesPage() {
               <span>{draft.name}</span>
               <strong>{draft.status}</strong>
               <em>{draft.factors.length} 个因子</em>
+            </div>
+          ))}
+        </div>
+      </section>
+      <section className="panel draft-editor">
+        <div className="detail-heading">
+          <div>
+            <h2>策略实例工厂</h2>
+            <p>用因子库组合可运行策略实例。这里不调参、不改 Alpha，只把结构化配置沉淀到系统。</p>
+          </div>
+          <span className={`status ${instanceValidation.valid ? "success" : "warning"}`}>{instanceValidation.message}</span>
+        </div>
+        <div className="instance-form">
+          <label>
+            <span>策略ID</span>
+            <input value={instanceId} onChange={(event) => setInstanceId(event.target.value)} />
+          </label>
+          <label>
+            <span>策略名称</span>
+            <input value={instanceName} onChange={(event) => setInstanceName(event.target.value)} />
+          </label>
+          <label>
+            <span>状态</span>
+            <select value={instanceStatus} onChange={(event) => setInstanceStatus(event.target.value)}>
+              <option value="paper">paper</option>
+              <option value="shadow_live">shadow_live</option>
+              <option value="paused">paused</option>
+            </select>
+          </label>
+          <label>
+            <span>TopN</span>
+            <input type="number" min="1" max="200" value={instanceTopN} onChange={(event) => setInstanceTopN(Number(event.target.value))} />
+          </label>
+          <label>
+            <span>基准</span>
+            <input value={instanceBenchmark} onChange={(event) => setInstanceBenchmark(event.target.value)} />
+          </label>
+          <label>
+            <span>风险层</span>
+            <input value={instanceRiskOverlay} onChange={(event) => setInstanceRiskOverlay(event.target.value)} />
+          </label>
+          <label className="checkbox-label instance-enabled">
+            <input type="checkbox" checked={instanceEnabled} onChange={(event) => setInstanceEnabled(event.target.checked)} />
+            <span>每日自动运行</span>
+          </label>
+          <button type="button" onClick={handleSaveInstance}>
+            保存实例
+          </button>
+        </div>
+        {instanceMessage ? <p className={instanceValidation.valid ? "success-message" : "inline-error"}>{instanceMessage}</p> : null}
+        <div className="mini-table">
+          {instanceFactors.map((item) => {
+            const factor = data.factors.find((candidate) => candidate.factor_id === item.factor_id);
+            return (
+              <div key={item.factor_id} className="draft-row">
+                <label className="checkbox-label">
+                  <input
+                    type="checkbox"
+                    checked={item.enabled}
+                    onChange={(event) => updateInstanceFactor(item.factor_id, { enabled: event.target.checked })}
+                  />
+                  <span>{factor?.name ?? item.factor_id}</span>
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={item.weight}
+                  onChange={(event) => updateInstanceFactor(item.factor_id, { weight: Number(event.target.value) })}
+                />
+                <select value={item.transform} onChange={(event) => updateInstanceFactor(item.factor_id, { transform: event.target.value })}>
+                  <option value="winsorize_zscore">winsorize_zscore</option>
+                  <option value="zscore">zscore</option>
+                </select>
+              </div>
+            );
+          })}
+        </div>
+        <h2>已登记策略实例</h2>
+        <div className="mini-table">
+          {instances.map((instance) => (
+            <div key={instance.strategy_id} className="mini-row">
+              <span>{instance.name}</span>
+              <strong>{instance.enabled ? "自动运行" : "停用"}</strong>
+              <em>{instance.template_id}</em>
             </div>
           ))}
         </div>

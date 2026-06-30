@@ -4,11 +4,11 @@ import type { RuntimeLog } from "../entities/log/model";
 import type { MarketMetric } from "../entities/market/model";
 import type { ReadinessReport } from "../entities/readiness/model";
 import type { ReportIndex } from "../entities/report/model";
-import type { ResearchTodos } from "../entities/research/model";
+import type { FactorIdea, ResearchTodos, StrategyIdea } from "../entities/research/model";
 import type { StrategyRun } from "../entities/run/model";
 import type { SchedulerStatus } from "../entities/scheduler/model";
 import type { ServiceManifest, ServiceStatusManifest } from "../entities/service/model";
-import type { StrategyDefinition, StrategyMetric } from "../entities/strategy/model";
+import type { StrategyDefinition, StrategyInstance, StrategyMetric, StrategyTemplate } from "../entities/strategy/model";
 import type { StrategyDraft } from "../entities/strategyDraft/model";
 
 export interface DashboardData {
@@ -19,11 +19,15 @@ export interface DashboardData {
   logs: RuntimeLog[];
   reports: ReportIndex[];
   researchTodos: ResearchTodos;
+  factorIdeas: FactorIdea[];
+  strategyIdeas: StrategyIdea[];
   runs: StrategyRun[];
   schedulerStatus: SchedulerStatus;
   serviceManifest: ServiceManifest;
   serviceStatus: ServiceStatusManifest;
   strategyDrafts: StrategyDraft[];
+  strategyTemplates: StrategyTemplate[];
+  strategyInstances: StrategyInstance[];
   strategySeries: StrategyMetric[];
   strategyDetails: Record<string, StrategyDefinition>;
   strategySeriesMap: Record<string, StrategyMetric[]>;
