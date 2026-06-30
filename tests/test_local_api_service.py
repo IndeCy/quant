@@ -151,6 +151,72 @@ def test_local_api_service_saves_strategy_draft(tmp_path: Path) -> None:
     assert len(service.strategy_drafts()) == 1
 
 
+def test_local_api_service_saves_research_ideas(tmp_path: Path) -> None:
+    """本地 API 应支持沉淀外部因子和策略想法。"""
+    service = LocalApiService(_seed_runtime(tmp_path))
+
+    factor = service.save_factor_idea(
+        {
+            "idea_id": "profit_stability",
+            "title": "盈利稳定性",
+            "raw_description": "过去三年ROE波动率越低越好",
+            "source": "external_note",
+            "hypothesis": "盈利稳定公司更可能获得稳定估值溢价",
+            "required_data": ["roe", "f_ann_date"],
+            "as_of_requirement": "必须使用财报披露日",
+            "direction": "lower_is_better",
+            "status": "draft",
+        }
+    )
+    strategy = service.save_strategy_idea(
+        {
+            "idea_id": "quality_low_vol_top30",
+            "title": "高质量低波Top30",
+            "raw_description": "高ROA、高经营现金流、低波动，月频调仓，Top30",
+            "source": "external_strategy",
+            "hypothesis": "质量和低波风险溢价共同发挥作用",
+            "candidate_template": "factor_topn_monthly",
+            "required_factors": ["roa", "ocf_to_or", "low_volatility"],
+            "status": "structured",
+        }
+    )
+
+    assert factor["required_data"] == ["roe", "f_ann_date"]
+    assert service.factor_ideas()[0]["idea_id"] == "profit_stability"
+    assert strategy["required_factors"] == ["roa", "ocf_to_or", "low_volatility"]
+    assert service.strategy_ideas()[0]["idea_id"] == "quality_low_vol_top30"
+
+
+def test_local_api_service_exposes_strategy_templates_and_instances(tmp_path: Path) -> None:
+    """本地 API 应支持策略模板和可运行策略实例。"""
+    service = LocalApiService(_seed_runtime(tmp_path))
+
+    templates = service.strategy_templates()
+    saved = service.save_strategy_instance(
+        {
+            "strategy_id": "quality_roa_ocf_v2",
+            "name": "Quality ROA OCF V2",
+            "template_id": "factor_topn_monthly",
+            "status": "paper",
+            "enabled": True,
+            "universe": "all_a",
+            "filters": ["listed_3y"],
+            "factors": [{"factor_id": "roa", "weight": 1.0, "transform": "winsorize_zscore"}],
+            "construction": {"top_n": 20, "weighting": "equal_weight"},
+            "risk_overlay": "",
+            "benchmark": "510300",
+        }
+    )
+
+    assert templates[0]["template_id"] == "factor_topn_monthly"
+    assert saved["strategy_id"] == "quality_roa_ocf_v2"
+    assert saved["enabled"] is True
+    instance_ids = [item["strategy_id"] for item in service.strategy_instances()]
+    assert "quality_roa_ocf_v2" in instance_ids
+    assert "quality_overlay" in instance_ids
+    assert "mainline_chain_b" in instance_ids
+
+
 def test_local_api_service_exposes_scheduler_status(tmp_path: Path) -> None:
     """设置页需要读取每日自动运行任务状态。"""
     service = LocalApiService(_seed_runtime(tmp_path))
@@ -349,6 +415,57 @@ def test_fastapi_routes_delegate_to_service(tmp_path: Path) -> None:
     assert client.get("/api/logs").status_code == 200
     assert client.get("/api/readiness").json()["checks"][0]["name"] == "tushare_token"
     assert "待办资料库" in client.get("/api/research/todos").json()["content"]
+    factor_response = client.post(
+        "/api/research/factor-ideas",
+        json={
+            "idea_id": "profit_stability",
+            "title": "盈利稳定性",
+            "raw_description": "过去三年ROE波动率越低越好",
+            "source": "external_note",
+            "hypothesis": "盈利稳定公司更可能获得稳定估值溢价",
+            "required_data": ["roe"],
+            "as_of_requirement": "必须使用财报披露日",
+            "direction": "lower_is_better",
+            "status": "draft",
+        },
+    )
+    assert factor_response.status_code == 200
+    assert client.get("/api/research/factor-ideas").json()[0]["idea_id"] == "profit_stability"
+    strategy_response = client.post(
+        "/api/research/strategy-ideas",
+        json={
+            "idea_id": "quality_low_vol_top30",
+            "title": "高质量低波Top30",
+            "raw_description": "高ROA、高经营现金流、低波动，月频调仓，Top30",
+            "source": "external_strategy",
+            "hypothesis": "质量和低波风险溢价共同发挥作用",
+            "candidate_template": "factor_topn_monthly",
+            "required_factors": ["roa"],
+            "status": "structured",
+        },
+    )
+    assert strategy_response.status_code == 200
+    assert client.get("/api/research/strategy-ideas").json()[0]["idea_id"] == "quality_low_vol_top30"
+    assert client.get("/api/strategy-templates").json()[0]["template_id"] == "factor_topn_monthly"
+    instance_response = client.post(
+        "/api/strategy-instances",
+        json={
+            "strategy_id": "quality_roa_ocf_v2",
+            "name": "Quality ROA OCF V2",
+            "template_id": "factor_topn_monthly",
+            "status": "paper",
+            "enabled": True,
+            "universe": "all_a",
+            "filters": ["listed_3y"],
+            "factors": [{"factor_id": "roa", "weight": 1.0, "transform": "winsorize_zscore"}],
+            "construction": {"top_n": 20, "weighting": "equal_weight"},
+            "risk_overlay": "",
+            "benchmark": "510300",
+        },
+    )
+    assert instance_response.status_code == 200
+    strategy_instances = client.get("/api/strategy-instances").json()
+    assert "quality_roa_ocf_v2" in [item["strategy_id"] for item in strategy_instances]
     assert client.get("/api/data/health").json()["runtime_root"].endswith("runtime")
     strategy_ids = [item["strategy_id"] for item in client.get("/api/strategies").json()]
     assert "quality_overlay" in strategy_ids

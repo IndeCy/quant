@@ -13,7 +13,7 @@ export function AppLayout({ data }: AppLayoutProps) {
     <div className="app-shell">
       <Sidebar />
       <section className="main-shell">
-        <TopStatusBar strategy={data.strategy} />
+        <TopStatusBar data={data} />
         <Outlet context={data} />
       </section>
     </div>

@@ -123,4 +123,58 @@ def init_system_schema(con: sqlite3.Connection) -> None:
         )
         """
     )
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS factor_ideas (
+            idea_id TEXT NOT NULL PRIMARY KEY,
+            title TEXT NOT NULL,
+            raw_description TEXT NOT NULL,
+            source TEXT NOT NULL,
+            hypothesis TEXT NOT NULL,
+            required_data_json TEXT NOT NULL DEFAULT '[]',
+            as_of_requirement TEXT NOT NULL DEFAULT '',
+            direction TEXT NOT NULL DEFAULT '',
+            status TEXT NOT NULL DEFAULT 'draft',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS strategy_ideas (
+            idea_id TEXT NOT NULL PRIMARY KEY,
+            title TEXT NOT NULL,
+            raw_description TEXT NOT NULL,
+            source TEXT NOT NULL,
+            hypothesis TEXT NOT NULL,
+            candidate_template TEXT NOT NULL DEFAULT '',
+            required_factors_json TEXT NOT NULL DEFAULT '[]',
+            status TEXT NOT NULL DEFAULT 'draft',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    con.execute(
+        """
+        CREATE TABLE IF NOT EXISTS strategy_instances (
+            strategy_id TEXT NOT NULL PRIMARY KEY,
+            name TEXT NOT NULL,
+            template_id TEXT NOT NULL,
+            status TEXT NOT NULL,
+            enabled INTEGER NOT NULL DEFAULT 0,
+            universe TEXT NOT NULL DEFAULT '',
+            filters_json TEXT NOT NULL DEFAULT '[]',
+            factors_json TEXT NOT NULL DEFAULT '[]',
+            construction_json TEXT NOT NULL DEFAULT '{}',
+            risk_overlay TEXT NOT NULL DEFAULT '',
+            benchmark TEXT NOT NULL DEFAULT '',
+            config_json TEXT NOT NULL DEFAULT '{}',
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+        )
+        """
+    )
+    con.execute("CREATE INDEX IF NOT EXISTS idx_strategy_instances_enabled ON strategy_instances(enabled, status)")
     con.execute("CREATE INDEX IF NOT EXISTS idx_report_strategy_date ON report_index(strategy_id, trade_date)")

@@ -25,11 +25,15 @@ export interface DashboardData {
   serviceStatus: ServiceStatusManifest;
   strategyDrafts: StrategyDraft[];
   strategySeries: StrategyMetric[];
+  strategyDetails: Record<string, StrategyDefinition>;
+  strategySeriesMap: Record<string, StrategyMetric[]>;
   marketSeries: MarketMetric[];
   readiness: ReadinessReport;
 }
 
 export interface DashboardContext extends DashboardData {
+  selectedStrategyId: string;
   refreshData: () => Promise<void>;
+  selectStrategy: (strategyId: string) => void;
   updateRuntimeStatus: (schedulerStatus: SchedulerStatus, readiness: ReadinessReport) => void;
 }

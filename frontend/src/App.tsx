@@ -22,6 +22,7 @@ import "./shared/styles/features.css";
 
 function App() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [selectedStrategyId, setSelectedStrategyId] = useState<string>("ALL");
   const [error, setError] = useState<string>("");
 
   useEffect(() => {
@@ -48,7 +49,9 @@ function App() {
 
   const context: DashboardContext = {
     ...data,
+    selectedStrategyId,
     refreshData,
+    selectStrategy: setSelectedStrategyId,
     updateRuntimeStatus
   };
 

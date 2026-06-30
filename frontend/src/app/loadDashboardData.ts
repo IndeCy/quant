@@ -10,13 +10,18 @@ import { getSchedulerStatus } from "../entities/scheduler/api";
 import { getServiceManifest, getServiceStatus } from "../entities/service/api";
 import { getStrategy, getStrategySeries, listStrategies } from "../entities/strategy/api";
 import { listStrategyDrafts } from "../entities/strategyDraft/api";
+import { chooseDefaultStrategyId } from "./state";
 
 export async function loadDashboardData() {
-  const strategyId = "quality_overlay";
+  const strategies = await listStrategies();
+  const strategyIds = strategies.map((item) => item.strategy_id);
+  const strategyDetailsList = await Promise.all(strategyIds.map((strategyId) => getStrategy(strategyId)));
+  const strategySeriesList = await Promise.all(strategyIds.map((strategyId) => getStrategySeries(strategyId)));
+  const strategyDetails = Object.fromEntries(strategyDetailsList.map((item) => [item.strategy_id, item]));
+  const strategySeriesMap = Object.fromEntries(strategyIds.map((strategyId, index) => [strategyId, strategySeriesList[index]]));
+  const strategyId = chooseDefaultStrategyId(strategyDetailsList);
   const [
-    strategies,
     backupManifest,
-    strategy,
     factors,
     logs,
     reports,
@@ -26,13 +31,10 @@ export async function loadDashboardData() {
     serviceManifest,
     serviceStatus,
     strategyDrafts,
-    strategySeries,
     marketSeries,
     readiness
   ] = await Promise.all([
-    listStrategies(),
     getBackupManifest(),
-    getStrategy(strategyId),
     listFactors(),
     listLogs(),
     listReports(strategyId),
@@ -42,10 +44,11 @@ export async function loadDashboardData() {
     getServiceManifest(),
     getServiceStatus(),
     listStrategyDrafts(),
-    getStrategySeries(strategyId),
     getMarketSeries("510300"),
     getReadinessReport()
   ]);
+  const strategy = strategyDetails[strategyId] ?? strategyDetailsList[0];
+  const strategySeries = strategySeriesMap[strategyId] ?? [];
   return {
     strategies,
     backupManifest,
@@ -60,6 +63,8 @@ export async function loadDashboardData() {
     serviceStatus,
     strategyDrafts,
     strategySeries,
+    strategyDetails,
+    strategySeriesMap,
     marketSeries,
     readiness
   };

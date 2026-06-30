@@ -18,6 +18,8 @@ from runtime.readiness import build_readiness_report
 from runtime.repository import SystemRepository
 from runtime.scheduler import configure_daily_pipeline_job, load_scheduler_status
 from runtime.service_manager import build_service_manifest, build_service_status
+from runtime.strategy_instance_catalog import register_builtin_strategy_instances
+from runtime.strategy_templates import list_strategy_templates
 from runtime.strategy_catalog import register_builtin_strategies
 
 
@@ -28,6 +30,7 @@ class LocalApiService:
         self.paths = paths or get_runtime_paths()
         self.system_repository = SystemRepository(self.paths.system_state_path)
         register_builtin_strategies(self.system_repository)
+        register_builtin_strategy_instances(self.system_repository)
         self.monitoring_repository = MonitoringRepository(self.paths.monitoring_path)
         sync_mainline_chain_monitoring(self.paths, self.monitoring_repository, self.system_repository)
 
@@ -104,6 +107,34 @@ class LocalApiService:
             "content": path.read_text(encoding="utf-8"),
             "missing": False,
         }
+
+    def factor_ideas(self) -> list[dict[str, Any]]:
+        """返回自然语言因子想法列表。"""
+        return self.system_repository.list_factor_ideas()
+
+    def save_factor_idea(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """保存外部因子想法，暂不要求已经可执行。"""
+        return self.system_repository.upsert_factor_idea(payload)
+
+    def strategy_ideas(self) -> list[dict[str, Any]]:
+        """返回自然语言策略想法列表。"""
+        return self.system_repository.list_strategy_ideas()
+
+    def save_strategy_idea(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """保存外部策略想法，后续可结构化为策略实例。"""
+        return self.system_repository.upsert_strategy_idea(payload)
+
+    def strategy_templates(self) -> list[dict[str, object]]:
+        """返回可实例化策略模板。"""
+        return list_strategy_templates()
+
+    def strategy_instances(self, enabled_only: bool = False) -> list[dict[str, Any]]:
+        """返回策略实例列表。"""
+        return self.system_repository.list_strategy_instances(enabled_only=enabled_only)
+
+    def save_strategy_instance(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """保存可运行策略实例配置。"""
+        return self.system_repository.upsert_strategy_instance(payload)
 
     def strategies(self) -> list[dict[str, Any]]:
         """返回策略列表。"""

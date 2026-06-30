@@ -78,6 +78,50 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
         """返回研究待办资料库。"""
         return api_service.research_todos()
 
+    @app.get("/api/research/factor-ideas")
+    def factor_ideas() -> list[dict[str, Any]]:
+        """返回外部因子想法列表。"""
+        return api_service.factor_ideas()
+
+    @app.post("/api/research/factor-ideas")
+    def save_factor_idea(payload: dict[str, Any]) -> dict[str, Any]:
+        """保存外部因子想法。"""
+        try:
+            return api_service.save_factor_idea(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/research/strategy-ideas")
+    def strategy_ideas() -> list[dict[str, Any]]:
+        """返回外部策略想法列表。"""
+        return api_service.strategy_ideas()
+
+    @app.post("/api/research/strategy-ideas")
+    def save_strategy_idea(payload: dict[str, Any]) -> dict[str, Any]:
+        """保存外部策略想法。"""
+        try:
+            return api_service.save_strategy_idea(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/strategy-templates")
+    def strategy_templates() -> list[dict[str, Any]]:
+        """返回可实例化策略模板。"""
+        return api_service.strategy_templates()
+
+    @app.get("/api/strategy-instances")
+    def strategy_instances(enabled_only: bool = False) -> list[dict[str, Any]]:
+        """返回策略实例列表。"""
+        return api_service.strategy_instances(enabled_only=enabled_only)
+
+    @app.post("/api/strategy-instances")
+    def save_strategy_instance(payload: dict[str, Any]) -> dict[str, Any]:
+        """保存策略实例。"""
+        try:
+            return api_service.save_strategy_instance(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.get("/api/strategies")
     def strategies() -> list[dict[str, Any]]:
         """返回策略列表。"""

@@ -7,10 +7,12 @@ from pathlib import Path
 import sqlite3
 from typing import Any, Iterable
 
+from runtime.research_repository import ResearchIdeaRepositoryMixin
 from runtime.repository_schema import init_system_schema
+from runtime.strategy_instance_repository import StrategyInstanceRepositoryMixin
 
 
-class SystemRepository:
+class SystemRepository(ResearchIdeaRepositoryMixin, StrategyInstanceRepositoryMixin):
     """保存每日运行状态和报告索引，供后续前端统一读取。"""
 
     def __init__(self, path: str | Path) -> None:
@@ -440,6 +442,16 @@ class SystemRepository:
             result["tags"] = json.loads(result.pop("tags_json") or "[]")
         if "config_json" in result:
             result["config"] = json.loads(result.pop("config_json") or "{}")
+        if "required_data_json" in result:
+            result["required_data"] = json.loads(result.pop("required_data_json") or "[]")
+        if "required_factors_json" in result:
+            result["required_factors"] = json.loads(result.pop("required_factors_json") or "[]")
+        if "filters_json" in result:
+            result["filters"] = json.loads(result.pop("filters_json") or "[]")
+        if "factors_json" in result:
+            result["factors"] = json.loads(result.pop("factors_json") or "[]")
+        if "construction_json" in result:
+            result["construction"] = json.loads(result.pop("construction_json") or "{}")
         if "enabled" in result:
             result["enabled"] = bool(result["enabled"])
         return result
