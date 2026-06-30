@@ -18,6 +18,7 @@ from runtime.paths import RuntimePaths, get_runtime_paths
 DATA_UPDATE_JOB_ID = "daily_data_update_pipeline"
 DAILY_PIPELINE_JOB_ID = "quality_overlay_daily_pipeline"
 MAINLINE_CHAIN_DAILY_JOB_ID = "mainline_chain_daily_pipeline"
+STRATEGY_BATCH_JOB_ID = "strategy_batch_pipeline"
 DEFAULT_HOUR = 16
 DEFAULT_MINUTE = 30
 DEFAULT_STRATEGY_DELAY_MINUTES = 10
@@ -56,6 +57,11 @@ def build_mainline_chain_daily_command(
     if push:
         command.append("--push")
     return command
+
+
+def build_strategy_batch_command(python_executable: str = sys.executable) -> list[str]:
+    """构造动态策略实例批量运行命令。"""
+    return [python_executable, "scripts/run_strategy_batch.py"]
 
 
 def create_scheduler(paths: RuntimePaths | None = None) -> BackgroundScheduler:
@@ -146,6 +152,31 @@ def install_mainline_chain_daily_job(
     )
 
 
+def install_strategy_batch_job(
+    scheduler: BackgroundScheduler,
+    paths: RuntimePaths | None = None,
+    hour: int = DEFAULT_HOUR,
+    minute: int = DEFAULT_MINUTE,
+) -> Job:
+    """登记策略实例批量运行任务。"""
+    runtime_paths = paths or get_runtime_paths()
+    command = build_strategy_batch_command()
+    return scheduler.add_job(
+        run_daily_pipeline,
+        trigger="cron",
+        day_of_week="mon-fri",
+        hour=hour,
+        minute=minute,
+        id=STRATEGY_BATCH_JOB_ID,
+        replace_existing=True,
+        kwargs={
+            "command": command,
+            "cwd": str(project_root()),
+            "log_path": str(runtime_paths.logs_dir / "scheduler.log"),
+        },
+    )
+
+
 def install_daily_pipeline_jobs(
     scheduler: BackgroundScheduler,
     paths: RuntimePaths | None = None,
@@ -157,6 +188,7 @@ def install_daily_pipeline_jobs(
     """登记所有每日盘后任务，统一由本地调度器托管。"""
     runtime_paths = paths or get_runtime_paths()
     strategy_hour, strategy_minute = _add_minutes(hour, minute, DEFAULT_STRATEGY_DELAY_MINUTES)
+    _remove_legacy_strategy_jobs(scheduler)
     return [
         install_daily_data_update_job(
             scheduler,
@@ -164,20 +196,11 @@ def install_daily_pipeline_jobs(
             hour=hour,
             minute=minute,
         ),
-        install_daily_pipeline_job(
+        install_strategy_batch_job(
             scheduler,
             runtime_paths,
             hour=strategy_hour,
             minute=strategy_minute,
-            skip_update=True,
-            push=push,
-        ),
-        install_mainline_chain_daily_job(
-            scheduler,
-            runtime_paths,
-            hour=strategy_hour,
-            minute=strategy_minute,
-            push=push,
         ),
     ]
 
@@ -192,7 +215,7 @@ def load_scheduler_status(paths: RuntimePaths | None = None) -> dict[str, object
     start_minute = DEFAULT_MINUTE
     start_flags = ""
     try:
-        job = scheduler.get_job(DAILY_PIPELINE_JOB_ID)
+        job = scheduler.get_job(STRATEGY_BATCH_JOB_ID)
         jobs = scheduler.get_jobs()
         data_job = scheduler.get_job(DATA_UPDATE_JOB_ID)
         pipeline_job = data_job or job
@@ -207,7 +230,7 @@ def load_scheduler_status(paths: RuntimePaths | None = None) -> dict[str, object
             scheduler.shutdown()
     return {
         "enabled": job is not None,
-        "job_id": DAILY_PIPELINE_JOB_ID,
+        "job_id": STRATEGY_BATCH_JOB_ID,
         "job_store_path": str(runtime_paths.scheduler_state_path),
         "job_store_exists": runtime_paths.scheduler_state_path.exists(),
         "next_run_time": next_run,
@@ -297,10 +320,18 @@ def _ordered_daily_jobs(jobs: list[Job]) -> list[Job]:
     """按页面观测优先级排序每日任务。"""
     order = {
         DATA_UPDATE_JOB_ID: 0,
-        DAILY_PIPELINE_JOB_ID: 1,
-        MAINLINE_CHAIN_DAILY_JOB_ID: 2,
+        STRATEGY_BATCH_JOB_ID: 1,
+        DAILY_PIPELINE_JOB_ID: 2,
+        MAINLINE_CHAIN_DAILY_JOB_ID: 3,
     }
     return sorted(jobs, key=lambda value: (order.get(value.id, 99), value.id))
+
+
+def _remove_legacy_strategy_jobs(scheduler: BackgroundScheduler) -> None:
+    """迁移到策略实例批处理后，清理旧的单策略定时任务，避免重复运行。"""
+    for job_id in [DAILY_PIPELINE_JOB_ID, MAINLINE_CHAIN_DAILY_JOB_ID]:
+        if scheduler.get_job(job_id) is not None:
+            scheduler.remove_job(job_id)
 
 
 def _add_minutes(hour: int, minute: int, delta: int) -> tuple[int, int]:

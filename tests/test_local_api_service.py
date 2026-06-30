@@ -240,11 +240,9 @@ def test_local_api_service_configures_scheduler_job(tmp_path: Path) -> None:
     assert "--skip-update" not in status["start_command"]
     assert [item["job_id"] for item in status["jobs"]] == [
         "daily_data_update_pipeline",
-        "quality_overlay_daily_pipeline",
-        "mainline_chain_daily_pipeline",
+        "strategy_batch_pipeline",
     ]
     assert status["jobs"][1]["schedule"] == "mon-fri 17:15 Asia/Shanghai"
-    assert status["jobs"][2]["schedule"] == "mon-fri 17:15 Asia/Shanghai"
 
 
 def test_local_api_service_exposes_backup_manifest(tmp_path: Path) -> None:
@@ -403,12 +401,12 @@ def test_fastapi_routes_delegate_to_service(tmp_path: Path) -> None:
 
     assert client.get("/api/health").json()["status"] == "ok"
     scheduler_status = client.get("/api/scheduler/status").json()
-    assert scheduler_status["job_id"] == "quality_overlay_daily_pipeline"
+    assert scheduler_status["job_id"] == "strategy_batch_pipeline"
     assert scheduler_status["jobs"] == []
     scheduler_response = client.post("/api/scheduler/daily-job", json={"hour": 17, "minute": 5, "skip_update": True})
     assert scheduler_response.status_code == 200
     assert scheduler_response.json()["schedule"] == "mon-fri 17:05 Asia/Shanghai"
-    assert len(scheduler_response.json()["jobs"]) == 3
+    assert len(scheduler_response.json()["jobs"]) == 2
     assert client.get("/api/backup/manifest").json()["items"][0]["name"] == "data"
     assert client.get("/api/services/manifest").json()["services"][0]["name"] == "api"
     assert client.get("/api/services/status").json()["services"][1]["name"] == "frontend"
