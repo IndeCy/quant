@@ -37,6 +37,8 @@ from monitoring.dashboard_data import build_dashboard_payload, write_dashboard_f
 from monitoring.metrics import build_market_monitor_frame, build_strategy_monitor_frame
 from monitoring.repository import MonitoringRepository
 from pipeline.production_daily import build_monthly_review, is_month_end_trade_date, write_daily_artifacts, write_run_log
+from runtime.mainline_cache_sync import mainline_proxy_fund_symbols
+from runtime.notification_config import resolve_bark_url
 from runtime.paths import get_runtime_paths
 from runtime.repository import SystemRepository
 from runtime.strategy_catalog import register_quality_alpha_v1
@@ -77,16 +79,20 @@ def update_incremental(end_date: str) -> tuple[list[str], list[str]]:
 
 
 def update_benchmark_incremental(end_date: str) -> list[str]:
-    """补齐510300 ETF和上证指数基准缓存。"""
+    """补齐510300、主线代理ETF和上证指数基准缓存。"""
     token = os.getenv("TUSHARE_TOKEN", "")
     if not token:
         return ["未检测到TUSHARE_TOKEN，本次未更新ETF/指数基准"]
     store = BenchmarkIncrementalStore(BENCHMARK_INCREMENT_PATH)
     updater = TushareBenchmarkUpdater(TushareBenchmarkProClient(token), store)
+    fund_symbols = tuple(dict.fromkeys(("510300.SH", *mainline_proxy_fund_symbols())))
     try:
         result = updater.update(
             end_date=end_date,
-            fund_base_latest={"510300.SH": _latest_etf_base_date("510300.SH")},
+            fund_base_latest={
+                symbol: _latest_etf_base_date(symbol) if symbol == "510300.SH" else None
+                for symbol in fund_symbols
+            },
             index_base_latest={"000001.SH": _latest_index_base_date("000001.SH")},
         )
     except Exception as exc:
@@ -454,7 +460,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-update", action="store_true", help="只使用当前完整缓存")
     parser.add_argument("--push", action="store_true", help="通过Bark推送摘要")
-    parser.add_argument("--bark-url", default=os.getenv("BARK_PUSH_URL", ""))
+    parser.add_argument("--bark-url", default=resolve_bark_url())
     args = parser.parse_args()
     run_date = datetime.now().strftime("%Y%m%d")
     run_log_dir = RUNS_ROOT / run_date

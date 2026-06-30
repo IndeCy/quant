@@ -47,6 +47,13 @@ def test_build_strategy_batch_command_uses_dynamic_runner(tmp_path: Path) -> Non
     assert command == ["python-test", "scripts/run_strategy_batch.py"]
 
 
+def test_build_strategy_batch_command_can_enable_push(tmp_path: Path) -> None:
+    """调度器开启通知时，策略批处理入口应收到 push 标记。"""
+    command = build_strategy_batch_command("python-test", push=True)
+
+    assert command == ["python-test", "scripts/run_strategy_batch.py", "--push"]
+
+
 def test_install_daily_pipeline_job_registers_quality_cron_job(tmp_path: Path) -> None:
     """APScheduler 中应登记每日 Quality Alpha 流水线任务。"""
     paths = RuntimePaths(tmp_path / "runtime")
@@ -67,7 +74,7 @@ def test_install_daily_pipeline_jobs_registers_data_then_batch_runner(tmp_path: 
     paths.ensure_directories()
     scheduler = create_scheduler(paths)
 
-    jobs = install_daily_pipeline_jobs(scheduler, paths, hour=16, minute=10, skip_update=True)
+    jobs = install_daily_pipeline_jobs(scheduler, paths, hour=16, minute=10, skip_update=True, push=True)
 
     assert [job.id for job in jobs] == [
         "daily_data_update_pipeline",
@@ -81,6 +88,7 @@ def test_install_daily_pipeline_jobs_registers_data_then_batch_runner(tmp_path: 
         sys.executable,
         "scripts/run_strategy_batch.py",
     ]
+    assert "--push" in jobs[1].kwargs["command"]
     assert jobs[1].kwargs["log_path"].endswith("logs/scheduler.log")
 
 
@@ -93,7 +101,7 @@ def test_install_daily_pipeline_jobs_removes_legacy_strategy_jobs(tmp_path: Path
 
     install_mainline_chain_daily_job(scheduler, paths, hour=16, minute=10)
 
-    install_daily_pipeline_jobs(scheduler, paths, hour=16, minute=10, skip_update=True)
+    install_daily_pipeline_jobs(scheduler, paths, hour=16, minute=10, skip_update=True, push=True)
 
     assert scheduler.get_job("quality_overlay_daily_pipeline") is None
     assert scheduler.get_job("mainline_chain_daily_pipeline") is None
@@ -105,7 +113,7 @@ def test_load_scheduler_status_reports_registered_daily_job(tmp_path: Path) -> N
     paths = RuntimePaths(tmp_path / "runtime")
     paths.ensure_directories()
     scheduler = create_scheduler(paths)
-    install_daily_pipeline_jobs(scheduler, paths, hour=16, minute=10, skip_update=True)
+    install_daily_pipeline_jobs(scheduler, paths, hour=16, minute=10, skip_update=True, push=True)
     scheduler.start(paused=True)
     try:
         status = load_scheduler_status(paths)
@@ -118,6 +126,7 @@ def test_load_scheduler_status_reports_registered_daily_job(tmp_path: Path) -> N
     assert status["schedule"] == "mon-fri 16:10 Asia/Shanghai"
     assert "T16:10:00" in str(status["next_run_time"])
     assert "scripts/run_local_scheduler.py" in status["start_command"]
+    assert "--push" in status["start_command"]
     assert [item["job_id"] for item in status["jobs"]] == [
         "daily_data_update_pipeline",
         "strategy_batch_pipeline",

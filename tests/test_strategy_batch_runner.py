@@ -3,9 +3,11 @@
 from pathlib import Path
 import sqlite3
 
+import pytest
+
 from runtime.paths import RuntimePaths
 from runtime.repository import SystemRepository
-from runtime.strategy_batch_runner import run_enabled_strategy_instances
+from runtime.strategy_batch_runner import _with_push_args, run_enabled_strategy_instances
 
 
 def test_batch_runner_runs_enabled_factor_topn_instances(tmp_path: Path) -> None:
@@ -38,6 +40,19 @@ def test_batch_runner_runs_enabled_factor_topn_instances(tmp_path: Path) -> None
     assert latest is not None
     assert latest["status"] == "SUCCESS"
     assert "selected 2 symbols" in latest["message"]
+
+
+@pytest.mark.parametrize(
+    ("push", "bark_url", "expected"),
+    [
+        (False, "", ["python", "script.py"]),
+        (True, "", ["python", "script.py"]),
+        (True, "https://example.invalid/token", ["python", "script.py", "--push", "--bark-url", "https://example.invalid/token"]),
+    ],
+)
+def test_batch_runner_appends_push_args(push: bool, bark_url: str, expected: list[str]) -> None:
+    """批处理开启通知时，应把统一 Bark 配置透传给兼容策略脚本。"""
+    assert _with_push_args(["python", "script.py"], push, bark_url) == expected
 
 
 def _seed_factor_scores(paths: RuntimePaths) -> None:

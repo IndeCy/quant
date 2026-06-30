@@ -59,9 +59,12 @@ def build_mainline_chain_daily_command(
     return command
 
 
-def build_strategy_batch_command(python_executable: str = sys.executable) -> list[str]:
+def build_strategy_batch_command(python_executable: str = sys.executable, push: bool = False) -> list[str]:
     """构造动态策略实例批量运行命令。"""
-    return [python_executable, "scripts/run_strategy_batch.py"]
+    command = [python_executable, "scripts/run_strategy_batch.py"]
+    if push:
+        command.append("--push")
+    return command
 
 
 def create_scheduler(paths: RuntimePaths | None = None) -> BackgroundScheduler:
@@ -157,10 +160,11 @@ def install_strategy_batch_job(
     paths: RuntimePaths | None = None,
     hour: int = DEFAULT_HOUR,
     minute: int = DEFAULT_MINUTE,
+    push: bool = False,
 ) -> Job:
     """登记策略实例批量运行任务。"""
     runtime_paths = paths or get_runtime_paths()
-    command = build_strategy_batch_command()
+    command = build_strategy_batch_command(push=push)
     return scheduler.add_job(
         run_daily_pipeline,
         trigger="cron",
@@ -201,6 +205,7 @@ def install_daily_pipeline_jobs(
             runtime_paths,
             hour=strategy_hour,
             minute=strategy_minute,
+            push=push,
         ),
     ]
 
@@ -223,7 +228,7 @@ def load_scheduler_status(paths: RuntimePaths | None = None) -> dict[str, object
         if pipeline_job is not None:
             schedule = _describe_cron_schedule(pipeline_job)
             start_hour, start_minute = _cron_hour_minute(pipeline_job)
-        if job is not None and data_job is None:
+        if job is not None:
             start_flags = _start_flags_from_job(job)
     finally:
         if scheduler.state != STATE_STOPPED:

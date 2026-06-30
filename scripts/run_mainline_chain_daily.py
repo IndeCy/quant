@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import argparse
 from datetime import date
-import os
 from pathlib import Path
 import sys
 
@@ -14,6 +13,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from backtest.mainline_observer import observe_account, push_observation
 from backtest.mainline_rebalance_executor import execute_due_rebalance
 from monitoring.mainline_adapter import sync_mainline_chain_monitoring
+from runtime.mainline_cache_sync import sync_mainline_cache_from_increment
+from runtime.notification_config import resolve_bark_url
 from runtime.paths import get_runtime_paths
 
 
@@ -23,13 +24,25 @@ def main() -> None:
     parser.add_argument("--account-id", type=int, default=1)
     parser.add_argument("--as-of-date", default=None)
     parser.add_argument("--push", action="store_true")
-    parser.add_argument("--bark-url", default=os.getenv("BARK_URL", ""))
+    parser.add_argument("--bark-url", default=resolve_bark_url())
     args = parser.parse_args()
 
     paths = get_runtime_paths()
     paths.ensure_directories()
     requested_date = date.fromisoformat(args.as_of_date) if args.as_of_date else date.today()
     cache_path = paths.data_dir / "market_cache.sqlite3"
+
+    cache_result = sync_mainline_cache_from_increment(
+        paths=paths,
+        account_id=args.account_id,
+        requested_date=requested_date,
+        cache_path=cache_path,
+    )
+    print(
+        "主线行情缓存同步完成: "
+        f"写入 {cache_result.rows_written} 行, "
+        f"缺失 {len(cache_result.missing_symbols)} 个标的"
+    )
 
     execution_result = execute_due_rebalance(
         account_id=args.account_id,

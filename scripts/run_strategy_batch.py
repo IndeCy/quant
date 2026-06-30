@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import argparse
 from pathlib import Path
 import sys
 
@@ -13,7 +14,10 @@ from runtime.strategy_batch_runner import run_enabled_strategy_instances
 
 def main() -> None:
     """命令行入口，供 APScheduler 调用。"""
-    summary = run_enabled_strategy_instances()
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--push", action="store_true", help="运行策略后发送已配置的 Bark 通知")
+    args = parser.parse_args()
+    summary = run_enabled_strategy_instances(push=args.push)
     print(summary)
 
 
