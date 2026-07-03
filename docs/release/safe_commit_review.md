@@ -1,184 +1,28 @@
 # Safe Commit Review
 
 - repo_root: `/Users/admin/PycharmProjects/quant`
-- baseline_generated_at: `2026-07-03T09:43:27`
+- baseline_generated_at: `2026-07-03T09:50:06`
 - ready_for_selective_commit: `True`
 
 ## Safe Git Add
 
-git add -- '.gitignore' '.planning/PROJECT.md' '.planning/REQUIREMENTS.md' '.planning/ROADMAP.md' '.planning/STATE.md' '.planning/TASKS.md' '.planning/adr/0001-enterprise-priority-order.md' '.planning/milestones/enterprise-quant-platform/E1.1-experiment-runner-plan.md' '.planning/milestones/enterprise-quant-platform/E1.2-walk-forward-validation-plan.md' '.planning/milestones/enterprise-quant-platform/E2.1-data-catalog-plan.md' '.planning/milestones/enterprise-quant-platform/E2.2-data-quality-gate-plan.md' '.planning/milestones/enterprise-quant-platform/E3.1-factor-registry-v2-plan.md' '.planning/milestones/enterprise-quant-platform/E3.2-factor-computation-runner-plan.md' '.planning/milestones/enterprise-quant-platform/E4.1-strategy-lifecycle-plan.md' '.planning/milestones/enterprise-quant-platform/E4.2-portfolio-account-model-plan.md' 'api/local_server.py' 'api/service.py' 'data/tushare_concept_incremental.py' 'docs/development_workflow.md' 'docs/phase_template.md' 'docs/release/git_baseline_report.json' 'docs/release/git_baseline_report.md' 'docs/release/safe_commit_review.json' 'docs/release/safe_commit_review.md' 'docs/superpowers/plans/2026-07-01-powerlaw-opportunity-radar-plan.md' 'docs/superpowers/plans/2026-07-02-live-readiness-audit-plan.md' 'docs/superpowers/plans/2026-07-02-live-risk-guard-plan.md' 'docs/superpowers/plans/2026-07-02-manual-order-workflow-plan.md' 'docs/superpowers/plans/2026-07-02-unified-daily-pipeline-plan.md' 'docs/superpowers/plans/2026-07-03-git-baseline-hygiene-plan.md' 'docs/superpowers/plans/2026-07-03-release-baseline-runtime-backup-plan.md' 'docs/superpowers/plans/2026-07-03-safe-commit-review-plan.md' 'docs/superpowers/plans/2026-07-03-selective-commit-release-baseline-plan.md' 'docs/verification_checklist.md' 'frontend/src/App.tsx' 'frontend/src/app/loadDashboardData.ts' 'frontend/src/app/state.test.ts' 'frontend/src/app/types.ts' 'frontend/src/entities/account/api.ts' 'frontend/src/entities/account/drift.test.ts' 'frontend/src/entities/account/drift.ts' 'frontend/src/entities/account/model.ts' 'frontend/src/entities/dataCatalog/api.ts' 'frontend/src/entities/dataCatalog/model.ts' 'frontend/src/entities/dataCatalog/status.test.ts' 'frontend/src/entities/dataCatalog/status.ts' 'frontend/src/entities/factorContract/api.ts' 'frontend/src/entities/factorContract/display.test.ts' 'frontend/src/entities/factorContract/display.ts' 'frontend/src/entities/factorContract/model.ts' 'frontend/src/entities/manualOrder/api.ts' 'frontend/src/entities/manualOrder/model.ts' 'frontend/src/entities/manualOrder/status.test.ts' 'frontend/src/entities/manualOrder/status.ts' 'frontend/src/entities/readiness/status.test.ts' 'frontend/src/entities/readiness/status.ts' 'frontend/src/entities/research/api.ts' 'frontend/src/entities/research/model.ts' 'frontend/src/entities/strategy/api.ts' 'frontend/src/entities/strategy/lifecycle.test.ts' 'frontend/src/entities/strategy/lifecycle.ts' 'frontend/src/entities/strategy/model.ts' 'frontend/src/pages/dashboard/components/ReadinessPanel.tsx' 'frontend/src/pages/data/DataHealthPage.tsx' 'frontend/src/pages/factors/FactorsPage.tsx' 'frontend/src/pages/research/ResearchPage.tsx' 'frontend/src/pages/strategies/ManualOrderPanel.tsx' 'frontend/src/pages/strategies/StrategiesPage.tsx' 'frontend/src/pages/strategies/StrategyAccountSnapshotPanel.tsx' 'frontend/src/pages/strategies/StrategyOperationsPanel.tsx' 'frontend/src/shared/styles/features.css' 'frontend/src/shared/styles/operations.css' 'monitoring/repository.py' 'runtime/daily_pipeline.py' 'runtime/data_catalog.py' 'runtime/data_catalog_repository.py' 'runtime/data_catalog_runner.py' 'runtime/data_quality_gate.py' 'runtime/experiment_repository.py' 'runtime/experiment_runner.py' 'runtime/factor_computation_runner.py' 'runtime/factor_registry_repository.py' 'runtime/git_baseline.py' 'runtime/live_risk_guard.py' 'runtime/mainline_cache_sync.py' 'runtime/mainline_tushare_backfill.py' 'runtime/manual_order.py' 'runtime/manual_order_repository.py' 'runtime/notification_config.py' 'runtime/opportunity_catalog.py' 'runtime/opportunity_verifier.py' 'runtime/portfolio_account.py' 'runtime/portfolio_account_repository.py' 'runtime/pre_market_check.py' 'runtime/readiness.py' 'runtime/release_baseline.py' 'runtime/repository.py' 'runtime/repository_schema.py' 'runtime/research_monitor.py' 'runtime/research_monitor_scoring.py' 'runtime/research_repository.py' 'runtime/safe_commit_review.py' 'runtime/scheduler.py' 'runtime/scheduler_watchdog.py' 'runtime/strategy_batch_runner.py' 'runtime/strategy_catalog.py' 'runtime/strategy_instance_catalog.py' 'runtime/strategy_instance_repository.py' 'runtime/strategy_lifecycle.py' 'runtime/strategy_templates.py' 'runtime/walk_forward.py' 'scripts/backfill_mainline_tushare_cache.py' 'scripts/create_release_baseline.py' 'scripts/generate_git_baseline_report.py' 'scripts/generate_safe_commit_review.py' 'scripts/refresh_data_catalog.py' 'scripts/run_daily_data_update.py' 'scripts/run_daily_pipeline.py' 'scripts/run_data_quality_gate.py' 'scripts/run_experiment.py' 'scripts/run_factor_computation.py' 'scripts/run_live_risk_guard.py' 'scripts/run_local_scheduler.py' 'scripts/run_pre_market_check.py' 'scripts/run_research_monitor.py' 'scripts/run_scheduler_watchdog.py' 'scripts/run_strategy_batch.py' 'scripts/run_walk_forward_experiment.py' 'strategies/mainline_chain_factor_runner.py' 'tests/test_daily_pipeline.py' 'tests/test_data_catalog.py' 'tests/test_data_quality_gate.py' 'tests/test_experiment_runner.py' 'tests/test_factor_computation_runner.py' 'tests/test_factor_registry_v2.py' 'tests/test_factor_strategy_workbench_e2e.py' 'tests/test_git_baseline.py' 'tests/test_live_risk_guard.py' 'tests/test_local_api_service.py' 'tests/test_mainline_cache_sync.py' 'tests/test_mainline_chain_factor_runner.py' 'tests/test_mainline_tushare_backfill.py' 'tests/test_manual_order_workflow.py' 'tests/test_operations_api_service.py' 'tests/test_opportunity_verifier.py' 'tests/test_portfolio_account_model.py' 'tests/test_pre_market_check.py' 'tests/test_release_baseline.py' 'tests/test_research_monitor.py' 'tests/test_runtime_readiness.py' 'tests/test_runtime_repository.py' 'tests/test_runtime_scheduler.py' 'tests/test_safe_commit_review.py' 'tests/test_scheduler_watchdog.py' 'tests/test_strategy_batch_runner.py' 'tests/test_strategy_catalog.py' 'tests/test_strategy_instances.py' 'tests/test_strategy_lifecycle.py' 'tests/test_tushare_concept_incremental.py' 'tests/test_walk_forward.py'
+git add -- '.planning/ROADMAP.md' '.planning/STATE.md' '.planning/TASKS.md' 'docs/release/post_baseline_operations_audit.json' 'docs/release/post_baseline_operations_audit.md' 'docs/superpowers/plans/2026-07-03-post-baseline-operations-audit-plan.md' 'runtime/post_baseline_audit.py' 'scripts/run_post_baseline_audit.py' 'tests/test_post_baseline_audit.py'
 
 ## Safe Git Update
 
-git rm --cached --ignore-unmatch -- 'monitoring/mainline_adapter.py' 'monitoring/mainline_backtest.py' 'scripts/run_mainline_chain_daily.py' 'tests/test_mainline_backtest.py' 'tests/test_mainline_monitoring_adapter.py'
+# no deleted candidates
 
 ## Stage Candidates
 
-- `.gitignore`
-- `.planning/PROJECT.md`
-- `.planning/REQUIREMENTS.md`
 - `.planning/ROADMAP.md`
 - `.planning/STATE.md`
 - `.planning/TASKS.md`
-- `.planning/adr/0001-enterprise-priority-order.md`
-- `.planning/milestones/enterprise-quant-platform/E1.1-experiment-runner-plan.md`
-- `.planning/milestones/enterprise-quant-platform/E1.2-walk-forward-validation-plan.md`
-- `.planning/milestones/enterprise-quant-platform/E2.1-data-catalog-plan.md`
-- `.planning/milestones/enterprise-quant-platform/E2.2-data-quality-gate-plan.md`
-- `.planning/milestones/enterprise-quant-platform/E3.1-factor-registry-v2-plan.md`
-- `.planning/milestones/enterprise-quant-platform/E3.2-factor-computation-runner-plan.md`
-- `.planning/milestones/enterprise-quant-platform/E4.1-strategy-lifecycle-plan.md`
-- `.planning/milestones/enterprise-quant-platform/E4.2-portfolio-account-model-plan.md`
-- `api/local_server.py`
-- `api/service.py`
-- `data/tushare_concept_incremental.py`
-- `docs/development_workflow.md`
-- `docs/phase_template.md`
-- `docs/release/git_baseline_report.json`
-- `docs/release/git_baseline_report.md`
-- `docs/release/safe_commit_review.json`
-- `docs/release/safe_commit_review.md`
-- `docs/superpowers/plans/2026-07-01-powerlaw-opportunity-radar-plan.md`
-- `docs/superpowers/plans/2026-07-02-live-readiness-audit-plan.md`
-- `docs/superpowers/plans/2026-07-02-live-risk-guard-plan.md`
-- `docs/superpowers/plans/2026-07-02-manual-order-workflow-plan.md`
-- `docs/superpowers/plans/2026-07-02-unified-daily-pipeline-plan.md`
-- `docs/superpowers/plans/2026-07-03-git-baseline-hygiene-plan.md`
-- `docs/superpowers/plans/2026-07-03-release-baseline-runtime-backup-plan.md`
-- `docs/superpowers/plans/2026-07-03-safe-commit-review-plan.md`
-- `docs/superpowers/plans/2026-07-03-selective-commit-release-baseline-plan.md`
-- `docs/verification_checklist.md`
-- `frontend/src/App.tsx`
-- `frontend/src/app/loadDashboardData.ts`
-- `frontend/src/app/state.test.ts`
-- `frontend/src/app/types.ts`
-- `frontend/src/entities/account/api.ts`
-- `frontend/src/entities/account/drift.test.ts`
-- `frontend/src/entities/account/drift.ts`
-- `frontend/src/entities/account/model.ts`
-- `frontend/src/entities/dataCatalog/api.ts`
-- `frontend/src/entities/dataCatalog/model.ts`
-- `frontend/src/entities/dataCatalog/status.test.ts`
-- `frontend/src/entities/dataCatalog/status.ts`
-- `frontend/src/entities/factorContract/api.ts`
-- `frontend/src/entities/factorContract/display.test.ts`
-- `frontend/src/entities/factorContract/display.ts`
-- `frontend/src/entities/factorContract/model.ts`
-- `frontend/src/entities/manualOrder/api.ts`
-- `frontend/src/entities/manualOrder/model.ts`
-- `frontend/src/entities/manualOrder/status.test.ts`
-- `frontend/src/entities/manualOrder/status.ts`
-- `frontend/src/entities/readiness/status.test.ts`
-- `frontend/src/entities/readiness/status.ts`
-- `frontend/src/entities/research/api.ts`
-- `frontend/src/entities/research/model.ts`
-- `frontend/src/entities/strategy/api.ts`
-- `frontend/src/entities/strategy/lifecycle.test.ts`
-- `frontend/src/entities/strategy/lifecycle.ts`
-- `frontend/src/entities/strategy/model.ts`
-- `frontend/src/pages/dashboard/components/ReadinessPanel.tsx`
-- `frontend/src/pages/data/DataHealthPage.tsx`
-- `frontend/src/pages/factors/FactorsPage.tsx`
-- `frontend/src/pages/research/ResearchPage.tsx`
-- `frontend/src/pages/strategies/ManualOrderPanel.tsx`
-- `frontend/src/pages/strategies/StrategiesPage.tsx`
-- `frontend/src/pages/strategies/StrategyAccountSnapshotPanel.tsx`
-- `frontend/src/pages/strategies/StrategyOperationsPanel.tsx`
-- `frontend/src/shared/styles/features.css`
-- `frontend/src/shared/styles/operations.css`
-- `monitoring/mainline_adapter.py`
-- `monitoring/mainline_backtest.py`
-- `monitoring/repository.py`
-- `runtime/daily_pipeline.py`
-- `runtime/data_catalog.py`
-- `runtime/data_catalog_repository.py`
-- `runtime/data_catalog_runner.py`
-- `runtime/data_quality_gate.py`
-- `runtime/experiment_repository.py`
-- `runtime/experiment_runner.py`
-- `runtime/factor_computation_runner.py`
-- `runtime/factor_registry_repository.py`
-- `runtime/git_baseline.py`
-- `runtime/live_risk_guard.py`
-- `runtime/mainline_cache_sync.py`
-- `runtime/mainline_tushare_backfill.py`
-- `runtime/manual_order.py`
-- `runtime/manual_order_repository.py`
-- `runtime/notification_config.py`
-- `runtime/opportunity_catalog.py`
-- `runtime/opportunity_verifier.py`
-- `runtime/portfolio_account.py`
-- `runtime/portfolio_account_repository.py`
-- `runtime/pre_market_check.py`
-- `runtime/readiness.py`
-- `runtime/release_baseline.py`
-- `runtime/repository.py`
-- `runtime/repository_schema.py`
-- `runtime/research_monitor.py`
-- `runtime/research_monitor_scoring.py`
-- `runtime/research_repository.py`
-- `runtime/safe_commit_review.py`
-- `runtime/scheduler.py`
-- `runtime/scheduler_watchdog.py`
-- `runtime/strategy_batch_runner.py`
-- `runtime/strategy_catalog.py`
-- `runtime/strategy_instance_catalog.py`
-- `runtime/strategy_instance_repository.py`
-- `runtime/strategy_lifecycle.py`
-- `runtime/strategy_templates.py`
-- `runtime/walk_forward.py`
-- `scripts/backfill_mainline_tushare_cache.py`
-- `scripts/create_release_baseline.py`
-- `scripts/generate_git_baseline_report.py`
-- `scripts/generate_safe_commit_review.py`
-- `scripts/refresh_data_catalog.py`
-- `scripts/run_daily_data_update.py`
-- `scripts/run_daily_pipeline.py`
-- `scripts/run_data_quality_gate.py`
-- `scripts/run_experiment.py`
-- `scripts/run_factor_computation.py`
-- `scripts/run_live_risk_guard.py`
-- `scripts/run_local_scheduler.py`
-- `scripts/run_mainline_chain_daily.py`
-- `scripts/run_pre_market_check.py`
-- `scripts/run_research_monitor.py`
-- `scripts/run_scheduler_watchdog.py`
-- `scripts/run_strategy_batch.py`
-- `scripts/run_walk_forward_experiment.py`
-- `strategies/mainline_chain_factor_runner.py`
-- `tests/test_daily_pipeline.py`
-- `tests/test_data_catalog.py`
-- `tests/test_data_quality_gate.py`
-- `tests/test_experiment_runner.py`
-- `tests/test_factor_computation_runner.py`
-- `tests/test_factor_registry_v2.py`
-- `tests/test_factor_strategy_workbench_e2e.py`
-- `tests/test_git_baseline.py`
-- `tests/test_live_risk_guard.py`
-- `tests/test_local_api_service.py`
-- `tests/test_mainline_backtest.py`
-- `tests/test_mainline_cache_sync.py`
-- `tests/test_mainline_chain_factor_runner.py`
-- `tests/test_mainline_monitoring_adapter.py`
-- `tests/test_mainline_tushare_backfill.py`
-- `tests/test_manual_order_workflow.py`
-- `tests/test_operations_api_service.py`
-- `tests/test_opportunity_verifier.py`
-- `tests/test_portfolio_account_model.py`
-- `tests/test_pre_market_check.py`
-- `tests/test_release_baseline.py`
-- `tests/test_research_monitor.py`
-- `tests/test_runtime_readiness.py`
-- `tests/test_runtime_repository.py`
-- `tests/test_runtime_scheduler.py`
-- `tests/test_safe_commit_review.py`
-- `tests/test_scheduler_watchdog.py`
-- `tests/test_strategy_batch_runner.py`
-- `tests/test_strategy_catalog.py`
-- `tests/test_strategy_instances.py`
-- `tests/test_strategy_lifecycle.py`
-- `tests/test_tushare_concept_incremental.py`
-- `tests/test_walk_forward.py`
+- `docs/release/post_baseline_operations_audit.json`
+- `docs/release/post_baseline_operations_audit.md`
+- `docs/superpowers/plans/2026-07-03-post-baseline-operations-audit-plan.md`
+- `runtime/post_baseline_audit.py`
+- `scripts/run_post_baseline_audit.py`
+- `tests/test_post_baseline_audit.py`
 
 ## Hold For Review
 
