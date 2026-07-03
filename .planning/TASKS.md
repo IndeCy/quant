@@ -27,7 +27,8 @@
 | E15-001 | E15.1 | P4 | done | Codex | 运行体验与告警闭环 | `/api/operations/observation` 与调度页运行观察面板 |
 | E16-001 | E16.1 | P4 | done | Codex | 通知决策面与异常闭环 | `/api/operations/decision` 与调度页今日操作判断 |
 | E17-001 | E17.1 | P4 | done | Codex | 异常确认与处置回溯 | `/api/operations/acknowledgements` 与调度页人工确认记录 |
-| E18-001 | E18.1 | P4 | pending | Codex | 运维闭环复盘指标 | 告警、确认和运行结果形成闭环质量指标 |
+| E18-001 | E18.1 | P4 | done | Codex | 运维闭环复盘指标 | `/api/operations/review` 与调度页闭环复盘面板 |
+| E19-001 | E19.1 | P4 | pending | Codex | 运维质量趋势报告 | 运维闭环指标进入日报/月度趋势 |
 
 ## 状态规则
 

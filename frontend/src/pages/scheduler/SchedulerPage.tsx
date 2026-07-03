@@ -6,6 +6,7 @@ import { recordOperationsAcknowledgement } from "../../entities/operations/ackAp
 import { ackStatusTone } from "../../entities/operations/ackStatus";
 import { decisionTitle, decisionTone } from "../../entities/operations/decisionStatus";
 import { observationStatusTone } from "../../entities/operations/status";
+import { reviewStatusTitle, reviewStatusTone } from "../../entities/operations/reviewStatus";
 import { schedulerNextRunLabel, schedulerStateLabel } from "../../entities/scheduler/status";
 import { formatCommand } from "../../entities/service/format";
 import { PageHeader } from "../../shared/ui/PageHeader";
@@ -15,6 +16,7 @@ export function SchedulerPage() {
   const scheduler = data.schedulerStatus;
   const decision = data.operationsDecision;
   const observation = data.operationsObservation;
+  const review = data.operationsReview;
   const [ackMessage, setAckMessage] = useState("");
   const observationSections = [
     ["日报产物", observation.run_artifacts],
@@ -87,6 +89,51 @@ export function SchedulerPage() {
           <p className="muted-text">当前没有阻断项或告警项，按计划继续观察。</p>
         )}
         {ackMessage ? <p className="success-message">{ackMessage}</p> : null}
+      </section>
+      <section className="panel detail-panel">
+        <div className="detail-heading">
+          <div>
+            <h2>闭环复盘</h2>
+            <p>把当前告警、人工确认和处置记录串起来，观察运维闭环是否完成。</p>
+          </div>
+          <span className={`status ${reviewStatusTone(review.closure_status)}`}>
+            {reviewStatusTitle(review.closure_status)}
+          </span>
+        </div>
+        <div className="config-grid">
+          <div>
+            <span>当前告警</span>
+            <strong>{review.current_action_count}</strong>
+          </div>
+          <div>
+            <span>已确认</span>
+            <strong>{review.acknowledged_action_count}</strong>
+          </div>
+          <div>
+            <span>待跟进</span>
+            <strong>{review.unacknowledged_action_count}</strong>
+          </div>
+          <div>
+            <span>最近确认</span>
+            <strong>{review.latest_ack_at || "暂无"}</strong>
+          </div>
+        </div>
+        {review.unacknowledged_actions.length > 0 ? (
+          <div className="review-action-list">
+            {review.unacknowledged_actions.slice(0, 5).map((action) => (
+              <div className="review-action-row" key={`${action.source}-${action.category}-${action.name}`}>
+                <span>
+                  <strong>{action.name}</strong>
+                  <small>{action.source} / {action.category}</small>
+                </span>
+                <em className={`status ${decisionTone(action.severity)}`}>{action.severity}</em>
+                <p>{action.message}</p>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="muted-text">当前没有待跟进告警。</p>
+        )}
       </section>
       <section className="panel detail-panel">
         <div className="detail-heading">

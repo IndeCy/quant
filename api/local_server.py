@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.service import LocalApiService
 from runtime.operations_ack import list_operations_ack, record_operations_ack
+from runtime.operations_review import build_operations_review
 
 
 def create_app(service: LocalApiService | None = None) -> FastAPI:
@@ -88,6 +89,15 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
             return record_operations_ack(api_service.paths.system_state_path, payload)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/operations/review")
+    def operations_review() -> dict[str, Any]:
+        """返回运维告警和人工确认的闭环复盘指标。"""
+        return build_operations_review(
+            api_service.paths.root,
+            api_service.paths.system_state_path,
+            api_service.readiness(),
+        )
 
     @app.get("/api/logs")
     def logs() -> list[dict[str, Any]]:

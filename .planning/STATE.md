@@ -2,11 +2,11 @@
 
 ## Active Milestone
 
-Enterprise Quant Platform / Milestone E18：运维闭环复盘指标
+Enterprise Quant Platform / Milestone E19：运维质量趋势报告
 
 ## Active Phase
 
-Phase E18.1：Operations Review Metrics
+Phase E19.1：Operations Quality Trend Reporting
 
 ## Current Status
 
@@ -98,15 +98,20 @@ pending
 - 新增 `/api/operations/acknowledgements` GET/POST，调度页展示最近人工确认记录，并支持对当前 action 记录“已确认”。
 - 真实服务 smoke 已写入并读回 `e17_smoke / ACKNOWLEDGED`。
 - 后端全量测试通过：`448 passed`；前端全量测试通过：`27 files / 51 tests`；`npm run build:pre` 通过，本地服务已重启。
+- Phase E18.1：Operations Review Metrics。
+- 新增 `runtime/operations_review.py`，聚合当前操作判断、人工确认记录和闭环状态，输出当前告警数、已确认数、待跟进数和最近确认时间。
+- 新增 `/api/operations/review`，调度页新增“闭环复盘”面板。
+- 当前真实接口返回：`closure_status=CLOSED`、`current_action_count=0`、`acknowledgement_count=1`。
+- 后端全量测试通过：`451 passed`；前端全量测试通过：`28 files / 52 tests`；`npm run build:pre` 通过，本地服务已重启。
 
 ## Next Action
 
-进入 Phase E18.1：Operations Review Metrics。继续把决策、确认记录和运行结果串成复盘指标，评估告警是否及时、确认是否闭环。
+进入 Phase E19.1：Operations Quality Trend Reporting。继续把运维闭环指标纳入日报/月度视角，观察长期运行质量趋势。
 
 ## Resume Prompt
 
 ```text
-继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E18.1：Operations Review Metrics。
+继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E19.1：Operations Quality Trend Reporting。
 ```
 
 ## Verification Commands
@@ -135,6 +140,7 @@ test -f docs/development_workflow.md
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_observation_api.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_decision.py tests/test_operations_decision_api.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_ack.py tests/test_operations_ack_api.py -q
+/Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_review.py tests/test_operations_review_api.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_git_baseline_report.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_safe_commit_review.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/run_post_baseline_audit.py --output-dir docs/release

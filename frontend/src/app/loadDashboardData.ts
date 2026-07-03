@@ -5,6 +5,7 @@ import { getMarketSeries } from "../entities/market/api";
 import { listOperationsAcknowledgements } from "../entities/operations/ackApi";
 import { getOperationsDecision } from "../entities/operations/decisionApi";
 import { getOperationsObservation } from "../entities/operations/api";
+import { getOperationsReview } from "../entities/operations/reviewApi";
 import { getReadinessReport } from "../entities/readiness/api";
 import { listReports } from "../entities/report/api";
 import {
@@ -43,6 +44,7 @@ export async function loadDashboardData() {
     operationsAcknowledgements,
     operationsDecision,
     operationsObservation,
+    operationsReview,
     reports,
     researchTodos,
     researchNotes,
@@ -66,6 +68,7 @@ export async function loadDashboardData() {
     listOperationsAcknowledgements(),
     getOperationsDecision(),
     getOperationsObservation(),
+    getOperationsReview(),
     listReports(),
     getResearchTodos(),
     listResearchNotes(),
@@ -94,6 +97,7 @@ export async function loadDashboardData() {
     operationsAcknowledgements,
     operationsDecision,
     operationsObservation,
+    operationsReview,
     reports,
     researchTodos,
     researchNotes,

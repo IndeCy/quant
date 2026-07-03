@@ -5,6 +5,7 @@ import type { MarketMetric } from "../entities/market/model";
 import type { OperationsAcknowledgement } from "../entities/operations/ackModel";
 import type { OperationsDecision } from "../entities/operations/decisionModel";
 import type { OperationsObservation } from "../entities/operations/model";
+import type { OperationsReview } from "../entities/operations/reviewModel";
 import type { ReadinessReport } from "../entities/readiness/model";
 import type { ReportIndex } from "../entities/report/model";
 import type {
@@ -30,6 +31,7 @@ export interface DashboardData {
   operationsAcknowledgements: OperationsAcknowledgement[];
   operationsDecision: OperationsDecision;
   operationsObservation: OperationsObservation;
+  operationsReview: OperationsReview;
   reports: ReportIndex[];
   researchTodos: ResearchTodos;
   researchNotes: ResearchNote[];
