@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.service import LocalApiService
 from runtime.operations_ack import list_operations_ack, record_operations_ack
+from runtime.operations_quality_report import build_operations_quality_report
 from runtime.operations_review import build_operations_review
 
 
@@ -97,6 +98,16 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
             api_service.paths.root,
             api_service.paths.system_state_path,
             api_service.readiness(),
+        )
+
+    @app.post("/api/operations/quality-report")
+    def operations_quality_report(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        """生成并登记运维质量趋势报告。"""
+        data = payload or {}
+        return build_operations_quality_report(
+            api_service.paths,
+            api_service.readiness(),
+            trade_date=str(data.get("trade_date") or "") or None,
         )
 
     @app.get("/api/logs")

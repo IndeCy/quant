@@ -6,6 +6,7 @@ import { recordOperationsAcknowledgement } from "../../entities/operations/ackAp
 import { ackStatusTone } from "../../entities/operations/ackStatus";
 import { decisionTitle, decisionTone } from "../../entities/operations/decisionStatus";
 import { observationStatusTone } from "../../entities/operations/status";
+import { generateOperationsQualityReport } from "../../entities/operations/qualityReportApi";
 import { reviewStatusTitle, reviewStatusTone } from "../../entities/operations/reviewStatus";
 import { schedulerNextRunLabel, schedulerStateLabel } from "../../entities/scheduler/status";
 import { formatCommand } from "../../entities/service/format";
@@ -18,6 +19,7 @@ export function SchedulerPage() {
   const observation = data.operationsObservation;
   const review = data.operationsReview;
   const [ackMessage, setAckMessage] = useState("");
+  const [reportMessage, setReportMessage] = useState("");
   const observationSections = [
     ["日报产物", observation.run_artifacts],
     ["调度证据", observation.scheduler],
@@ -37,6 +39,12 @@ export function SchedulerPage() {
       operator: "local_user"
     });
     setAckMessage(`${action.name} 已记录人工确认`);
+    await data.refreshData();
+  }
+
+  async function handleGenerateQualityReport() {
+    const result = await generateOperationsQualityReport(review.latest_activity_date || review.latest_run_date);
+    setReportMessage(`运维复盘报告已生成：${result.trade_date}`);
     await data.refreshData();
   }
 
@@ -118,6 +126,10 @@ export function SchedulerPage() {
             <strong>{review.latest_ack_at || "暂无"}</strong>
           </div>
         </div>
+        <button type="button" className="primary-action" onClick={handleGenerateQualityReport}>
+          生成运维复盘报告
+        </button>
+        {reportMessage ? <p className="success-message">{reportMessage}</p> : null}
         {review.unacknowledged_actions.length > 0 ? (
           <div className="review-action-list">
             {review.unacknowledged_actions.slice(0, 5).map((action) => (

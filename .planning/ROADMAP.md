@@ -193,5 +193,13 @@
 ### Phase E19.1：Operations Quality Trend Reporting
 
 - 优先级：P4
-- 状态：pending
+- 状态：done
 - 目标：把运维闭环指标纳入日报/月度视角，形成长期运行质量趋势。
+
+## Milestone E20：运行环境一致性审计
+
+### Phase E20.1：Runtime Environment Consistency Audit
+
+- 优先级：P4
+- 状态：pending
+- 目标：检查终端、API 服务和调度器的关键环境变量一致性，降低配置漂移导致的假异常。

@@ -2,11 +2,11 @@
 
 ## Active Milestone
 
-Enterprise Quant Platform / Milestone E19：运维质量趋势报告
+Enterprise Quant Platform / Milestone E20：运行环境一致性审计
 
 ## Active Phase
 
-Phase E19.1：Operations Quality Trend Reporting
+Phase E20.1：Runtime Environment Consistency Audit
 
 ## Current Status
 
@@ -103,15 +103,21 @@ pending
 - 新增 `/api/operations/review`，调度页新增“闭环复盘”面板。
 - 当前真实接口返回：`closure_status=CLOSED`、`current_action_count=0`、`acknowledgement_count=1`。
 - 后端全量测试通过：`451 passed`；前端全量测试通过：`28 files / 52 tests`；`npm run build:pre` 通过，本地服务已重启。
+- Phase E19.1：Operations Quality Trend Reporting。
+- 新增 `runtime/operations_quality_report.py`，生成运维质量趋势 Markdown/JSON 并登记到 `report_index`。
+- 新增 `POST /api/operations/quality-report`，调度页闭环复盘面板支持生成报告并刷新报告索引。
+- 真实服务已生成 `reports/operations_quality/20260703/operations_quality_review.md`，报告索引显示 `operations_quality_review / operations / 运维质量趋势 20260703`。
+- 当前真实报告暴露服务进程缺少 `TUSHARE_TOKEN`，闭环状态为 `OPEN`，这是 E20 需要处理的环境一致性问题。
+- 后端全量测试通过：`453 passed`；前端全量测试通过：`28 files / 52 tests`；`npm run build:pre` 通过，本地服务已重启。
 
 ## Next Action
 
-进入 Phase E19.1：Operations Quality Trend Reporting。继续把运维闭环指标纳入日报/月度视角，观察长期运行质量趋势。
+进入 Phase E20.1：Runtime Environment Consistency Audit。继续检查终端、launchd/API 服务和调度器环境变量是否一致，防止 token 等关键配置漂移。
 
 ## Resume Prompt
 
 ```text
-继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E19.1：Operations Quality Trend Reporting。
+继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E20.1：Runtime Environment Consistency Audit。
 ```
 
 ## Verification Commands
@@ -141,6 +147,7 @@ test -f docs/development_workflow.md
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_decision.py tests/test_operations_decision_api.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_ack.py tests/test_operations_ack_api.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_review.py tests/test_operations_review_api.py -q
+/Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_quality_report.py tests/test_operations_quality_report_api.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_git_baseline_report.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_safe_commit_review.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/run_post_baseline_audit.py --output-dir docs/release
