@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.service import LocalApiService
+from runtime.operations_ack import list_operations_ack, record_operations_ack
 
 
 def create_app(service: LocalApiService | None = None) -> FastAPI:
@@ -74,6 +75,19 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
     def operations_decision() -> dict[str, Any]:
         """返回今天是否需要人工处理的运行决策。"""
         return api_service.operations_decision()
+
+    @app.get("/api/operations/acknowledgements")
+    def operations_acknowledgements() -> list[dict[str, Any]]:
+        """返回最近人工确认和处置记录。"""
+        return list_operations_ack(api_service.paths.system_state_path)
+
+    @app.post("/api/operations/acknowledgements")
+    def create_operations_acknowledgement(payload: dict[str, Any]) -> dict[str, Any]:
+        """记录一次人工确认或处置动作。"""
+        try:
+            return record_operations_ack(api_service.paths.system_state_path, payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/logs")
     def logs() -> list[dict[str, Any]]:

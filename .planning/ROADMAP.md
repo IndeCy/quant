@@ -177,5 +177,13 @@
 ### Phase E17.1：Operations Acknowledgement Log
 
 - 优先级：P4
-- 状态：pending
+- 状态：done
 - 目标：记录人工确认、异常处理动作和处置结果，让 Shadow Live 运维闭环可追溯。
+
+## Milestone E18：运维闭环复盘指标
+
+### Phase E18.1：Operations Review Metrics
+
+- 优先级：P4
+- 状态：pending
+- 目标：把操作判断、人工确认和运行结果串成复盘指标，衡量告警和处置闭环质量。

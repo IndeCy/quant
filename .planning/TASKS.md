@@ -26,7 +26,8 @@
 | E14-001 | E14.1 | P4 | done | Codex | 日报 WARN 收敛 | `pytest tests/test_operations_observation.py -q` |
 | E15-001 | E15.1 | P4 | done | Codex | 运行体验与告警闭环 | `/api/operations/observation` 与调度页运行观察面板 |
 | E16-001 | E16.1 | P4 | done | Codex | 通知决策面与异常闭环 | `/api/operations/decision` 与调度页今日操作判断 |
-| E17-001 | E17.1 | P4 | pending | Codex | 异常确认与处置回溯 | 人工确认、异常处理动作和结果可回溯 |
+| E17-001 | E17.1 | P4 | done | Codex | 异常确认与处置回溯 | `/api/operations/acknowledgements` 与调度页人工确认记录 |
+| E18-001 | E18.1 | P4 | pending | Codex | 运维闭环复盘指标 | 告警、确认和运行结果形成闭环质量指标 |
 
 ## 状态规则
 

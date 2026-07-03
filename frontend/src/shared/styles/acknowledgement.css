@@ -1,0 +1,50 @@
+.ack-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.ack-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.9fr) 118px minmax(180px, 1.2fr) minmax(180px, 1.2fr);
+  gap: 10px;
+  align-items: center;
+  border-top: 1px solid #eef2f7;
+  padding: 10px 0;
+}
+
+.ack-row strong,
+.ack-row small {
+  display: block;
+}
+
+.ack-row small,
+.ack-row p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.ack-row em {
+  width: fit-content;
+  font-style: normal;
+}
+
+.decision-action-row button {
+  width: fit-content;
+  min-width: 96px;
+  min-height: 34px;
+  border: 1px solid #d8e0eb;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #334155;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+@media (max-width: 1180px) {
+  .ack-row {
+    grid-template-columns: 1fr;
+  }
+}

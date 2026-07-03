@@ -2,6 +2,7 @@ import type { BackupManifest } from "../entities/backup/model";
 import type { FactorDefinition } from "../entities/factor/model";
 import type { RuntimeLog } from "../entities/log/model";
 import type { MarketMetric } from "../entities/market/model";
+import type { OperationsAcknowledgement } from "../entities/operations/ackModel";
 import type { OperationsDecision } from "../entities/operations/decisionModel";
 import type { OperationsObservation } from "../entities/operations/model";
 import type { ReadinessReport } from "../entities/readiness/model";
@@ -26,6 +27,7 @@ export interface DashboardData {
   strategy: StrategyDefinition;
   factors: FactorDefinition[];
   logs: RuntimeLog[];
+  operationsAcknowledgements: OperationsAcknowledgement[];
   operationsDecision: OperationsDecision;
   operationsObservation: OperationsObservation;
   reports: ReportIndex[];

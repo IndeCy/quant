@@ -2,11 +2,11 @@
 
 ## Active Milestone
 
-Enterprise Quant Platform / Milestone E17：异常确认与处置回溯
+Enterprise Quant Platform / Milestone E18：运维闭环复盘指标
 
 ## Active Phase
 
-Phase E17.1：Operations Acknowledgement Log
+Phase E18.1：Operations Review Metrics
 
 ## Current Status
 
@@ -93,15 +93,20 @@ pending
 - 新增 `/api/operations/decision`，调度页新增“今日操作判断”面板，第一屏展示是否需要人工介入。
 - 当前真实接口返回：`decision=NO_ACTION`、`severity=NORMAL`、`manual_intervention_required=false`、`latest_run_date=20260702`。
 - 后端全量测试通过：`445 passed`；前端全量测试通过：`26 files / 50 tests`；`npm run build:pre` 通过，本地服务已重启。
+- Phase E17.1：Operations Acknowledgement Log。
+- 新增 `runtime/operations_ack.py`，在系统状态 SQLite 中记录人工确认、处置说明、操作人和状态。
+- 新增 `/api/operations/acknowledgements` GET/POST，调度页展示最近人工确认记录，并支持对当前 action 记录“已确认”。
+- 真实服务 smoke 已写入并读回 `e17_smoke / ACKNOWLEDGED`。
+- 后端全量测试通过：`448 passed`；前端全量测试通过：`27 files / 51 tests`；`npm run build:pre` 通过，本地服务已重启。
 
 ## Next Action
 
-进入 Phase E17.1：Operations Acknowledgement Log。继续把人工确认、异常处理记录和处置结果做成可回溯闭环。
+进入 Phase E18.1：Operations Review Metrics。继续把决策、确认记录和运行结果串成复盘指标，评估告警是否及时、确认是否闭环。
 
 ## Resume Prompt
 
 ```text
-继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E17.1：Operations Acknowledgement Log。
+继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E18.1：Operations Review Metrics。
 ```
 
 ## Verification Commands
@@ -129,6 +134,7 @@ test -f docs/development_workflow.md
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_observation.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_observation_api.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_decision.py tests/test_operations_decision_api.py -q
+/Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_ack.py tests/test_operations_ack_api.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_git_baseline_report.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_safe_commit_review.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/run_post_baseline_audit.py --output-dir docs/release

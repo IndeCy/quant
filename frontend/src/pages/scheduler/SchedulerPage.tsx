@@ -1,6 +1,9 @@
+import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
 
 import type { DashboardContext } from "../../app/types";
+import { recordOperationsAcknowledgement } from "../../entities/operations/ackApi";
+import { ackStatusTone } from "../../entities/operations/ackStatus";
 import { decisionTitle, decisionTone } from "../../entities/operations/decisionStatus";
 import { observationStatusTone } from "../../entities/operations/status";
 import { schedulerNextRunLabel, schedulerStateLabel } from "../../entities/scheduler/status";
@@ -12,11 +15,29 @@ export function SchedulerPage() {
   const scheduler = data.schedulerStatus;
   const decision = data.operationsDecision;
   const observation = data.operationsObservation;
+  const [ackMessage, setAckMessage] = useState("");
   const observationSections = [
     ["日报产物", observation.run_artifacts],
     ["调度证据", observation.scheduler],
     ["报告产物", observation.held_reports]
   ] as const;
+
+  async function handleAcknowledge(action: typeof decision.actions[number]) {
+    await recordOperationsAcknowledgement({
+      trade_date: decision.latest_activity_date || decision.latest_run_date,
+      source: action.source,
+      category: action.category,
+      name: action.name,
+      severity: action.severity,
+      decision: decision.decision,
+      message: action.message,
+      resolution: action.suggested_action,
+      operator: "local_user"
+    });
+    setAckMessage(`${action.name} 已记录人工确认`);
+    await data.refreshData();
+  }
+
   return (
     <>
       <PageHeader title="调度" description="查看本地 APScheduler 每日任务、执行命令和下一次运行时间。" />
@@ -56,12 +77,41 @@ export function SchedulerPage() {
                 </span>
                 <em className={`status ${decisionTone(action.severity)}`}>{action.severity}</em>
                 <p>{action.message}</p>
-                <small>{action.suggested_action}</small>
+                <button type="button" onClick={() => handleAcknowledge(action)}>
+                  记录已确认
+                </button>
               </div>
             ))}
           </div>
         ) : (
           <p className="muted-text">当前没有阻断项或告警项，按计划继续观察。</p>
+        )}
+        {ackMessage ? <p className="success-message">{ackMessage}</p> : null}
+      </section>
+      <section className="panel detail-panel">
+        <div className="detail-heading">
+          <div>
+            <h2>人工确认记录</h2>
+            <p>记录已经看过的告警、处理动作和处置结果，用于后续复盘。</p>
+          </div>
+          <span className="status neutral">{data.operationsAcknowledgements.length} 条</span>
+        </div>
+        {data.operationsAcknowledgements.length === 0 ? (
+          <p className="muted-text">暂无人工确认记录</p>
+        ) : (
+          <div className="ack-list">
+            {data.operationsAcknowledgements.map((item) => (
+              <div className="ack-row" key={item.ack_id}>
+                <span>
+                  <strong>{item.name}</strong>
+                  <small>{item.trade_date} / {item.source} / {item.category}</small>
+                </span>
+                <em className={`status ${ackStatusTone(item.status)}`}>{item.status}</em>
+                <p>{item.message}</p>
+                <small>{item.resolution || "-"}</small>
+              </div>
+            ))}
+          </div>
         )}
       </section>
       <section className="panel detail-panel">
