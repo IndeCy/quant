@@ -11,7 +11,7 @@ def test_strategy_templates_include_factor_and_chain_templates() -> None:
     """系统应提供可复用策略模板，而不是只维护固定策略脚本。"""
     template_ids = [item["template_id"] for item in list_strategy_templates()]
 
-    assert template_ids == ["factor_topn_monthly", "industry_chain_momentum"]
+    assert template_ids == ["factor_topn_monthly", "factor_chain_rotation"]
 
 
 def test_strategy_instance_can_reference_factor_template(tmp_path: Path) -> None:
@@ -52,8 +52,8 @@ def test_builtin_strategies_are_registered_as_instances(tmp_path: Path) -> None:
     register_builtin_strategy_instances(repository)
 
     instances = repository.list_strategy_instances(enabled_only=True)
-    assert [item["strategy_id"] for item in instances] == ["mainline_chain_b", "quality_overlay"]
-    assert instances[0]["template_id"] == "industry_chain_momentum"
+    assert [item["strategy_id"] for item in instances] == ["mainline_chain_factor_v1", "quality_overlay"]
+    assert instances[0]["template_id"] == "factor_chain_rotation"
     assert instances[1]["template_id"] == "factor_topn_monthly"
 
 

@@ -14,7 +14,7 @@ describe("mergeRuntimeStatus", () => {
     } as unknown as DashboardData;
     const schedulerStatus: SchedulerStatus = {
       enabled: true,
-      job_id: "quality_overlay_daily_pipeline",
+      job_id: "daily_trading_pipeline",
       job_store_path: "/tmp/scheduler.sqlite",
       job_store_exists: true,
       next_run_time: "2026-06-30T16:30:00+08:00",

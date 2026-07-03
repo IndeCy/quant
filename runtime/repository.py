@@ -7,12 +7,25 @@ from pathlib import Path
 import sqlite3
 from typing import Any, Iterable
 
+from runtime.data_catalog_repository import DataCatalogRepositoryMixin
+from runtime.experiment_repository import ExperimentRepositoryMixin
+from runtime.factor_registry_repository import FactorRegistryRepositoryMixin
+from runtime.manual_order_repository import ManualOrderRepositoryMixin
+from runtime.portfolio_account_repository import PortfolioAccountRepositoryMixin
 from runtime.research_repository import ResearchIdeaRepositoryMixin
 from runtime.repository_schema import init_system_schema
 from runtime.strategy_instance_repository import StrategyInstanceRepositoryMixin
 
 
-class SystemRepository(ResearchIdeaRepositoryMixin, StrategyInstanceRepositoryMixin):
+class SystemRepository(
+    DataCatalogRepositoryMixin,
+    ExperimentRepositoryMixin,
+    FactorRegistryRepositoryMixin,
+    ManualOrderRepositoryMixin,
+    PortfolioAccountRepositoryMixin,
+    ResearchIdeaRepositoryMixin,
+    StrategyInstanceRepositoryMixin,
+):
     """保存每日运行状态和报告索引，供后续前端统一读取。"""
 
     def __init__(self, path: str | Path) -> None:
@@ -176,6 +189,23 @@ class SystemRepository(ResearchIdeaRepositoryMixin, StrategyInstanceRepositoryMi
         with self._connect() as con:
             rows = con.execute("SELECT * FROM strategy_registry ORDER BY strategy_id").fetchall()
         return [self._row_to_dict(row) for row in rows]
+
+    def delete_strategy_artifacts(self, strategy_id: str) -> None:
+        """删除废弃策略在系统状态库中的全部登记资产。"""
+        tables = [
+            "strategy_factor_link",
+            "strategy_registry",
+            "strategy_instances",
+            "strategy_runs",
+            "strategy_run_steps",
+            "report_index",
+            "strategy_instance_state",
+            "strategy_instance_holdings",
+        ]
+        with self._connect() as con:
+            for table in tables:
+                if _table_exists(con, table):
+                    con.execute(f"DELETE FROM {table} WHERE strategy_id = ?", [strategy_id])
 
     def list_factors(self) -> list[dict[str, Any]]:
         """读取全部因子定义，按因子ID排序。"""
@@ -440,6 +470,10 @@ class SystemRepository(ResearchIdeaRepositoryMixin, StrategyInstanceRepositoryMi
         result = dict(row)
         if "tags_json" in result:
             result["tags"] = json.loads(result.pop("tags_json") or "[]")
+        if "metrics_json" in result:
+            result["metrics"] = json.loads(result.pop("metrics_json") or "{}")
+        if "evidence_json" in result:
+            result["evidence"] = json.loads(result.pop("evidence_json") or "{}")
         if "config_json" in result:
             result["config"] = json.loads(result.pop("config_json") or "{}")
         if "required_data_json" in result:
@@ -454,4 +488,12 @@ class SystemRepository(ResearchIdeaRepositoryMixin, StrategyInstanceRepositoryMi
             result["construction"] = json.loads(result.pop("construction_json") or "{}")
         if "enabled" in result:
             result["enabled"] = bool(result["enabled"])
+        if "upgrade_candidate" in result:
+            result["upgrade_candidate"] = bool(result["upgrade_candidate"])
         return result
+
+
+def _table_exists(con: sqlite3.Connection, table: str) -> bool:
+    """判断 SQLite 表是否存在，便于兼容旧状态库。"""
+    row = con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name = ?", [table]).fetchone()
+    return row is not None

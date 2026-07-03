@@ -13,9 +13,9 @@ def list_strategy_templates() -> list[dict[str, object]]:
             "supported_status": ["draft", "research", "paper", "shadow_live", "paused", "archived"],
         },
         {
-            "template_id": "industry_chain_momentum",
-            "name": "产业链动量策略",
-            "required_sections": ["universe", "construction", "benchmark"],
-            "supported_status": ["paper", "shadow_live", "paused", "archived"],
+            "template_id": "factor_chain_rotation",
+            "name": "因子组合产业链轮动策略",
+            "required_sections": ["universe", "filters", "factors", "construction", "benchmark"],
+            "supported_status": ["draft", "research", "paper", "shadow_live", "paused", "archived"],
         },
     ]

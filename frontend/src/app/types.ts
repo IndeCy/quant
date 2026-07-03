@@ -4,7 +4,14 @@ import type { RuntimeLog } from "../entities/log/model";
 import type { MarketMetric } from "../entities/market/model";
 import type { ReadinessReport } from "../entities/readiness/model";
 import type { ReportIndex } from "../entities/report/model";
-import type { FactorIdea, ResearchTodos, StrategyIdea } from "../entities/research/model";
+import type {
+  FactorIdea,
+  OpportunityRanking,
+  OpportunityTheme,
+  ResearchNote,
+  ResearchTodos,
+  StrategyIdea
+} from "../entities/research/model";
 import type { StrategyRun } from "../entities/run/model";
 import type { SchedulerStatus } from "../entities/scheduler/model";
 import type { ServiceManifest, ServiceStatusManifest } from "../entities/service/model";
@@ -19,6 +26,9 @@ export interface DashboardData {
   logs: RuntimeLog[];
   reports: ReportIndex[];
   researchTodos: ResearchTodos;
+  researchNotes: ResearchNote[];
+  opportunityThemes: OpportunityTheme[];
+  opportunityRankings: OpportunityRanking[];
   factorIdeas: FactorIdea[];
   strategyIdeas: StrategyIdea[];
   runs: StrategyRun[];

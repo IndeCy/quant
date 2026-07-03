@@ -16,6 +16,7 @@ def test_batch_runner_runs_enabled_factor_topn_instances(tmp_path: Path) -> None
     paths.ensure_directories()
     _seed_factor_scores(paths)
     repository = SystemRepository(paths.system_state_path)
+    _seed_factor_contract(repository)
     repository.upsert_strategy_instance(
         {
             "strategy_id": "paper_test",
@@ -42,6 +43,35 @@ def test_batch_runner_runs_enabled_factor_topn_instances(tmp_path: Path) -> None
     assert "selected 2 symbols" in latest["message"]
 
 
+def test_batch_runner_skips_enabled_research_instances(tmp_path: Path) -> None:
+    """研究态策略即使 enabled=True 也不应进入每日批处理。"""
+    paths = RuntimePaths(tmp_path / "runtime")
+    paths.ensure_directories()
+    _seed_factor_scores(paths)
+    repository = SystemRepository(paths.system_state_path)
+    _seed_factor_contract(repository)
+    repository.upsert_strategy_instance(
+        {
+            "strategy_id": "research_test",
+            "name": "Research Test",
+            "template_id": "factor_topn_monthly",
+            "status": "research",
+            "enabled": True,
+            "universe": "all_a",
+            "filters": [],
+            "factors": [{"factor_id": "roa", "weight": 1.0, "transform": "winsorize_zscore"}],
+            "construction": {"top_n": 20, "weighting": "equal_weight"},
+            "risk_overlay": "",
+            "benchmark": "510300",
+        }
+    )
+
+    summary = run_enabled_strategy_instances(paths)
+
+    assert summary["enabled_count"] == 0
+    assert repository.latest_run("research_test") is None
+
+
 @pytest.mark.parametrize(
     ("push", "bark_url", "expected"),
     [
@@ -65,3 +95,24 @@ def _seed_factor_scores(paths: RuntimePaths) -> None:
                 ("20260630", "000002.SZ", "roa", 0.20),
             ],
         )
+
+
+def _seed_factor_contract(repository: SystemRepository) -> None:
+    repository.upsert_factor_contract(
+        {
+            "factor_id": "roa",
+            "name": "ROA",
+            "category": "quality",
+            "direction": "higher_is_better",
+            "source": "fina_indicator",
+            "frequency": "annual",
+            "value_type": "numeric",
+            "as_of_policy": "financial_announcement",
+            "as_of_field": "f_ann_date",
+            "effective_date_field": "trade_date",
+            "input_datasets": ["fina_indicator_duckdb"],
+            "input_fields": ["roa"],
+            "output_fields": ["trade_date", "symbol", "factor_value"],
+            "status": "active",
+        }
+    )

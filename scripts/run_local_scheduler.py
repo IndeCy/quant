@@ -24,6 +24,7 @@ def main() -> None:
     args = parser.parse_args()
     paths = get_runtime_paths()
     scheduler = create_scheduler(paths)
+    scheduler.start(paused=True)
     jobs = install_daily_pipeline_jobs(
         scheduler,
         paths,
@@ -32,7 +33,7 @@ def main() -> None:
         skip_update=args.skip_update,
         push=args.push,
     )
-    scheduler.start()
+    scheduler.resume()
     write_scheduler_heartbeat(paths)
     job_ids = ", ".join(job.id for job in jobs)
     print(f"local scheduler started: {job_ids} at {args.hour:02d}:{args.minute:02d}")

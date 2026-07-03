@@ -8,15 +8,16 @@ import subprocess
 import sys
 from typing import Any
 
+from backtest.notifier import NotificationMessage, build_notifier
 from runtime.paths import RuntimePaths, get_runtime_paths
 from runtime.notification_config import resolve_bark_url
 from runtime.repository import SystemRepository
 from strategies.factor_topn_runner import run_factor_topn_monthly_instance
+from strategies.mainline_chain_factor_runner import run_factor_chain_rotation_instance
 
 
 COMPAT_ADAPTER_COMMANDS: dict[str, list[str]] = {
     "quality_overlay": [sys.executable, "examples/run_quality_overlay_paper.py", "--skip-update"],
-    "mainline_chain_b": [sys.executable, "scripts/run_mainline_chain_daily.py"],
 }
 
 
@@ -25,7 +26,7 @@ def run_enabled_strategy_instances(paths: RuntimePaths | None = None, push: bool
     runtime_paths = paths or get_runtime_paths()
     runtime_paths.ensure_directories()
     repository = SystemRepository(runtime_paths.system_state_path)
-    instances = repository.list_strategy_instances(enabled_only=True)
+    instances = repository.list_runnable_strategy_instances()
     trade_date = datetime.now().strftime("%Y%m%d")
     bark_url = resolve_bark_url() if push else ""
     results = [
@@ -54,10 +55,24 @@ def _run_instance(
     if command is None and instance.get("template_id") == "factor_topn_monthly":
         try:
             result = run_factor_topn_monthly_instance(instance, paths)
-            return {"strategy_id": strategy_id, "status": "SUCCESS", "message": f"selected {result['selected_count']} symbols"}
+            message = f"selected {result['selected_count']} symbols"
+            _send_native_notification(instance, message, push, bark_url)
+            return {"strategy_id": strategy_id, "status": "SUCCESS", "message": message}
         except Exception as exc:
             message = str(exc)
             repository.record_strategy_run(strategy_id, trade_date, "FAILED", paths.runs_dir / trade_date, message)
+            _send_native_notification(instance, f"FAILED: {message}", push, bark_url)
+            return {"strategy_id": strategy_id, "status": "FAILED", "message": message}
+    if command is None and instance.get("template_id") == "factor_chain_rotation":
+        try:
+            result = run_factor_chain_rotation_instance(instance, paths)
+            message = f"selected {result['selected_count']} symbols, nav {result['nav']:.6f}"
+            _send_native_notification(instance, message, push, bark_url)
+            return {"strategy_id": strategy_id, "status": "SUCCESS", "message": message}
+        except Exception as exc:
+            message = str(exc)
+            repository.record_strategy_run(strategy_id, trade_date, "FAILED", paths.runs_dir / trade_date, message)
+            _send_native_notification(instance, f"FAILED: {message}", push, bark_url)
             return {"strategy_id": strategy_id, "status": "FAILED", "message": message}
     if command is None:
         message = f"unsupported_template: {instance.get('template_id')}"
@@ -86,3 +101,14 @@ def _with_push_args(command: list[str], push: bool, bark_url: str) -> list[str]:
     result.append("--push")
     result.extend(["--bark-url", bark_url])
     return result
+
+
+def _send_native_notification(instance: dict[str, Any], message: str, push: bool, bark_url: str) -> None:
+    """原生模板策略统一用运行中心发送 Bark 通知。"""
+    if not push or not bark_url:
+        return
+    title = f"{instance.get('name', instance.get('strategy_id'))}运行结果"
+    try:
+        build_notifier("bark", bark_url).send(NotificationMessage(title=title, body=message))
+    except Exception:
+        return

@@ -15,13 +15,22 @@ from apscheduler.schedulers.base import STATE_STOPPED
 from runtime.paths import RuntimePaths, get_runtime_paths
 
 
+TRADING_PIPELINE_JOB_ID = "daily_trading_pipeline"
+PRE_MARKET_CHECK_JOB_ID = "pre_market_check_pipeline"
+LIVE_RISK_GUARD_JOB_ID = "live_risk_guard_pipeline"
 DATA_UPDATE_JOB_ID = "daily_data_update_pipeline"
 DAILY_PIPELINE_JOB_ID = "quality_overlay_daily_pipeline"
-MAINLINE_CHAIN_DAILY_JOB_ID = "mainline_chain_daily_pipeline"
 STRATEGY_BATCH_JOB_ID = "strategy_batch_pipeline"
+RESEARCH_MONITOR_JOB_ID = "research_monitor_pipeline"
+SCHEDULER_WATCHDOG_JOB_ID = "scheduler_watchdog_pipeline"
 DEFAULT_HOUR = 16
 DEFAULT_MINUTE = 30
 DEFAULT_STRATEGY_DELAY_MINUTES = 10
+DEFAULT_RESEARCH_DELAY_MINUTES = 15
+DEFAULT_LIVE_RISK_DELAY_MINUTES = 25
+DEFAULT_WATCHDOG_DELAY_MINUTES = 35
+DEFAULT_PRE_MARKET_HOUR = 9
+DEFAULT_PRE_MARKET_MINUTE = 20
 
 
 def project_root() -> Path:
@@ -34,10 +43,8 @@ def build_daily_pipeline_command(
     skip_update: bool = False,
     push: bool = False,
 ) -> list[str]:
-    """构造每日流水线命令，复用既有脚本入口。"""
-    command = [python_executable, "examples/run_quality_overlay_paper.py"]
-    if skip_update:
-        command.append("--skip-update")
+    """构造唯一每日交易流水线命令，调度和补跑必须复用它。"""
+    command = [python_executable, "scripts/run_daily_pipeline.py", "--source", "scheduler"]
     if push:
         command.append("--push")
     return command
@@ -48,20 +55,41 @@ def build_daily_data_update_command(python_executable: str = sys.executable) -> 
     return [python_executable, "scripts/run_daily_data_update.py"]
 
 
-def build_mainline_chain_daily_command(
-    python_executable: str = sys.executable,
-    push: bool = False,
-) -> list[str]:
-    """构造主线链动每日观察命令，观察后会同步监控指标。"""
-    command = [python_executable, "scripts/run_mainline_chain_daily.py"]
+def build_strategy_batch_command(python_executable: str = sys.executable, push: bool = False) -> list[str]:
+    """构造动态策略实例批量运行命令。"""
+    command = [python_executable, "scripts/run_strategy_batch.py"]
     if push:
         command.append("--push")
     return command
 
 
-def build_strategy_batch_command(python_executable: str = sys.executable, push: bool = False) -> list[str]:
-    """构造动态策略实例批量运行命令。"""
-    command = [python_executable, "scripts/run_strategy_batch.py"]
+def build_research_monitor_command(python_executable: str = sys.executable, push: bool = False) -> list[str]:
+    """构造投研机会池每日监控命令。"""
+    command = [python_executable, "scripts/run_research_monitor.py"]
+    if push:
+        command.append("--push")
+    return command
+
+
+def build_live_risk_guard_command(python_executable: str = sys.executable, push: bool = False) -> list[str]:
+    """构造盘后实盘风险处置命令。"""
+    command = [python_executable, "scripts/run_live_risk_guard.py"]
+    if push:
+        command.append("--push")
+    return command
+
+
+def build_pre_market_check_command(python_executable: str = sys.executable, push: bool = False) -> list[str]:
+    """构造开盘前风险复核命令。"""
+    command = [python_executable, "scripts/run_pre_market_check.py"]
+    if push:
+        command.append("--push")
+    return command
+
+
+def build_scheduler_watchdog_command(python_executable: str = sys.executable, push: bool = False) -> list[str]:
+    """构造调度稳定性巡检命令。"""
+    command = [python_executable, "scripts/run_scheduler_watchdog.py"]
     if push:
         command.append("--push")
     return command
@@ -85,7 +113,7 @@ def install_daily_pipeline_job(
     skip_update: bool = False,
     push: bool = False,
 ) -> Job:
-    """登记每日盘后 Quality Alpha 生产候选流水线任务。"""
+    """登记每日盘后交易原子流水线任务。"""
     runtime_paths = paths or get_runtime_paths()
     command = build_daily_pipeline_command(skip_update=skip_update, push=push)
     return scheduler.add_job(
@@ -94,7 +122,7 @@ def install_daily_pipeline_job(
         day_of_week="mon-fri",
         hour=hour,
         minute=minute,
-        id=DAILY_PIPELINE_JOB_ID,
+        id=TRADING_PIPELINE_JOB_ID,
         replace_existing=True,
         kwargs={
             "command": command,
@@ -120,32 +148,6 @@ def install_daily_data_update_job(
         hour=hour,
         minute=minute,
         id=DATA_UPDATE_JOB_ID,
-        replace_existing=True,
-        kwargs={
-            "command": command,
-            "cwd": str(project_root()),
-            "log_path": str(runtime_paths.logs_dir / "scheduler.log"),
-        },
-    )
-
-
-def install_mainline_chain_daily_job(
-    scheduler: BackgroundScheduler,
-    paths: RuntimePaths | None = None,
-    hour: int = DEFAULT_HOUR,
-    minute: int = DEFAULT_MINUTE,
-    push: bool = False,
-) -> Job:
-    """登记每日盘后主线链动影子实盘观察任务。"""
-    runtime_paths = paths or get_runtime_paths()
-    command = build_mainline_chain_daily_command(push=push)
-    return scheduler.add_job(
-        run_daily_pipeline,
-        trigger="cron",
-        day_of_week="mon-fri",
-        hour=hour,
-        minute=minute,
-        id=MAINLINE_CHAIN_DAILY_JOB_ID,
         replace_existing=True,
         kwargs={
             "command": command,
@@ -181,6 +183,110 @@ def install_strategy_batch_job(
     )
 
 
+def install_pre_market_check_job(
+    scheduler: BackgroundScheduler,
+    paths: RuntimePaths | None = None,
+    hour: int = DEFAULT_PRE_MARKET_HOUR,
+    minute: int = DEFAULT_PRE_MARKET_MINUTE,
+    push: bool = False,
+) -> Job:
+    """登记开盘前风险复核任务，仅在存在昨日风险单时通知。"""
+    runtime_paths = paths or get_runtime_paths()
+    command = build_pre_market_check_command(push=push)
+    return scheduler.add_job(
+        run_daily_pipeline,
+        trigger="cron",
+        day_of_week="mon-fri",
+        hour=hour,
+        minute=minute,
+        id=PRE_MARKET_CHECK_JOB_ID,
+        replace_existing=True,
+        kwargs={
+            "command": command,
+            "cwd": str(project_root()),
+            "log_path": str(runtime_paths.logs_dir / "scheduler.log"),
+        },
+    )
+
+
+def install_live_risk_guard_job(
+    scheduler: BackgroundScheduler,
+    paths: RuntimePaths | None = None,
+    hour: int = DEFAULT_HOUR,
+    minute: int = DEFAULT_MINUTE,
+    push: bool = False,
+) -> Job:
+    """登记盘后风险处置任务，有风险动作才 Bark。"""
+    runtime_paths = paths or get_runtime_paths()
+    command = build_live_risk_guard_command(push=push)
+    return scheduler.add_job(
+        run_daily_pipeline,
+        trigger="cron",
+        day_of_week="mon-fri",
+        hour=hour,
+        minute=minute,
+        id=LIVE_RISK_GUARD_JOB_ID,
+        replace_existing=True,
+        kwargs={
+            "command": command,
+            "cwd": str(project_root()),
+            "log_path": str(runtime_paths.logs_dir / "scheduler.log"),
+        },
+    )
+
+
+def install_research_monitor_job(
+    scheduler: BackgroundScheduler,
+    paths: RuntimePaths | None = None,
+    hour: int = DEFAULT_HOUR,
+    minute: int = DEFAULT_MINUTE,
+    push: bool = False,
+) -> Job:
+    """登记投研机会池每日监控任务，保持和交易策略隔离。"""
+    runtime_paths = paths or get_runtime_paths()
+    command = build_research_monitor_command(push=push)
+    return scheduler.add_job(
+        run_daily_pipeline,
+        trigger="cron",
+        day_of_week="mon-fri",
+        hour=hour,
+        minute=minute,
+        id=RESEARCH_MONITOR_JOB_ID,
+        replace_existing=True,
+        kwargs={
+            "command": command,
+            "cwd": str(project_root()),
+            "log_path": str(runtime_paths.logs_dir / "scheduler.log"),
+        },
+    )
+
+
+def install_scheduler_watchdog_job(
+    scheduler: BackgroundScheduler,
+    paths: RuntimePaths | None = None,
+    hour: int = DEFAULT_HOUR,
+    minute: int = DEFAULT_MINUTE,
+    push: bool = False,
+) -> Job:
+    """登记调度稳定性巡检任务，正常不通知，异常才 Bark。"""
+    runtime_paths = paths or get_runtime_paths()
+    command = build_scheduler_watchdog_command(push=push)
+    return scheduler.add_job(
+        run_daily_pipeline,
+        trigger="cron",
+        day_of_week="mon-fri",
+        hour=hour,
+        minute=minute,
+        id=SCHEDULER_WATCHDOG_JOB_ID,
+        replace_existing=True,
+        kwargs={
+            "command": command,
+            "cwd": str(project_root()),
+            "log_path": str(runtime_paths.logs_dir / "scheduler.log"),
+        },
+    )
+
+
 def install_daily_pipeline_jobs(
     scheduler: BackgroundScheduler,
     paths: RuntimePaths | None = None,
@@ -191,20 +297,43 @@ def install_daily_pipeline_jobs(
 ) -> list[Job]:
     """登记所有每日盘后任务，统一由本地调度器托管。"""
     runtime_paths = paths or get_runtime_paths()
-    strategy_hour, strategy_minute = _add_minutes(hour, minute, DEFAULT_STRATEGY_DELAY_MINUTES)
+    research_hour, research_minute = _add_minutes(hour, minute, DEFAULT_RESEARCH_DELAY_MINUTES)
+    risk_hour, risk_minute = _add_minutes(hour, minute, DEFAULT_LIVE_RISK_DELAY_MINUTES)
+    watchdog_hour, watchdog_minute = _add_minutes(hour, minute, DEFAULT_WATCHDOG_DELAY_MINUTES)
     _remove_legacy_strategy_jobs(scheduler)
     return [
-        install_daily_data_update_job(
+        install_pre_market_check_job(
+            scheduler,
+            runtime_paths,
+            push=push,
+        ),
+        install_daily_pipeline_job(
             scheduler,
             runtime_paths,
             hour=hour,
             minute=minute,
+            skip_update=skip_update,
+            push=push,
         ),
-        install_strategy_batch_job(
+        install_research_monitor_job(
             scheduler,
             runtime_paths,
-            hour=strategy_hour,
-            minute=strategy_minute,
+            hour=research_hour,
+            minute=research_minute,
+            push=push,
+        ),
+        install_live_risk_guard_job(
+            scheduler,
+            runtime_paths,
+            hour=risk_hour,
+            minute=risk_minute,
+            push=push,
+        ),
+        install_scheduler_watchdog_job(
+            scheduler,
+            runtime_paths,
+            hour=watchdog_hour,
+            minute=watchdog_minute,
             push=push,
         ),
     ]
@@ -220,10 +349,9 @@ def load_scheduler_status(paths: RuntimePaths | None = None) -> dict[str, object
     start_minute = DEFAULT_MINUTE
     start_flags = ""
     try:
-        job = scheduler.get_job(STRATEGY_BATCH_JOB_ID)
+        job = scheduler.get_job(TRADING_PIPELINE_JOB_ID)
         jobs = scheduler.get_jobs()
-        data_job = scheduler.get_job(DATA_UPDATE_JOB_ID)
-        pipeline_job = data_job or job
+        pipeline_job = job
         next_run = pipeline_job.next_run_time.isoformat() if pipeline_job and pipeline_job.next_run_time else None
         if pipeline_job is not None:
             schedule = _describe_cron_schedule(pipeline_job)
@@ -235,7 +363,7 @@ def load_scheduler_status(paths: RuntimePaths | None = None) -> dict[str, object
             scheduler.shutdown()
     return {
         "enabled": job is not None,
-        "job_id": STRATEGY_BATCH_JOB_ID,
+        "job_id": TRADING_PIPELINE_JOB_ID,
         "job_store_path": str(runtime_paths.scheduler_state_path),
         "job_store_exists": runtime_paths.scheduler_state_path.exists(),
         "next_run_time": next_run,
@@ -324,17 +452,22 @@ def _job_status(job: Job) -> dict[str, object]:
 def _ordered_daily_jobs(jobs: list[Job]) -> list[Job]:
     """按页面观测优先级排序每日任务。"""
     order = {
-        DATA_UPDATE_JOB_ID: 0,
-        STRATEGY_BATCH_JOB_ID: 1,
-        DAILY_PIPELINE_JOB_ID: 2,
-        MAINLINE_CHAIN_DAILY_JOB_ID: 3,
+        PRE_MARKET_CHECK_JOB_ID: 0,
+        TRADING_PIPELINE_JOB_ID: 1,
+        DATA_UPDATE_JOB_ID: 2,
+        STRATEGY_BATCH_JOB_ID: 3,
+        RESEARCH_MONITOR_JOB_ID: 4,
+        LIVE_RISK_GUARD_JOB_ID: 5,
+        SCHEDULER_WATCHDOG_JOB_ID: 6,
+        DAILY_PIPELINE_JOB_ID: 7,
+        "mainline_chain_daily_pipeline": 7,
     }
     return sorted(jobs, key=lambda value: (order.get(value.id, 99), value.id))
 
 
 def _remove_legacy_strategy_jobs(scheduler: BackgroundScheduler) -> None:
     """迁移到策略实例批处理后，清理旧的单策略定时任务，避免重复运行。"""
-    for job_id in [DAILY_PIPELINE_JOB_ID, MAINLINE_CHAIN_DAILY_JOB_ID]:
+    for job_id in [DATA_UPDATE_JOB_ID, STRATEGY_BATCH_JOB_ID, DAILY_PIPELINE_JOB_ID, "mainline_chain_daily_pipeline"]:
         if scheduler.get_job(job_id) is not None:
             scheduler.remove_job(job_id)
 

@@ -14,14 +14,24 @@ def test_factor_strategy_instance_runs_into_monitoring_curve(tmp_path: Path) -> 
     paths = RuntimePaths(tmp_path / "runtime")
     paths.ensure_directories()
     repository = SystemRepository(paths.system_state_path)
-    repository.upsert_factor(
-        factor_id="profit_stability",
-        name="盈利稳定性",
-        category="quality",
-        direction="lower_is_better",
-        source="manual",
-        description="过去三年ROA波动率越低越好",
-        config={"as_of_field": "f_ann_date"},
+    repository.upsert_factor_contract(
+        {
+            "factor_id": "profit_stability",
+            "name": "盈利稳定性",
+            "category": "quality",
+            "direction": "lower_is_better",
+            "source": "manual",
+            "description": "过去三年ROA波动率越低越好",
+            "frequency": "annual",
+            "value_type": "numeric",
+            "as_of_policy": "financial_announcement",
+            "as_of_field": "f_ann_date",
+            "effective_date_field": "trade_date",
+            "input_datasets": ["fina_indicator_duckdb"],
+            "input_fields": ["roa"],
+            "output_fields": ["trade_date", "symbol", "factor_value"],
+            "status": "active",
+        }
     )
     repository.upsert_strategy_instance(
         {

@@ -22,4 +22,4 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit("请使用 scripts/run_daily_pipeline.py 执行完整原子流水线")

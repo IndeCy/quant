@@ -1,0 +1,38 @@
+# Task Board
+
+| ID | Phase | Priority | Status | Owner | Task | Verification |
+|---|---|---:|---|---|---|---|
+| E0-001 | E0.1 | P0 | done | Codex | 创建项目治理文件 | `test -f .planning/STATE.md` |
+| E0-002 | E0.1 | P0 | done | Codex | 输出企业级项目计划 | 用户确认 |
+| E0-003 | E0.2 | P0 | done | Codex | 编写开发流程门禁 | 文档存在且包含 TDD/测试/提交 |
+| E1-000 | E1.1 | P1 | done | Codex | 规划 Experiment Runner | 输出 Phase E1.1 计划 |
+| E1-001 | E1.1 | P1 | done | Codex | 设计 Experiment Runner 数据模型 | 单测覆盖实验登记 |
+| E1-002 | E1.2 | P1 | done | Codex | 实现 Walk-Forward Runner | `pytest tests/test_walk_forward.py -q` |
+| E2-001 | E2.1 | P1 | done | Codex | 建立 Data Catalog | `pytest tests/test_data_catalog.py -q` |
+| E2-002 | E2.2 | P1 | done | Codex | 统一 Data Quality Gate | `pytest tests/test_data_quality_gate.py tests/test_daily_pipeline.py -q` |
+| E3-001 | E3.1 | P2 | done | Codex | Factor Registry V2 | `pytest tests/test_factor_registry_v2.py -q` |
+| E3-002 | E3.2 | P2 | done | Codex | Factor Computation Runner | `pytest tests/test_factor_computation_runner.py -q` |
+| E4-001 | E4.1 | P2 | done | Codex | 策略生命周期状态机 | `pytest tests/test_strategy_lifecycle.py tests/test_strategy_batch_runner.py -q` |
+| E4-002 | E4.2 | P2 | done | Codex | 账户/持仓模型 | `pytest tests/test_portfolio_account_model.py -q` |
+| E5-001 | E5.1 | P3 | done | Codex | 前端运营控制台信息架构 | `cd frontend && PATH=/opt/homebrew/opt/node@22/bin:$PATH npm run build:pre` |
+| E6-001 | E6.1 | P4 | done | Codex | 人工订单工作流 | `pytest tests/test_manual_order_workflow.py -q` |
+| E7-001 | E7.1 | P4 | done | Codex | 实盘前就绪审计 | `/api/readiness` 包含备份、通知、调仓、券商权限边界 |
+| E8-001 | E8.1 | P4 | done | Codex | 发布基线和运行数据备份 | `scripts/create_release_baseline.py --output-dir runtime_backups --label e8_1_smoke` |
+| E9-001 | E9.1 | P4 | done | Codex | Git 基线整理 | `pytest tests/test_git_baseline.py tests/test_release_baseline.py -q` |
+| E10-001 | E10.1 | P4 | done | Codex | 安全提交分组确认 | `pytest tests/test_safe_commit_review.py tests/test_git_baseline.py tests/test_release_baseline.py -q` |
+| E11-001 | E11.1 | P4 | done | Codex | 选择性暂存和提交 | `git diff --cached --name-only` 不包含 runtime/report 数据 |
+| E12-001 | E12.1 | P4 | pending | Codex | 基线后运行观察 | 继续验证调度、通知、日报、投研和策略资产化稳定性 |
+
+## 状态规则
+
+- pending：未开始。
+- in_progress：当前正在做。
+- blocked：明确阻塞，必须写阻塞原因。
+- done：代码、测试、文档或验收已完成。
+
+## 执行规则
+
+- 每次只允许一个 Phase 处于 in_progress。
+- 每个 Phase 开始前必须写计划。
+- 每个实现任务必须先写失败测试。
+- 每个 Phase 完成后更新本文件和 `.planning/STATE.md`。

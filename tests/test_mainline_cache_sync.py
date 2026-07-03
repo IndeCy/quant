@@ -103,8 +103,8 @@ def test_sync_mainline_cache_from_tushare_increment_updates_today_bars(tmp_path:
             {"open": [39.0], "high": [41.0], "low": [38.0], "close": [40.0], "volume": [1.0], "amount": [1.0]},
             index=pd.to_datetime(["2026-06-29"]),
         )
-        cache.upsert_bars("tencent", "601138.SH", "1d", "qfq", previous_stock)
-        cache.upsert_bars("tencent", "159695.SZ", "1d", "qfq", previous_fund)
+        cache.upsert_bars("tushare", "601138.SH", "1d", "qfq", previous_stock)
+        cache.upsert_bars("tushare", "159695.SZ", "1d", "qfq", previous_fund)
     finally:
         cache.close()
 
@@ -112,10 +112,10 @@ def test_sync_mainline_cache_from_tushare_increment_updates_today_bars(tmp_path:
 
     cache = MarketDataCache(cache_path)
     try:
-        stock_qfq = cache.read_bars("tencent", "601138.SH", "1d", "qfq", date(2026, 6, 30), date(2026, 6, 30))
-        stock_raw = cache.read_bars("tencent", "601138.SH", "1d", "none", date(2026, 6, 30), date(2026, 6, 30))
-        fund_qfq = cache.read_bars("tencent", "159695.SZ", "1d", "qfq", date(2026, 6, 30), date(2026, 6, 30))
-        index_raw = cache.read_bars("tencent", "000001.SH", "1d", "none", date(2026, 6, 30), date(2026, 6, 30))
+        stock_qfq = cache.read_bars("tushare", "601138.SH", "1d", "qfq", date(2026, 6, 30), date(2026, 6, 30))
+        stock_raw = cache.read_bars("tushare", "601138.SH", "1d", "none", date(2026, 6, 30), date(2026, 6, 30))
+        fund_qfq = cache.read_bars("tushare", "159695.SZ", "1d", "qfq", date(2026, 6, 30), date(2026, 6, 30))
+        index_raw = cache.read_bars("tushare", "000001.SH", "1d", "none", date(2026, 6, 30), date(2026, 6, 30))
     finally:
         cache.close()
 

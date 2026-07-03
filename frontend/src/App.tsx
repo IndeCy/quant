@@ -20,6 +20,7 @@ import { SettingsPage } from "./pages/settings/SettingsPage";
 import { StrategiesPage } from "./pages/strategies/StrategiesPage";
 import "./shared/styles/global.css";
 import "./shared/styles/features.css";
+import "./shared/styles/operations.css";
 import "./shared/styles/workbench.css";
 
 function App() {

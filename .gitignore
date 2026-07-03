@@ -30,6 +30,7 @@ htmlcov/
 *~
 *.bak
 backups/
+runtime_backups/
 data/*
 !data/*.py
 *.csv

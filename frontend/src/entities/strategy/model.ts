@@ -74,3 +74,8 @@ export interface StrategyInstanceState {
     last_close: number;
   }>;
 }
+
+export interface StrategyTransitionPayload {
+  target_status: string;
+  enable?: boolean;
+}

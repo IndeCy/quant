@@ -2,16 +2,24 @@ import { useEffect, useMemo, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 
 import type { DashboardContext } from "../../app/types";
-import { getStrategy, getStrategyInstanceState, saveStrategyInstance } from "../../entities/strategy/api";
+import { getAccountSnapshot } from "../../entities/account/api";
+import { sortAccountPositions } from "../../entities/account/drift";
+import type { AccountSnapshot } from "../../entities/account/model";
+import { getManualOrderBatch } from "../../entities/manualOrder/api";
+import type { ManualOrderBatch } from "../../entities/manualOrder/model";
+import { getStrategy, getStrategyInstanceState, saveStrategyInstance, transitionStrategyInstance } from "../../entities/strategy/api";
 import { strategyMetricText } from "../../entities/strategy/display";
 import { buildFactorTopNInstance, createEditableFactors, validateEditableFactors } from "../../entities/strategy/instanceFactory";
-import type { StrategyDefinition, StrategyInstanceState } from "../../entities/strategy/model";
+import type { StrategyDefinition, StrategyInstance, StrategyInstanceState } from "../../entities/strategy/model";
 import { saveStrategyDraft } from "../../entities/strategyDraft/api";
 import { createDraftFactorsFromAvailableFactors } from "../../entities/strategyDraft/factory";
 import type { StrategyDraft, StrategyDraftPayload } from "../../entities/strategyDraft/model";
 import { validateStrategyDraftWeights } from "../../entities/strategyDraft/validation";
 import { formatNumber, formatPercent } from "../../shared/lib/formatters";
 import { PageHeader } from "../../shared/ui/PageHeader";
+import { ManualOrderPanel } from "./ManualOrderPanel";
+import { StrategyAccountSnapshotPanel } from "./StrategyAccountSnapshotPanel";
+import { StrategyOperationsPanel } from "./StrategyOperationsPanel";
 
 export function StrategiesPage() {
   const data = useOutletContext<DashboardContext>();
@@ -35,8 +43,18 @@ export function StrategiesPage() {
   const [instanceFactors, setInstanceFactors] = useState(createEditableFactors(data.factors));
   const [instanceStates, setInstanceStates] = useState<Record<string, StrategyInstanceState>>({});
   const [instanceMessage, setInstanceMessage] = useState("");
+  const [selectedInstanceId, setSelectedInstanceId] = useState(data.strategyInstances[0]?.strategy_id ?? "");
+  const [accountSnapshot, setAccountSnapshot] = useState<AccountSnapshot | null>(null);
+  const [accountMessage, setAccountMessage] = useState("");
+  const [manualOrderBatch, setManualOrderBatch] = useState<ManualOrderBatch | null>(null);
+  const [manualOrderMessage, setManualOrderMessage] = useState("");
   const validation = useMemo(() => validateStrategyDraftWeights(draftFactors), [draftFactors]);
   const instanceValidation = useMemo(() => validateEditableFactors(instanceFactors), [instanceFactors]);
+  const selectedInstance = useMemo(
+    () => instances.find((instance) => instance.strategy_id === selectedInstanceId) ?? instances[0] ?? null,
+    [instances, selectedInstanceId]
+  );
+  const accountPositions = useMemo(() => sortAccountPositions(accountSnapshot?.positions ?? []), [accountSnapshot]);
 
   useEffect(() => {
     if (data.selectedStrategyId === "ALL") {
@@ -65,6 +83,70 @@ export function StrategiesPage() {
       active = false;
     };
   }, [instances]);
+
+  useEffect(() => {
+    if (selectedInstance && selectedInstance.strategy_id !== selectedInstanceId) {
+      setSelectedInstanceId(selectedInstance.strategy_id);
+    }
+  }, [selectedInstance, selectedInstanceId]);
+
+  useEffect(() => {
+    if (!selectedInstance) {
+      setAccountSnapshot(null);
+      setAccountMessage("暂无策略实例");
+      setManualOrderBatch(null);
+      setManualOrderMessage("");
+      return;
+    }
+    let active = true;
+    setAccountMessage("");
+    getAccountSnapshot(selectedInstance.strategy_id)
+      .then((snapshot) => {
+        if (active) {
+          setAccountSnapshot(snapshot);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setAccountSnapshot(null);
+          setAccountMessage("暂无账户快照，等待该策略完成一次每日流水线");
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedInstance]);
+
+  useEffect(() => {
+    if (!selectedInstance) {
+      return;
+    }
+    let active = true;
+    setManualOrderMessage("");
+    getManualOrderBatch(selectedInstance.strategy_id)
+      .then((batch) => {
+        if (active) {
+          setManualOrderBatch(batch);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setManualOrderBatch(null);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [selectedInstance]);
+
+  function refreshManualOrderBatch() {
+    if (!selectedInstance) {
+      return;
+    }
+    getManualOrderBatch(selectedInstance.strategy_id)
+      .then(setManualOrderBatch)
+      .catch(() => setManualOrderBatch(null));
+  }
 
   function updateDraftFactor(factorId: string, patch: Partial<StrategyDraftPayload["factors"][number]>) {
     setDraftFactors((items) => items.map((item) => (item.factor_id === factorId ? { ...item, ...patch } : item)));
@@ -128,6 +210,19 @@ export function StrategiesPage() {
     );
     setInstances((items) => [saved, ...items.filter((item) => item.strategy_id !== saved.strategy_id)]);
     setInstanceMessage("策略实例已保存，启用后会进入每日批处理队列");
+    setSelectedInstanceId(saved.strategy_id);
+    await data.refreshData();
+  }
+
+  async function handleTransition(instance: StrategyInstance, targetStatus: string) {
+    setInstanceMessage("");
+    const saved = await transitionStrategyInstance(instance.strategy_id, {
+      target_status: targetStatus,
+      enable: targetStatus === "paused" || targetStatus === "retired" ? false : instance.enabled
+    });
+    setInstances((items) => items.map((item) => (item.strategy_id === saved.strategy_id ? saved : item)));
+    setSelectedInstanceId(saved.strategy_id);
+    setInstanceMessage(`策略实例已流转到 ${saved.status}`);
     await data.refreshData();
   }
 
@@ -337,7 +432,12 @@ export function StrategiesPage() {
         <h2>已登记策略实例</h2>
         <div className="mini-table">
           {instances.map((instance) => (
-            <div key={instance.strategy_id} className="mini-row instance-row">
+            <button
+              key={instance.strategy_id}
+              type="button"
+              className={`mini-row instance-row instance-button ${selectedInstance?.strategy_id === instance.strategy_id ? "selected-row" : ""}`}
+              onClick={() => setSelectedInstanceId(instance.strategy_id)}
+            >
               <span>{instance.name}</span>
               <strong>{instance.enabled ? "自动运行" : "停用"}</strong>
               <em>
@@ -347,10 +447,20 @@ export function StrategiesPage() {
                     }只`
                   : instance.template_id}
               </em>
-            </div>
+            </button>
           ))}
         </div>
       </section>
+      <StrategyOperationsPanel selectedInstance={selectedInstance} onTransition={handleTransition} />
+      <StrategyAccountSnapshotPanel accountMessage={accountMessage} accountPositions={accountPositions} accountSnapshot={accountSnapshot} />
+      <ManualOrderPanel
+        batch={manualOrderBatch}
+        message={manualOrderMessage}
+        strategyId={selectedInstance?.strategy_id ?? null}
+        onBatchChange={setManualOrderBatch}
+        onMessage={setManualOrderMessage}
+        onRefresh={refreshManualOrderBatch}
+      />
     </>
   );
 }

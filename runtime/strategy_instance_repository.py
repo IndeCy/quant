@@ -5,6 +5,12 @@ from __future__ import annotations
 import json
 from typing import Any
 
+from runtime.strategy_lifecycle import (
+    RUNNABLE_STATUSES,
+    validate_strategy_for_run,
+    validate_transition,
+)
+
 
 class StrategyInstanceRepositoryMixin:
     """保存可运行策略实例配置。"""
@@ -71,6 +77,57 @@ class StrategyInstanceRepositoryMixin:
         with self._connect() as con:
             rows = con.execute(sql, params).fetchall()
         return [self._row_to_dict(row) for row in rows]
+
+    def transition_strategy_instance_status(
+        self,
+        strategy_id: str,
+        target_status: str,
+        enable: bool | None = None,
+    ) -> dict[str, Any]:
+        """按生命周期状态机更新策略实例状态。"""
+        current = self.load_strategy_instance(strategy_id)
+        validate_transition(str(current["status"]), target_status)
+        updated = dict(current)
+        updated["status"] = target_status
+        if enable is not None:
+            updated["enabled"] = bool(enable)
+        if bool(updated.get("enabled")) and target_status in RUNNABLE_STATUSES:
+            validate_strategy_for_run(updated, self.validate_strategy_factor_contracts(strategy_id))
+        with self._connect() as con:
+            con.execute(
+                """
+                UPDATE strategy_instances
+                SET status = ?, enabled = ?, modified_at = CURRENT_TIMESTAMP
+                WHERE strategy_id = ?
+                """,
+                [target_status, 1 if bool(updated.get("enabled")) else 0, strategy_id],
+            )
+        return self.load_strategy_instance(strategy_id)
+
+    def list_runnable_strategy_instances(self) -> list[dict[str, Any]]:
+        """读取允许进入每日批处理的策略实例。"""
+        placeholders = ",".join("?" for _ in RUNNABLE_STATUSES)
+        with self._connect() as con:
+            rows = con.execute(
+                f"""
+                SELECT * FROM strategy_instances
+                WHERE enabled = 1 AND status IN ({placeholders})
+                ORDER BY strategy_id
+                """,
+                sorted(RUNNABLE_STATUSES),
+            ).fetchall()
+        result = []
+        for row in rows:
+            instance = self._row_to_dict(row)
+            try:
+                validate_strategy_for_run(
+                    instance,
+                    self.validate_strategy_factor_contracts(str(instance["strategy_id"])),
+                )
+            except Exception:
+                continue
+            result.append(instance)
+        return result
 
     def load_strategy_instance_state(self, strategy_id: str) -> dict[str, Any]:
         """读取策略实例最近一次 paper 状态和持仓。"""

@@ -8,7 +8,6 @@ from fastapi.testclient import TestClient
 
 from api.local_server import create_app
 from api.service import LocalApiService
-from backtest.paper_trading import PaperTradingStore
 from monitoring.metrics import build_market_monitor_frame, build_strategy_monitor_frame
 from monitoring.repository import MonitoringRepository
 from runtime.paths import RuntimePaths
@@ -64,69 +63,21 @@ def test_local_api_service_exposes_strategy_detail(tmp_path: Path) -> None:
     assert len(detail["factors"]) == 3
 
 
-def test_local_api_service_assetizes_mainline_chain_snapshots(tmp_path: Path) -> None:
-    """服务启动时应把主线链动模拟盘快照同步为可观测策略指标。"""
-    paths = _seed_runtime(tmp_path)
-    store = PaperTradingStore(paths.paper_trading_path)
-    account_id = store.create_account(
-        "主线链动策略",
-        "Mainline_Chain_Momentum",
-        1_000_000,
-        "000001.SH",
-        "上证指数",
-        "2026-06-05",
-    )
-    store.record_daily_snapshot(
-        account_id,
-        "2026-06-05",
-        total_value=1_000_000,
-        cash=100_000,
-        position_value=900_000,
-        strategy_return=0.0,
-        benchmark_return=0.0,
-        excess_return=0.0,
-        strongest_chain="通信AI",
-        rebalance_signal="NONE",
-        target_symbols=["601138.SH"],
-    )
-    store.record_daily_snapshot(
-        account_id,
-        "2026-06-06",
-        total_value=1_030_000,
-        cash=100_000,
-        position_value=930_000,
-        strategy_return=0.03,
-        benchmark_return=0.01,
-        excess_return=0.02,
-        strongest_chain="半导体",
-        rebalance_signal="REBALANCE",
-        target_symbols=["600584.SH"],
-    )
-    store.close()
-
-    service = LocalApiService(paths)
-
-    detail = service.strategy_detail("mainline_chain_b")
-    history = service.strategy_series("mainline_chain_b")
-    runs = service.runs("mainline_chain_b")
-
-    assert detail is not None
-    assert detail["latest_metrics"]["trade_date"] == "20260606"
-    assert len(history) == 2
-    assert runs[0]["message"] == "最强产业链: 半导体, 信号: REBALANCE"
-
-
 def test_local_api_service_exposes_factor_detail(tmp_path: Path) -> None:
     """因子详情应包含 as-of 配置和使用该因子的策略关系。"""
     service = LocalApiService(_seed_runtime(tmp_path))
 
     detail = service.factor_detail("roa")
+    contract = service.factor_contract_detail("roa")
 
     assert detail is not None
     assert detail["name"] == "ROA"
     assert detail["config"]["as_of_field"] == "f_ann_date"
     assert detail["strategies"][0]["strategy_id"] == "quality_overlay"
     assert round(detail["strategies"][0]["weight"], 6) == round(1 / 3, 6)
+    assert contract is not None
+    assert contract["as_of_field"] == "f_ann_date"
+    assert contract["input_datasets"] == ["fina_indicator_duckdb"]
 
 
 def test_local_api_service_saves_strategy_draft(tmp_path: Path) -> None:
@@ -187,6 +138,34 @@ def test_local_api_service_saves_research_ideas(tmp_path: Path) -> None:
     assert service.strategy_ideas()[0]["idea_id"] == "quality_low_vol_top30"
 
 
+def test_local_api_service_saves_research_notes(tmp_path: Path) -> None:
+    """投研模块应支持保存个股、策略等通用研究报告。"""
+    service = LocalApiService(_seed_runtime(tmp_path))
+
+    saved = service.save_research_note(
+        {
+            "note_id": "stock_300308_20260701",
+            "title": "中际旭创个股投研",
+            "note_type": "stock",
+            "linked_type": "stock",
+            "linked_id": "300308.SZ",
+            "summary": "AI光模块高景气高波动样本",
+            "content": "# 中际旭创\n适合作为趋势增强观察对象。",
+            "tags": ["AI算力", "光模块"],
+            "source": "agent_report",
+            "status": "active",
+        }
+    )
+
+    notes = service.research_notes()
+    detail = service.research_note_detail("stock_300308_20260701")
+
+    assert saved["note_type"] == "stock"
+    assert notes[0]["title"] == "中际旭创个股投研"
+    assert detail is not None
+    assert detail["content"].startswith("# 中际旭创")
+
+
 def test_local_api_service_exposes_strategy_templates_and_instances(tmp_path: Path) -> None:
     """本地 API 应支持策略模板和可运行策略实例。"""
     service = LocalApiService(_seed_runtime(tmp_path))
@@ -214,92 +193,35 @@ def test_local_api_service_exposes_strategy_templates_and_instances(tmp_path: Pa
     instance_ids = [item["strategy_id"] for item in service.strategy_instances()]
     assert "quality_roa_ocf_v2" in instance_ids
     assert "quality_overlay" in instance_ids
-    assert "mainline_chain_b" in instance_ids
+    assert "mainline_chain_factor_v1" in instance_ids
 
 
-def test_local_api_service_exposes_scheduler_status(tmp_path: Path) -> None:
-    """设置页需要读取每日自动运行任务状态。"""
+def test_local_api_service_transitions_strategy_lifecycle(tmp_path: Path) -> None:
+    """本地 API 应通过生命周期状态机更新策略状态。"""
     service = LocalApiService(_seed_runtime(tmp_path))
+    service.save_strategy_instance(
+        {
+            "strategy_id": "quality_lifecycle_test",
+            "name": "Quality Lifecycle Test",
+            "template_id": "factor_topn_monthly",
+            "status": "draft",
+            "enabled": False,
+            "universe": "all_a",
+            "filters": [],
+            "factors": [{"factor_id": "roa", "weight": 1.0, "transform": "winsorize_zscore"}],
+            "construction": {"top_n": 20, "weighting": "equal_weight"},
+            "risk_overlay": "",
+            "benchmark": "510300",
+        }
+    )
 
-    status = service.scheduler_status()
+    research = service.transition_strategy_instance(
+        "quality_lifecycle_test",
+        {"target_status": "research"},
+    )
 
-    assert status["job_store_path"].endswith("state/scheduler.sqlite")
-    assert status["start_command"].startswith("/Users/admin/recommend_analysis/.venv/bin/python3")
-    assert status["enabled"] is False
-    assert status["jobs"] == []
-
-
-def test_local_api_service_configures_scheduler_job(tmp_path: Path) -> None:
-    """设置页登记每日任务后，job store 中应出现 Quality Alpha 任务。"""
-    service = LocalApiService(_seed_runtime(tmp_path))
-
-    status = service.configure_scheduler_job({"hour": 17, "minute": 5, "skip_update": True})
-
-    assert status["enabled"] is True
-    assert status["schedule"] == "mon-fri 17:05 Asia/Shanghai"
-    assert "--skip-update" not in status["start_command"]
-    assert [item["job_id"] for item in status["jobs"]] == [
-        "daily_data_update_pipeline",
-        "strategy_batch_pipeline",
-    ]
-    assert status["jobs"][1]["schedule"] == "mon-fri 17:15 Asia/Shanghai"
-
-
-def test_local_api_service_exposes_backup_manifest(tmp_path: Path) -> None:
-    """设置页需要读取可迁移运行目录清单。"""
-    service = LocalApiService(_seed_runtime(tmp_path))
-
-    manifest = service.backup_manifest()
-
-    assert manifest["runtime_root"].endswith("runtime")
-    assert [item["name"] for item in manifest["items"]] == ["data", "state", "runs", "reports", "config", "logs"]
-    assert "tar -czf" in manifest["backup_command"]
-
-
-def test_local_api_service_exposes_service_manifest(tmp_path: Path) -> None:
-    """设置页需要展示本地服务启动命令和 launchd 模板。"""
-    service = LocalApiService(_seed_runtime(tmp_path))
-
-    manifest = service.service_manifest()
-
-    assert manifest["runtime_root"].endswith("runtime")
-    assert [item["name"] for item in manifest["services"]] == ["api", "frontend", "scheduler"]
-    assert "launchd_plist" in manifest["services"][0]
-
-
-def test_local_api_service_exposes_service_status(tmp_path: Path) -> None:
-    """设置页需要读取本地服务巡检状态。"""
-    service = LocalApiService(_seed_runtime(tmp_path))
-
-    status = service.service_status()
-
-    assert [item["name"] for item in status["services"]] == ["api", "frontend", "scheduler"]
-    assert status["services"][0]["check"] == "tcp:127.0.0.1:8765"
-
-
-def test_local_api_service_exposes_runtime_logs(tmp_path: Path) -> None:
-    """运行日志应通过 API 统一索引和读取。"""
-    paths = _seed_runtime(tmp_path)
-    (paths.logs_dir / "api.log").write_text("api ok\n", encoding="utf-8")
-    service = LocalApiService(paths)
-
-    logs = service.logs()
-    content = service.log_content(logs[0]["log_id"])
-
-    assert logs[0]["name"] == "api.log"
-    assert content is not None
-    assert content["content"] == "api ok\n"
-
-
-def test_local_api_service_exposes_readiness_report(tmp_path: Path, monkeypatch) -> None:
-    """总览页需要读取生产候选运行就绪度。"""
-    monkeypatch.setenv("TUSHARE_TOKEN", "token")
-    service = LocalApiService(_seed_runtime(tmp_path))
-
-    report = service.readiness()
-
-    assert report["status"] in {"READY", "NOT_READY"}
-    assert [item["name"] for item in report["checks"]][:3] == ["tushare_token", "live_market_data", "benchmark_data"]
+    assert research["status"] == "research"
+    assert research["enabled"] is False
 
 
 def test_local_api_service_exposes_research_todos(tmp_path: Path) -> None:
@@ -370,6 +292,24 @@ def test_local_api_service_reports_data_health(tmp_path: Path) -> None:
     assert health["monitoring"]["latest_strategy_date"] == "20260624"
 
 
+def test_local_api_service_refreshes_data_catalog(tmp_path: Path) -> None:
+    """本地 API 应能刷新并读取 Data Catalog。"""
+    paths = _seed_runtime(tmp_path)
+    with duckdb.connect(str(paths.data_dir / "daily.duckdb")) as con:
+        con.execute("CREATE TABLE daily(trade_date VARCHAR, close DOUBLE)")
+        con.execute("INSERT INTO daily VALUES ('20260702', 10.2)")
+    service = LocalApiService(paths)
+
+    refresh = service.refresh_data_catalog({"roots": [str(paths.data_dir)]})
+    sources = service.data_sources()
+    detail = service.data_source_detail("daily_duckdb")
+
+    assert refresh["status"] == "SUCCESS"
+    assert sources[0]["dataset_id"] == "daily_duckdb"
+    assert detail is not None
+    assert detail["tables"][0]["latest_date"] == "20260702"
+
+
 def test_local_api_service_returns_run_detail_with_steps(tmp_path: Path) -> None:
     """运行详情应返回运行记录、分步骤状态和当日产物。"""
     paths = _seed_runtime(tmp_path)
@@ -401,17 +341,38 @@ def test_fastapi_routes_delegate_to_service(tmp_path: Path) -> None:
 
     assert client.get("/api/health").json()["status"] == "ok"
     scheduler_status = client.get("/api/scheduler/status").json()
-    assert scheduler_status["job_id"] == "strategy_batch_pipeline"
+    assert scheduler_status["job_id"] == "daily_trading_pipeline"
     assert scheduler_status["jobs"] == []
     scheduler_response = client.post("/api/scheduler/daily-job", json={"hour": 17, "minute": 5, "skip_update": True})
     assert scheduler_response.status_code == 200
     assert scheduler_response.json()["schedule"] == "mon-fri 17:05 Asia/Shanghai"
-    assert len(scheduler_response.json()["jobs"]) == 2
+    assert len(scheduler_response.json()["jobs"]) == 5
     assert client.get("/api/backup/manifest").json()["items"][0]["name"] == "data"
     assert client.get("/api/services/manifest").json()["services"][0]["name"] == "api"
     assert client.get("/api/services/status").json()["services"][1]["name"] == "frontend"
     assert client.get("/api/logs").status_code == 200
     assert client.get("/api/readiness").json()["checks"][0]["name"] == "tushare_token"
+
+def test_fastapi_manual_daily_run_uses_unified_pipeline(
+    monkeypatch,
+    tmp_path: Path,
+) -> None:
+    """API 手动补跑也必须调用统一交易流水线。"""
+    service = LocalApiService(_seed_runtime(tmp_path))
+    client = TestClient(create_app(service))
+    calls = []
+
+    def fake_pipeline(paths, push: bool, source: str):
+        calls.append({"paths": paths, "push": push, "source": source})
+        return {"trade_date": "20260702", "status": "SUCCESS", "source": source}
+
+    monkeypatch.setattr("api.service.run_production_daily_pipeline", fake_pipeline)
+
+    response = client.post("/api/pipeline/daily-run", json={"push": True})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "SUCCESS"
+    assert calls == [{"paths": service.paths, "push": True, "source": "api"}]
     assert "待办资料库" in client.get("/api/research/todos").json()["content"]
     factor_response = client.post(
         "/api/research/factor-ideas",
@@ -465,12 +426,51 @@ def test_fastapi_routes_delegate_to_service(tmp_path: Path) -> None:
     strategy_instances = client.get("/api/strategy-instances").json()
     assert "quality_roa_ocf_v2" in [item["strategy_id"] for item in strategy_instances]
     assert client.get("/api/strategy-instances/quality_roa_ocf_v2/state").json()["holdings"] == []
+    assert client.get("/api/accounts/quality_roa_ocf_v2").status_code == 404
+    transition_response = client.post(
+        "/api/strategy-instances/quality_roa_ocf_v2/transition",
+        json={"target_status": "paused", "enable": False},
+    )
+    assert transition_response.status_code == 200
+    assert transition_response.json()["status"] == "paused"
     assert client.get("/api/data/health").json()["runtime_root"].endswith("runtime")
+    assert client.post("/api/data/catalog/refresh", json={"roots": [str(service.paths.data_dir)]}).status_code == 200
+    assert client.get("/api/data/sources").status_code == 200
+    assert client.get("/api/data/sources/missing").status_code == 404
+    quality_response = client.post("/api/data/quality-gate", json={"min_trade_date": "20260702"})
+    assert quality_response.status_code == 200
+    assert quality_response.json()["status"] in {"PASS", "FAIL"}
     strategy_ids = [item["strategy_id"] for item in client.get("/api/strategies").json()]
     assert "quality_overlay" in strategy_ids
-    assert "mainline_chain_b" in strategy_ids
+    assert "mainline_chain_factor_v1" in strategy_ids
+    assert "mainline_chain_b" not in strategy_ids
     assert client.get("/api/factors/roa").json()["strategies"][0]["strategy_id"] == "quality_overlay"
+    assert client.get("/api/factor-contracts").json()[0]["factor_id"]
+    assert client.get("/api/factor-contracts/roa").json()["as_of_field"] == "f_ann_date"
+    assert client.get("/api/factor-contracts/missing").status_code == 404
     assert client.get("/api/factors/missing").status_code == 404
+    note_response = client.post(
+        "/api/research/notes",
+        json={
+            "note_id": "stock_300308_20260701",
+            "title": "中际旭创个股投研",
+            "note_type": "stock",
+            "linked_type": "stock",
+            "linked_id": "300308.SZ",
+            "summary": "AI光模块高景气高波动样本",
+            "content": "# 中际旭创\n适合作为趋势增强观察对象。",
+            "tags": ["AI算力", "光模块"],
+            "source": "agent_report",
+            "status": "active",
+        },
+    )
+    assert note_response.status_code == 200
+    assert client.get("/api/research/notes").json()[0]["linked_id"] == "300308.SZ"
+    assert client.get("/api/research/notes/stock_300308_20260701").json()["note_type"] == "stock"
+    opportunities = client.get("/api/research/opportunities").json()
+    optical = next(item for item in opportunities if item["theme_id"] == "ai_optical_module_powerlaw")
+    assert optical["stocks"][0]["symbol"] in {"000063.SZ", "300308.SZ", "300394.SZ", "300502.SZ", "601138.SH"}
+    assert client.get("/api/research/opportunity-rankings").status_code == 200
     response = client.post(
         "/api/strategy-drafts",
         json={

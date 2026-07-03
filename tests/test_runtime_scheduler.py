@@ -5,24 +5,28 @@ import sys
 
 from runtime.paths import RuntimePaths
 from runtime.scheduler import (
+    TRADING_PIPELINE_JOB_ID,
+    build_live_risk_guard_command,
+    build_pre_market_check_command,
+    build_research_monitor_command,
+    build_scheduler_watchdog_command,
     build_strategy_batch_command,
     build_daily_data_update_command,
     build_daily_pipeline_command,
-    build_mainline_chain_daily_command,
     create_scheduler,
     install_daily_pipeline_job,
     install_daily_pipeline_jobs,
-    install_mainline_chain_daily_job,
     load_scheduler_status,
+    run_daily_pipeline,
 )
 
 
 def test_build_daily_pipeline_command_uses_existing_script(tmp_path: Path) -> None:
-    """调度器应复用既有每日流水线脚本，不复制策略逻辑。"""
+    """调度器应复用唯一每日交易流水线脚本，不复制策略逻辑。"""
     command = build_daily_pipeline_command("python-test", skip_update=True, push=False)
 
-    assert command[:2] == ["python-test", "examples/run_quality_overlay_paper.py"]
-    assert "--skip-update" in command
+    assert command == ["python-test", "scripts/run_daily_pipeline.py", "--source", "scheduler"]
+    assert "--skip-update" not in command
     assert "--push" not in command
 
 
@@ -31,13 +35,6 @@ def test_build_daily_data_update_command_uses_dedicated_script(tmp_path: Path) -
     command = build_daily_data_update_command("python-test")
 
     assert command == ["python-test", "scripts/run_daily_data_update.py"]
-
-
-def test_build_mainline_chain_daily_command_uses_wrapper_script(tmp_path: Path) -> None:
-    """主线链动调度应使用盘后观察和监控同步包装脚本。"""
-    command = build_mainline_chain_daily_command("python-test", push=True)
-
-    assert command == ["python-test", "scripts/run_mainline_chain_daily.py", "--push"]
 
 
 def test_build_strategy_batch_command_uses_dynamic_runner(tmp_path: Path) -> None:
@@ -54,22 +51,29 @@ def test_build_strategy_batch_command_can_enable_push(tmp_path: Path) -> None:
     assert command == ["python-test", "scripts/run_strategy_batch.py", "--push"]
 
 
+def test_build_research_monitor_command_uses_opportunity_runner(tmp_path: Path) -> None:
+    """投研观察池应有独立入口，不能混入交易策略批处理。"""
+    command = build_research_monitor_command("python-test")
+
+    assert command == ["python-test", "scripts/run_research_monitor.py"]
+
+
 def test_install_daily_pipeline_job_registers_quality_cron_job(tmp_path: Path) -> None:
-    """APScheduler 中应登记每日 Quality Alpha 流水线任务。"""
+    """APScheduler 中应登记唯一每日交易流水线任务。"""
     paths = RuntimePaths(tmp_path / "runtime")
     paths.ensure_directories()
     scheduler = create_scheduler(paths)
 
     job = install_daily_pipeline_job(scheduler, paths, hour=16, minute=10, skip_update=True)
 
-    assert job.id == "quality_overlay_daily_pipeline"
+    assert job.id == TRADING_PIPELINE_JOB_ID
     assert job.kwargs["cwd"].endswith("quant")
     assert job.kwargs["log_path"].endswith("logs/scheduler.log")
-    assert "--skip-update" in job.kwargs["command"]
+    assert job.kwargs["command"][:2] == [sys.executable, "scripts/run_daily_pipeline.py"]
 
 
 def test_install_daily_pipeline_jobs_registers_data_then_batch_runner(tmp_path: Path) -> None:
-    """每日调度应先更新数据，再运行策略实例批量任务。"""
+    """每日调度应把交易流程收敛为一个原子任务，投研监控独立。"""
     paths = RuntimePaths(tmp_path / "runtime")
     paths.ensure_directories()
     scheduler = create_scheduler(paths)
@@ -77,19 +81,38 @@ def test_install_daily_pipeline_jobs_registers_data_then_batch_runner(tmp_path: 
     jobs = install_daily_pipeline_jobs(scheduler, paths, hour=16, minute=10, skip_update=True, push=True)
 
     assert [job.id for job in jobs] == [
-        "daily_data_update_pipeline",
-        "strategy_batch_pipeline",
+        "pre_market_check_pipeline",
+        "daily_trading_pipeline",
+        "research_monitor_pipeline",
+        "live_risk_guard_pipeline",
+        "scheduler_watchdog_pipeline",
     ]
     assert jobs[0].kwargs["command"][:2] == [
         sys.executable,
-        "scripts/run_daily_data_update.py",
+        "scripts/run_pre_market_check.py",
     ]
+    assert "--push" in jobs[0].kwargs["command"]
     assert jobs[1].kwargs["command"][:2] == [
         sys.executable,
-        "scripts/run_strategy_batch.py",
+        "scripts/run_daily_pipeline.py",
     ]
     assert "--push" in jobs[1].kwargs["command"]
     assert jobs[1].kwargs["log_path"].endswith("logs/scheduler.log")
+    assert jobs[2].kwargs["command"][:2] == [
+        sys.executable,
+        "scripts/run_research_monitor.py",
+    ]
+    assert "--push" in jobs[2].kwargs["command"]
+    assert jobs[3].kwargs["command"][:2] == [
+        sys.executable,
+        "scripts/run_live_risk_guard.py",
+    ]
+    assert "--push" in jobs[3].kwargs["command"]
+    assert jobs[4].kwargs["command"][:2] == [
+        sys.executable,
+        "scripts/run_scheduler_watchdog.py",
+    ]
+    assert "--push" in jobs[4].kwargs["command"]
 
 
 def test_install_daily_pipeline_jobs_removes_legacy_strategy_jobs(tmp_path: Path) -> None:
@@ -99,13 +122,24 @@ def test_install_daily_pipeline_jobs_removes_legacy_strategy_jobs(tmp_path: Path
     scheduler = create_scheduler(paths)
     install_daily_pipeline_job(scheduler, paths, hour=16, minute=10, skip_update=True)
 
-    install_mainline_chain_daily_job(scheduler, paths, hour=16, minute=10)
+    scheduler.add_job(
+        run_daily_pipeline,
+        trigger="cron",
+        day_of_week="mon-fri",
+        hour=16,
+        minute=10,
+        id="mainline_chain_daily_pipeline",
+        replace_existing=True,
+        kwargs={"command": ["python-test", "old.py"], "cwd": str(tmp_path), "log_path": str(tmp_path / "old.log")},
+    )
 
     install_daily_pipeline_jobs(scheduler, paths, hour=16, minute=10, skip_update=True, push=True)
 
     assert scheduler.get_job("quality_overlay_daily_pipeline") is None
     assert scheduler.get_job("mainline_chain_daily_pipeline") is None
-    assert scheduler.get_job("strategy_batch_pipeline") is not None
+    assert scheduler.get_job("daily_data_update_pipeline") is None
+    assert scheduler.get_job("strategy_batch_pipeline") is None
+    assert scheduler.get_job("daily_trading_pipeline") is not None
 
 
 def test_load_scheduler_status_reports_registered_daily_job(tmp_path: Path) -> None:
@@ -121,15 +155,42 @@ def test_load_scheduler_status_reports_registered_daily_job(tmp_path: Path) -> N
         scheduler.shutdown()
 
     assert status["enabled"] is True
-    assert status["job_id"] == "strategy_batch_pipeline"
+    assert status["job_id"] == "daily_trading_pipeline"
     assert status["job_store_exists"] is True
     assert status["schedule"] == "mon-fri 16:10 Asia/Shanghai"
     assert "T16:10:00" in str(status["next_run_time"])
     assert "scripts/run_local_scheduler.py" in status["start_command"]
     assert "--push" in status["start_command"]
     assert [item["job_id"] for item in status["jobs"]] == [
-        "daily_data_update_pipeline",
-        "strategy_batch_pipeline",
+        "pre_market_check_pipeline",
+        "daily_trading_pipeline",
+        "research_monitor_pipeline",
+        "live_risk_guard_pipeline",
+        "scheduler_watchdog_pipeline",
     ]
-    assert status["jobs"][0]["schedule"] == "mon-fri 16:10 Asia/Shanghai"
-    assert status["jobs"][1]["schedule"] == "mon-fri 16:20 Asia/Shanghai"
+    assert status["jobs"][0]["schedule"] == "mon-fri 09:20 Asia/Shanghai"
+    assert status["jobs"][1]["schedule"] == "mon-fri 16:10 Asia/Shanghai"
+    assert status["jobs"][2]["schedule"] == "mon-fri 16:25 Asia/Shanghai"
+    assert status["jobs"][3]["schedule"] == "mon-fri 16:35 Asia/Shanghai"
+    assert status["jobs"][4]["schedule"] == "mon-fri 16:45 Asia/Shanghai"
+
+
+def test_build_scheduler_watchdog_command_can_enable_push(tmp_path: Path) -> None:
+    """稳定性巡检任务异常时应具备 Bark 通知能力。"""
+    command = build_scheduler_watchdog_command("python-test", push=True)
+
+    assert command == ["python-test", "scripts/run_scheduler_watchdog.py", "--push"]
+
+
+def test_build_live_risk_commands_can_enable_push(tmp_path: Path) -> None:
+    """盘后风控和开盘前复核都应具备 Bark 通知能力。"""
+    assert build_live_risk_guard_command("python-test", push=True) == [
+        "python-test",
+        "scripts/run_live_risk_guard.py",
+        "--push",
+    ]
+    assert build_pre_market_check_command("python-test", push=True) == [
+        "python-test",
+        "scripts/run_pre_market_check.py",
+        "--push",
+    ]

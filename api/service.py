@@ -9,11 +9,14 @@ from typing import Any
 
 import pandas as pd
 
-from monitoring.mainline_adapter import sync_mainline_chain_monitoring
-from monitoring.mainline_backtest import sync_mainline_chain_backtest_history
 from monitoring.repository import MonitoringRepository
 from runtime.backup import build_backup_manifest
+from runtime.daily_pipeline import run_production_daily_pipeline
+from runtime.data_catalog_runner import refresh_data_catalog
+from runtime.data_quality_gate import run_data_quality_gate
 from runtime.logs import list_log_files, read_log_file
+from runtime.notification_config import resolve_bark_url
+from runtime.opportunity_catalog import register_builtin_opportunity_themes
 from runtime.paths import RuntimePaths, get_runtime_paths
 from runtime.readiness import build_readiness_report
 from runtime.repository import SystemRepository
@@ -32,9 +35,9 @@ class LocalApiService:
         self.system_repository = SystemRepository(self.paths.system_state_path)
         register_builtin_strategies(self.system_repository)
         register_builtin_strategy_instances(self.system_repository)
+        register_builtin_opportunity_themes(self.system_repository)
         self.monitoring_repository = MonitoringRepository(self.paths.monitoring_path)
-        sync_mainline_chain_backtest_history(self.paths, self.monitoring_repository)
-        sync_mainline_chain_monitoring(self.paths, self.monitoring_repository, self.system_repository)
+        self.monitoring_repository.delete_strategy_history("mainline_chain_b")
 
     def health(self) -> dict[str, Any]:
         """返回运行目录和关键数据库是否存在。"""
@@ -62,8 +65,19 @@ class LocalApiService:
                 self.paths,
                 hour=hour,
                 minute=minute,
-                skip_update=bool(payload.get("skip_update", False)),
+                skip_update=False,
                 push=bool(payload.get("push", False)),
+            )
+        )
+
+    def run_daily_pipeline(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        """手动触发每日交易流水线，必须复用调度器同一套原子逻辑。"""
+        data = payload or {}
+        return _json_ready(
+            run_production_daily_pipeline(
+                paths=self.paths,
+                push=bool(data.get("push", False)),
+                source="api",
             )
         )
 
@@ -87,6 +101,10 @@ class LocalApiService:
                 data_health=self.data_health(),
                 scheduler_status=self.scheduler_status(),
                 service_status=self.service_status(),
+                backup_manifest=build_backup_manifest(self.paths),
+                notification_configured=bool(resolve_bark_url()),
+                manual_order_ready=_manual_order_tables_ready(self.paths.system_state_path),
+                broker_auto_trading_enabled=_env_flag("QUANT_ENABLE_BROKER_TRADING"),
             )
         )
 
@@ -126,6 +144,37 @@ class LocalApiService:
         """保存外部策略想法，后续可结构化为策略实例。"""
         return self.system_repository.upsert_strategy_idea(payload)
 
+    def research_notes(self, note_type: str | None = None) -> list[dict[str, Any]]:
+        """返回通用投研记录列表。"""
+        return self.system_repository.list_research_notes(note_type=note_type)
+
+    def research_note_detail(self, note_id: str) -> dict[str, Any] | None:
+        """读取单条投研报告正文。"""
+        try:
+            return self.system_repository.load_research_note(note_id)
+        except KeyError:
+            return None
+
+    def save_research_note(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """保存通用投研报告，正文按 Markdown 落库。"""
+        return self.system_repository.upsert_research_note(payload)
+
+    def opportunity_themes(self) -> list[dict[str, Any]]:
+        """返回产业机会观察池。"""
+        return self.system_repository.list_opportunity_themes()
+
+    def opportunity_rankings(self) -> list[dict[str, Any]]:
+        """返回最近一次产业方向强势排行。"""
+        return self.system_repository.list_opportunity_direction_rankings()
+
+    def save_opportunity_theme(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """保存产业机会观察主题。"""
+        return self.system_repository.upsert_opportunity_theme(payload)
+
+    def save_opportunity_stock(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """保存机会主题候选股票。"""
+        return self.system_repository.upsert_opportunity_stock(payload)
+
     def strategy_templates(self) -> list[dict[str, object]]:
         """返回可实例化策略模板。"""
         return list_strategy_templates()
@@ -141,6 +190,55 @@ class LocalApiService:
     def strategy_instance_state(self, strategy_id: str) -> dict[str, Any]:
         """返回策略实例最近一次 paper NAV 和目标持仓。"""
         return _json_ready(self.system_repository.load_strategy_instance_state(strategy_id))
+
+    def account_snapshot(self, strategy_id: str) -> dict[str, Any] | None:
+        """返回统一账户快照和漂移明细。"""
+        snapshot = self.system_repository.load_account_snapshot(strategy_id)
+        return _json_ready(snapshot) if snapshot else None
+
+    def create_manual_orders_from_account(self, strategy_id: str) -> dict[str, Any]:
+        """根据最新账户快照生成手工调仓单。"""
+        snapshot = self.system_repository.load_account_snapshot(strategy_id)
+        if snapshot is None:
+            raise KeyError(strategy_id)
+        return _json_ready(self.system_repository.create_manual_order_batch(snapshot))
+
+    def manual_order_batch(self, strategy_id: str) -> dict[str, Any] | None:
+        """返回某策略最近一批手工调仓单。"""
+        batch = self.system_repository.load_manual_order_batch(strategy_id)
+        return _json_ready(batch) if batch else None
+
+    def confirm_manual_order_batch(self, batch_id: str) -> dict[str, Any]:
+        """确认一批手工调仓单。"""
+        return _json_ready(self.system_repository.confirm_manual_order_batch(batch_id))
+
+    def fill_manual_order(self, order_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """回填单笔人工成交。"""
+        return _json_ready(
+            self.system_repository.fill_manual_order(
+                order_id,
+                int(payload.get("filled_quantity") or 0),
+                float(payload.get("filled_price") or 0.0),
+            )
+        )
+
+    def reject_manual_order(self, order_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """回填单笔人工拒绝或未成交。"""
+        return _json_ready(self.system_repository.reject_manual_order(order_id, str(payload.get("reason") or "")))
+
+    def transition_strategy_instance(self, strategy_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """按生命周期状态机流转策略实例。"""
+        target_status = str(payload.get("target_status") or "").strip()
+        if not target_status:
+            raise ValueError("target_status is required")
+        enable = payload.get("enable") if "enable" in payload else None
+        return _json_ready(
+            self.system_repository.transition_strategy_instance_status(
+                strategy_id,
+                target_status,
+                enable=bool(enable) if enable is not None else None,
+            )
+        )
 
     def strategies(self) -> list[dict[str, Any]]:
         """返回策略列表。"""
@@ -183,6 +281,15 @@ class LocalApiService:
         """返回因子定义和使用该因子的策略关系。"""
         definition = self.system_repository.load_factor_definition(factor_id)
         return _json_ready(definition) if definition else None
+
+    def factor_contracts(self) -> list[dict[str, Any]]:
+        """返回因子 V2 契约列表。"""
+        return _json_ready(self.system_repository.list_factor_contracts())
+
+    def factor_contract_detail(self, factor_id: str) -> dict[str, Any] | None:
+        """返回单个因子 V2 契约。"""
+        contract = self.system_repository.load_factor_contract(factor_id)
+        return _json_ready(contract) if contract else None
 
     def strategy_drafts(self) -> list[dict[str, Any]]:
         """返回本地策略草案列表。"""
@@ -259,6 +366,33 @@ class LocalApiService:
             },
         }
 
+    def refresh_data_catalog(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        """刷新本地数据资产目录。"""
+        roots = None
+        if payload and payload.get("roots"):
+            roots = [Path(str(item)) for item in payload["roots"]]
+        return _json_ready(refresh_data_catalog(paths=self.paths, roots=roots))
+
+    def data_sources(self) -> list[dict[str, Any]]:
+        """返回已登记的数据源目录。"""
+        return _json_ready(self.system_repository.list_data_sources())
+
+    def data_source_detail(self, dataset_id: str) -> dict[str, Any] | None:
+        """返回单个数据源详情。"""
+        detail = self.system_repository.load_data_source(dataset_id)
+        return _json_ready(detail) if detail else None
+
+    def run_data_quality_gate(self, payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        """手动执行数据质量门禁。"""
+        data = payload or {}
+        return _json_ready(
+            run_data_quality_gate(
+                paths=self.paths,
+                min_trade_date=str(data.get("min_trade_date") or ""),
+                raise_on_fail=False,
+            )
+        )
+
     def runs(self, strategy_id: str | None = None, limit: int = 30) -> list[dict[str, Any]]:
         """返回运行记录。"""
         return self.system_repository.list_runs(strategy_id=strategy_id, limit=limit)
@@ -316,6 +450,30 @@ def _sqlite_max_date(path: Path, table: str, column: str) -> str | None:
     except Exception:
         return None
     return str(value) if value else None
+
+
+def _manual_order_tables_ready(path: Path) -> bool:
+    """检查手工调仓闭环所需 SQLite 表是否已初始化。"""
+    required = {"manual_order_batches", "manual_orders", "manual_order_audit_events"}
+    if not path.exists():
+        return False
+    try:
+        with sqlite3.connect(path) as con:
+            rows = con.execute(
+                """
+                SELECT name FROM sqlite_master
+                WHERE type = 'table'
+                  AND name IN ('manual_order_batches', 'manual_orders', 'manual_order_audit_events')
+                """
+            ).fetchall()
+    except Exception:
+        return False
+    return {str(row[0]) for row in rows} == required
+
+
+def _env_flag(key: str) -> bool:
+    """读取显式开关，只有常见真值才视为开启。"""
+    return os.getenv(key, "").strip().lower() in {"1", "true", "yes", "on"}
 
 
 def _json_ready(value: Any) -> Any:

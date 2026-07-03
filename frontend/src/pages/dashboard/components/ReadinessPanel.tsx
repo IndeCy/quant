@@ -1,17 +1,5 @@
 import type { ReadinessReport } from "../../../entities/readiness/model";
-import { readinessTitle, readinessTone } from "../../../entities/readiness/status";
-
-const checkLabels: Record<string, string> = {
-  tushare_token: "Tushare Token",
-  live_market_data: "行情增量数据",
-  benchmark_data: "基准数据",
-  monitoring_db: "监控库",
-  system_state_db: "系统状态库",
-  scheduler_job: "每日任务",
-  api_service: "API 服务",
-  frontend_service: "前端服务",
-  scheduler_service: "调度器服务"
-};
+import { readinessCheckLabel, readinessTitle, readinessTone } from "../../../entities/readiness/status";
 
 export function ReadinessPanel({ report }: { report: ReadinessReport }) {
   return (
@@ -25,7 +13,7 @@ export function ReadinessPanel({ report }: { report: ReadinessReport }) {
           <div className="step-row" key={check.name}>
             <span className={`step-dot ${check.status === "PASS" ? "success" : "danger"}`} />
             <div>
-              <strong>{checkLabels[check.name] ?? check.name}</strong>
+              <strong>{readinessCheckLabel(check.name)}</strong>
               <p>{check.message}</p>
             </div>
             <em>{check.status}</em>

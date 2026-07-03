@@ -16,6 +16,8 @@ from examples.run_quality_overlay_paper import (
     validate_incremental_quality,
 )
 from pipeline.production_daily import write_run_log
+from runtime.mainline_cache_sync import sync_mainline_cache_from_increment
+from runtime.opportunity_catalog import register_builtin_opportunity_themes
 from runtime.paths import get_runtime_paths
 from runtime.repository import SystemRepository
 
@@ -27,12 +29,23 @@ def main() -> None:
     run_date = datetime.now().strftime("%Y%m%d")
     run_dir = paths.runs_dir / run_date
     repository = SystemRepository(paths.system_state_path)
+    register_builtin_opportunity_themes(repository)
     try:
         updated_dates, warnings = update_incremental(run_date)
         warnings.extend(update_benchmark_incremental(run_date))
         if _has_blocking_update_warning(warnings):
             raise RuntimeError("; ".join(warnings))
         validate_incremental_quality()
+        sync_result = sync_mainline_cache_from_increment(
+            paths,
+            account_id=None,
+            requested_date=datetime.strptime(run_date, "%Y%m%d").date(),
+            cache_path=paths.data_dir / "market_cache.sqlite3",
+            extra_stock_symbols=_opportunity_symbols(repository),
+        )
+        if sync_result.missing_symbols:
+            raise RuntimeError(f"主线链动缓存同步失败，缺失标的: {', '.join(sync_result.missing_symbols[:20])}")
+        warnings.append(f"主线链动缓存已同步: 写入{sync_result.rows_written}行")
         message = _build_success_message(updated_dates, warnings)
         write_run_log(run_dir, "SUCCESS", message)
         repository.record_strategy_run("system_data_update", run_date, "SUCCESS", run_dir, message)
@@ -62,5 +75,13 @@ def _build_success_message(updated_dates: list[str], warnings: list[str]) -> str
     return "，".join(parts)
 
 
+def _opportunity_symbols(repository: SystemRepository) -> list[str]:
+    """读取所有机会观察池股票，确保每日研究排行有行情输入。"""
+    symbols: list[str] = []
+    for theme in repository.list_opportunity_themes():
+        symbols.extend(str(stock["symbol"]) for stock in theme.get("stocks", []))
+    return sorted(set(symbols))
+
+
 if __name__ == "__main__":
-    main()
+    raise SystemExit("请使用 scripts/run_daily_pipeline.py 执行完整原子流水线")

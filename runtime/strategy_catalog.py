@@ -13,13 +13,24 @@ def register_quality_alpha_v1(repository: SystemRepository) -> None:
         ("ocf_to_or", "OCF_TO_OR", "quality", "higher_is_better", "fina_indicator", "经营现金流/营业收入"),
     ]
     for factor_id, name, category, direction, source, description in factors:
-        repository.upsert_factor(
+        repository.upsert_factor_contract(
             factor_id=factor_id,
             name=name,
             category=category,
             direction=direction,
             source=source,
             description=description,
+            version="v1",
+            status="active",
+            frequency="annual",
+            value_type="numeric",
+            as_of_policy="financial_announcement",
+            as_of_field="f_ann_date",
+            effective_date_field="trade_date",
+            input_datasets=["fina_indicator_duckdb"],
+            input_fields=["ts_code", "end_date", "f_ann_date", factor_id],
+            output_fields=["trade_date", "symbol", "factor_value"],
+            validation={"winsorize": True, "zscore": True, "report_period": "1231"},
             config={"as_of_field": "f_ann_date", "report_period": "1231"},
         )
     repository.upsert_strategy(
@@ -45,8 +56,8 @@ def register_quality_alpha_v1(repository: SystemRepository) -> None:
     )
 
 
-def register_mainline_chain_b(repository: SystemRepository) -> None:
-    """登记主线链动 B 策略元数据，不改变既有观察和交易逻辑。"""
+def _register_mainline_chain_factors(repository: SystemRepository) -> None:
+    """登记主线链动可组合因子，供原生策略和历史兼容策略共用。"""
     signal_components = [
         (
             "mainline_chain_gate",
@@ -87,67 +98,64 @@ def register_mainline_chain_b(repository: SystemRepository) -> None:
     ]
     for component in signal_components:
         factor_id, name, category, direction, source, description, config = component
-        repository.upsert_factor(
+        repository.upsert_factor_contract(
             factor_id=factor_id,
             name=name,
             category=category,
             direction=direction,
             source=source,
             description=description,
+            version="v1",
+            status="active",
+            frequency="daily",
+            value_type="numeric",
+            as_of_policy="trade_date",
+            as_of_field="trade_date",
+            effective_date_field="trade_date",
+            input_datasets=["market_cache_sqlite3", "live_market_increment_duckdb"],
+            input_fields=["trade_date", "symbol", "close"],
+            output_fields=["trade_date", "symbol", "factor_value"],
+            validation={"adjust_policy": "qfq"},
             config=config,
         )
+
+
+def register_mainline_chain_factor_v1(repository: SystemRepository) -> None:
+    """登记主线链动原生因子组合策略。"""
+    _register_mainline_chain_factors(repository)
     repository.upsert_strategy(
-        strategy_id="mainline_chain_b",
-        name="主线链动策略",
+        strategy_id="mainline_chain_factor_v1",
+        name="主线链动因子 V1",
         status="shadow_live",
-        strategy_type="industry_chain_momentum",
-        description="产业链强度轮动，选择当前最强产业链并在链内按60/120日动量等权持有Top5。",
+        strategy_type="factor_chain_rotation",
+        description="用产业链强度、市场基线过滤、链内60/120日动量组合构建主线链动观察策略。",
         config={
-            "entrypoint": "examples/post_close_mainline_chain_observer.py",
-            "observer": "backtest.mainline_observer.observe_account",
-            "execution": "backtest.mainline_rebalance_executor.execute_due_rebalance",
-            "strategy_class": "backtest.chain_selection.ChainStockSelectionStrategy",
             "mode": "multi_chain",
             "top_n": 5,
             "rebalance_frequency": 5,
-            "momentum_windows": [60, 120],
             "chain_momentum_window": 60,
-            "chain_gate_symbol": "市场基线",
-            "benchmark": "上证指数",
+            "stock_momentum_windows": [60, 120],
+            "benchmark": "000001.SH",
             "data_cache": "data/market_cache.sqlite3",
-            "paper_account_id": 1,
-            "automation_name": "主线链动策略盘后观察",
-            "adjust_policy": "qfq_for_signal_none_for_valuation",
+            "provider": "tushare",
+            "frequency": "1d",
+            "adjust_policy": "qfq",
+            "execution_model": "M0 ExecutionModel T+1",
         },
     )
     repository.replace_strategy_factors(
-        "mainline_chain_b",
+        "mainline_chain_factor_v1",
         [
-            {
-                "factor_id": "mainline_chain_gate",
-                "weight": 0.10,
-                "transform": "gate_filter",
-            },
-            {
-                "factor_id": "mainline_chain_strength_60d",
-                "weight": 0.40,
-                "transform": "rank_score",
-            },
-            {
-                "factor_id": "mainline_stock_momentum_120d",
-                "weight": 0.25,
-                "transform": "momentum_return",
-            },
-            {
-                "factor_id": "mainline_stock_momentum_60d",
-                "weight": 0.25,
-                "transform": "momentum_return",
-            },
+            {"factor_id": "mainline_chain_gate", "weight": 0.10, "transform": "gate_filter"},
+            {"factor_id": "mainline_chain_strength_60d", "weight": 0.40, "transform": "momentum_return"},
+            {"factor_id": "mainline_stock_momentum_120d", "weight": 0.25, "transform": "momentum_return"},
+            {"factor_id": "mainline_stock_momentum_60d", "weight": 0.25, "transform": "momentum_return"},
         ],
     )
 
 
 def register_builtin_strategies(repository: SystemRepository) -> None:
     """登记当前系统内置策略，供策略目录和前端运行中心统一读取。"""
+    repository.delete_strategy_artifacts("mainline_chain_b")
     register_quality_alpha_v1(repository)
-    register_mainline_chain_b(repository)
+    register_mainline_chain_factor_v1(repository)

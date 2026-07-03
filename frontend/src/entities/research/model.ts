@@ -31,3 +31,87 @@ export interface StrategyIdea {
   created_at?: string;
   modified_at?: string;
 }
+
+export type ResearchNoteType = "stock" | "strategy" | "industry" | "macro" | "idea" | "review";
+
+export interface ResearchNote {
+  note_id: string;
+  title: string;
+  note_type: ResearchNoteType | string;
+  linked_type: string;
+  linked_id: string;
+  summary: string;
+  content: string;
+  tags: string[];
+  source: string;
+  status: string;
+  created_at?: string;
+  modified_at?: string;
+}
+
+export interface OpportunityStock {
+  theme_id: string;
+  symbol: string;
+  name: string;
+  status: string;
+  watch_level: string;
+  chain_role: string;
+  conviction: string;
+  source_type: string;
+  source_detail: string;
+  verification_status: string;
+  first_observed_date: string;
+  thesis: string;
+  disconfirm_condition: string;
+  evidence: Record<string, unknown>;
+  metrics: Record<string, unknown>;
+  last_monitor_date: string;
+  created_at?: string;
+  modified_at?: string;
+}
+
+export interface ResearchMonitorRun {
+  run_id: string;
+  trade_date: string;
+  theme_id: string;
+  status: string;
+  summary: string;
+  metrics: Record<string, unknown>;
+  created_at?: string;
+  modified_at?: string;
+}
+
+export interface OpportunityTheme {
+  theme_id: string;
+  name: string;
+  status: string;
+  stage: string;
+  horizon_years: number;
+  thesis_type: string;
+  thesis: string;
+  upgrade_rule: string;
+  disconfirm_rule: string;
+  linked_note_id: string;
+  tags: string[];
+  stocks: OpportunityStock[];
+  monitor_runs: ResearchMonitorRun[];
+  created_at?: string;
+  modified_at?: string;
+}
+
+export interface OpportunityRanking {
+  trade_date: string;
+  theme_id: string;
+  name: string;
+  status: string;
+  stage: string;
+  strength_score: number;
+  early_signal_score: number;
+  maturity_score: number;
+  crowding_score: number;
+  upgrade_candidate: boolean;
+  summary: string;
+  metrics: Record<string, unknown>;
+  created_at?: string;
+  modified_at?: string;
+}

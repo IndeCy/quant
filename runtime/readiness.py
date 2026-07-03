@@ -10,6 +10,10 @@ def build_readiness_report(
     data_health: dict[str, Any],
     scheduler_status: dict[str, Any],
     service_status: dict[str, Any],
+    backup_manifest: dict[str, Any] | None = None,
+    notification_configured: bool | None = None,
+    manual_order_ready: bool | None = None,
+    broker_auto_trading_enabled: bool | None = None,
 ) -> dict[str, Any]:
     """汇总生产候选系统是否具备每日自动运行条件。"""
     checks = [
@@ -24,6 +28,35 @@ def build_readiness_report(
     checks.append(_check("api_service", service_map.get("api", False), "API 服务运行中", "API 服务未运行"))
     checks.append(_check("frontend_service", service_map.get("frontend", False), "前端服务运行中", "前端服务未运行"))
     checks.append(_check("scheduler_service", service_map.get("scheduler", False), "调度器运行中", "调度器未运行"))
+    if backup_manifest is not None:
+        checks.append(_check_backup_manifest(backup_manifest))
+    if notification_configured is not None:
+        checks.append(
+            _check(
+                "notification_channel",
+                bool(notification_configured),
+                "Bark 通知通道已配置",
+                "Bark 通知通道未配置",
+            )
+        )
+    if manual_order_ready is not None:
+        checks.append(
+            _check(
+                "manual_order_workflow",
+                bool(manual_order_ready),
+                "手工调仓闭环已初始化",
+                "手工调仓闭环未初始化",
+            )
+        )
+    if broker_auto_trading_enabled is not None:
+        checks.append(
+            _check(
+                "broker_permission_boundary",
+                not bool(broker_auto_trading_enabled),
+                "券商自动交易未开启，仍处于人工确认边界内",
+                "券商自动交易开关已开启，当前阶段禁止自动下单",
+            )
+        )
     return {
         "status": "READY" if all(item["status"] == "PASS" for item in checks) else "NOT_READY",
         "checks": checks,
@@ -41,3 +74,16 @@ def _check_data_pair(section_name: str, section: dict[str, Any], first_key: str,
     passed = exists and bool(first) and first == second
     message = f"数据日期一致: {first}" if passed else f"数据缺失或日期不一致: {first or '-'} / {second or '-'}"
     return {"name": section_name, "status": "PASS" if passed else "FAIL", "message": message}
+
+
+def _check_backup_manifest(manifest: dict[str, Any]) -> dict[str, str]:
+    required = {"data", "state", "runs", "reports", "config", "logs"}
+    items = {str(item.get("name")): bool(item.get("exists")) for item in manifest.get("items", [])}
+    missing = sorted(name for name in required if not items.get(name))
+    if not missing:
+        return {"name": "backup_manifest", "status": "PASS", "message": "运行目录备份清单完整"}
+    return {
+        "name": "backup_manifest",
+        "status": "FAIL",
+        "message": f"运行目录备份清单缺失: {', '.join(missing)}",
+    }

@@ -5,6 +5,9 @@ import type { DashboardContext } from "../../app/types";
 import { getFactor, saveFactor } from "../../entities/factor/api";
 import type { FactorDefinition } from "../../entities/factor/model";
 import { factorUsageLabel, factorWeightSum } from "../../entities/factor/usage";
+import { listFactorContracts } from "../../entities/factorContract/api";
+import { asOfLabel, contractStatusLabel } from "../../entities/factorContract/display";
+import type { FactorContract } from "../../entities/factorContract/model";
 import { formatNumber, formatPercent } from "../../shared/lib/formatters";
 import { PageHeader } from "../../shared/ui/PageHeader";
 
@@ -13,11 +16,18 @@ export function FactorsPage() {
   const [factors, setFactors] = useState(data.factors);
   const [selectedFactorId, setSelectedFactorId] = useState(data.factors[0]?.factor_id ?? "");
   const [selectedFactor, setSelectedFactor] = useState<FactorDefinition | null>(null);
+  const [contracts, setContracts] = useState<Record<string, FactorContract>>({});
   const [factorId, setFactorId] = useState("profit_stability");
   const [factorName, setFactorName] = useState("盈利稳定性");
   const [factorDescription, setFactorDescription] = useState("过去三年ROA波动率越低越好，需后续补充因子分数。");
   const [factorMessage, setFactorMessage] = useState("");
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    listFactorContracts()
+      .then((items) => setContracts(Object.fromEntries(items.map((item) => [item.factor_id, item]))))
+      .catch(() => setContracts({}));
+  }, []);
 
   useEffect(() => {
     if (!selectedFactorId) {
@@ -47,6 +57,7 @@ export function FactorsPage() {
     () => selectedFactor ?? factors.find((factor) => factor.factor_id === selectedFactorId) ?? factors[0],
     [factors, selectedFactor, selectedFactorId]
   );
+  const contract = detail ? contracts[detail.factor_id] ?? null : null;
 
   async function handleSaveFactor() {
     const saved = await saveFactor({
@@ -120,6 +131,14 @@ export function FactorsPage() {
                   <strong>{factorUsageLabel(detail)}</strong>
                 </div>
                 <div>
+                  <span>契约状态</span>
+                  <strong>{contractStatusLabel(contract)}</strong>
+                </div>
+                <div>
+                  <span>as-of</span>
+                  <strong>{asOfLabel(contract)}</strong>
+                </div>
+                <div>
                   <span>启用权重合计</span>
                   <strong>{formatNumber(factorWeightSum(detail), 3)}</strong>
                 </div>
@@ -130,6 +149,37 @@ export function FactorsPage() {
                   </div>
                 ))}
               </div>
+              <h2>因子契约</h2>
+              {contract ? (
+                <div className="config-grid">
+                  <div>
+                    <span>frequency</span>
+                    <strong>{contract.frequency || "-"}</strong>
+                  </div>
+                  <div>
+                    <span>value_type</span>
+                    <strong>{contract.value_type || "-"}</strong>
+                  </div>
+                  <div>
+                    <span>input_datasets</span>
+                    <strong>{contract.input_datasets.join(", ") || "-"}</strong>
+                  </div>
+                  <div>
+                    <span>input_fields</span>
+                    <strong>{contract.input_fields.join(", ") || "-"}</strong>
+                  </div>
+                  <div>
+                    <span>output_fields</span>
+                    <strong>{contract.output_fields.join(", ") || "-"}</strong>
+                  </div>
+                  <div>
+                    <span>validation</span>
+                    <strong>{JSON.stringify(contract.validation)}</strong>
+                  </div>
+                </div>
+              ) : (
+                <p className="muted-text">无契约，只能作为草案或研究素材</p>
+              )}
               <h2>策略使用关系</h2>
               <div className="mini-table">
                 {(detail.strategies ?? []).map((strategy) => (

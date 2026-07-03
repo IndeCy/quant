@@ -45,6 +45,11 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.post("/api/pipeline/daily-run")
+    def run_daily_pipeline(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        """手动补跑每日交易流水线，和调度器共用同一入口。"""
+        return api_service.run_daily_pipeline(payload or {})
+
     @app.get("/api/backup/manifest")
     def backup_manifest() -> dict[str, Any]:
         """返回运行目录备份和迁移清单。"""
@@ -104,6 +109,53 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.get("/api/research/notes")
+    def research_notes(note_type: str | None = None) -> list[dict[str, Any]]:
+        """返回通用投研记录列表。"""
+        return api_service.research_notes(note_type=note_type)
+
+    @app.get("/api/research/notes/{note_id}")
+    def research_note_detail(note_id: str) -> dict[str, Any]:
+        """返回单条投研记录详情。"""
+        detail = api_service.research_note_detail(note_id)
+        if detail is None:
+            raise HTTPException(status_code=404, detail="research note not found")
+        return detail
+
+    @app.post("/api/research/notes")
+    def save_research_note(payload: dict[str, Any]) -> dict[str, Any]:
+        """保存通用投研记录。"""
+        try:
+            return api_service.save_research_note(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/research/opportunities")
+    def opportunity_themes() -> list[dict[str, Any]]:
+        """返回产业机会观察池。"""
+        return api_service.opportunity_themes()
+
+    @app.get("/api/research/opportunity-rankings")
+    def opportunity_rankings() -> list[dict[str, Any]]:
+        """返回最近一次产业方向强势排行。"""
+        return api_service.opportunity_rankings()
+
+    @app.post("/api/research/opportunities")
+    def save_opportunity_theme(payload: dict[str, Any]) -> dict[str, Any]:
+        """保存产业机会观察主题。"""
+        try:
+            return api_service.save_opportunity_theme(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/research/opportunity-stocks")
+    def save_opportunity_stock(payload: dict[str, Any]) -> dict[str, Any]:
+        """保存机会主题候选股。"""
+        try:
+            return api_service.save_opportunity_stock(payload)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.get("/api/strategy-templates")
     def strategy_templates() -> list[dict[str, Any]]:
         """返回可实例化策略模板。"""
@@ -126,6 +178,62 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
     def strategy_instance_state(strategy_id: str) -> dict[str, Any]:
         """返回策略实例最近一次 paper 状态。"""
         return api_service.strategy_instance_state(strategy_id)
+
+    @app.get("/api/accounts/{strategy_id}")
+    def account_snapshot(strategy_id: str) -> dict[str, Any]:
+        """返回统一账户快照和漂移明细。"""
+        snapshot = api_service.account_snapshot(strategy_id)
+        if snapshot is None:
+            raise HTTPException(status_code=404, detail="account snapshot not found")
+        return snapshot
+
+    @app.post("/api/manual-orders/from-account/{strategy_id}")
+    def create_manual_orders_from_account(strategy_id: str) -> dict[str, Any]:
+        """从账户快照生成手工调仓单。"""
+        try:
+            return api_service.create_manual_orders_from_account(strategy_id)
+        except KeyError as exc:
+            raise HTTPException(status_code=404, detail="account snapshot not found") from exc
+
+    @app.get("/api/manual-orders/{strategy_id}")
+    def manual_order_batch(strategy_id: str) -> dict[str, Any]:
+        """读取某策略最近一批手工调仓单。"""
+        batch = api_service.manual_order_batch(strategy_id)
+        if batch is None:
+            raise HTTPException(status_code=404, detail="manual order batch not found")
+        return batch
+
+    @app.post("/api/manual-orders/batches/{batch_id}/confirm")
+    def confirm_manual_order_batch(batch_id: str) -> dict[str, Any]:
+        """确认手工调仓批次。"""
+        try:
+            return api_service.confirm_manual_order_batch(batch_id)
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/manual-orders/orders/{order_id}/fill")
+    def fill_manual_order(order_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """回填手工成交。"""
+        try:
+            return api_service.fill_manual_order(order_id, payload)
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/manual-orders/orders/{order_id}/reject")
+    def reject_manual_order(order_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """回填手工拒绝或未成交。"""
+        try:
+            return api_service.reject_manual_order(order_id, payload)
+        except (KeyError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.post("/api/strategy-instances/{strategy_id}/transition")
+    def transition_strategy_instance(strategy_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """按生命周期状态机流转策略实例。"""
+        try:
+            return api_service.transition_strategy_instance(strategy_id, payload)
+        except (ValueError, RuntimeError, KeyError) as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     @app.get("/api/strategies")
     def strategies() -> list[dict[str, Any]]:
@@ -161,6 +269,19 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="factor not found")
         return detail
 
+    @app.get("/api/factor-contracts")
+    def factor_contracts() -> list[dict[str, Any]]:
+        """返回因子 V2 契约列表。"""
+        return api_service.factor_contracts()
+
+    @app.get("/api/factor-contracts/{factor_id}")
+    def factor_contract_detail(factor_id: str) -> dict[str, Any]:
+        """返回单个因子 V2 契约。"""
+        detail = api_service.factor_contract_detail(factor_id)
+        if detail is None:
+            raise HTTPException(status_code=404, detail="factor contract not found")
+        return detail
+
     @app.get("/api/strategy-drafts")
     def strategy_drafts() -> list[dict[str, Any]]:
         """返回本地策略草案列表。"""
@@ -186,6 +307,29 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
     def data_health() -> dict[str, Any]:
         """返回本地数据健康状态。"""
         return api_service.data_health()
+
+    @app.post("/api/data/catalog/refresh")
+    def refresh_data_catalog(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        """刷新本地数据资产目录。"""
+        return api_service.refresh_data_catalog(payload or {})
+
+    @app.get("/api/data/sources")
+    def data_sources() -> list[dict[str, Any]]:
+        """返回已登记的数据源目录。"""
+        return api_service.data_sources()
+
+    @app.get("/api/data/sources/{dataset_id}")
+    def data_source_detail(dataset_id: str) -> dict[str, Any]:
+        """返回单个数据源表结构。"""
+        detail = api_service.data_source_detail(dataset_id)
+        if detail is None:
+            raise HTTPException(status_code=404, detail="data source not found")
+        return detail
+
+    @app.post("/api/data/quality-gate")
+    def data_quality_gate(payload: dict[str, Any] | None = None) -> dict[str, Any]:
+        """手动执行数据质量门禁。"""
+        return api_service.run_data_quality_gate(payload or {})
 
     @app.get("/api/reports")
     def reports(strategy_id: str | None = None) -> list[dict[str, Any]]:

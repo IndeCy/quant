@@ -7,6 +7,7 @@ from runtime.repository import SystemRepository
 
 def register_builtin_strategy_instances(repository: SystemRepository) -> None:
     """把当前固定策略兼容登记为可运行策略实例。"""
+    repository.delete_strategy_artifacts("mainline_chain_b")
     repository.upsert_strategy_instance(
         {
             "strategy_id": "quality_overlay",
@@ -29,22 +30,35 @@ def register_builtin_strategy_instances(repository: SystemRepository) -> None:
     )
     repository.upsert_strategy_instance(
         {
-            "strategy_id": "mainline_chain_b",
-            "name": "主线链动策略",
-            "template_id": "industry_chain_momentum",
+            "strategy_id": "mainline_chain_factor_v1",
+            "name": "主线链动因子 V1",
+            "template_id": "factor_chain_rotation",
             "status": "shadow_live",
             "enabled": True,
             "universe": "industry_chain_pool",
-            "filters": ["market_gate"],
+            "filters": ["market_gate", "local_standard_cache", "qfq"],
             "factors": [
-                {"factor_id": "mainline_chain_strength_60d", "weight": 0.4, "transform": "rank_score"},
+                {"factor_id": "mainline_chain_strength_60d", "weight": 0.4, "transform": "momentum_return"},
                 {"factor_id": "mainline_stock_momentum_120d", "weight": 0.25, "transform": "momentum_return"},
                 {"factor_id": "mainline_stock_momentum_60d", "weight": 0.25, "transform": "momentum_return"},
                 {"factor_id": "mainline_chain_gate", "weight": 0.1, "transform": "gate_filter"},
             ],
-            "construction": {"top_n": 5, "weighting": "equal_weight", "rebalance_frequency": 5},
+            "construction": {
+                "mode": "multi_chain",
+                "top_n": 5,
+                "weighting": "equal_weight",
+                "rebalance_frequency": 5,
+                "chain_momentum_window": 60,
+            },
             "risk_overlay": "market_gate",
             "benchmark": "000001.SH",
-            "config": {"adapter": "mainline_chain_compat"},
+            "config": {
+                "data_cache": "data/market_cache.sqlite3",
+                "provider": "tushare",
+                "frequency": "1d",
+                "adjust_policy": "qfq",
+                "initial_capital": 1_000_000.0,
+                "execution_slippage_bps": 10.0,
+            },
         }
     )

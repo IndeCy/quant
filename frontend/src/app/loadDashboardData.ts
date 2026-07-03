@@ -4,7 +4,14 @@ import { listLogs } from "../entities/log/api";
 import { getMarketSeries } from "../entities/market/api";
 import { getReadinessReport } from "../entities/readiness/api";
 import { listReports } from "../entities/report/api";
-import { getResearchTodos, listFactorIdeas, listStrategyIdeas } from "../entities/research/api";
+import {
+  getResearchTodos,
+  listFactorIdeas,
+  listOpportunityRankings,
+  listOpportunityThemes,
+  listResearchNotes,
+  listStrategyIdeas
+} from "../entities/research/api";
 import { listRuns } from "../entities/run/api";
 import { getSchedulerStatus } from "../entities/scheduler/api";
 import { getServiceManifest, getServiceStatus } from "../entities/service/api";
@@ -32,6 +39,9 @@ export async function loadDashboardData() {
     logs,
     reports,
     researchTodos,
+    researchNotes,
+    opportunityThemes,
+    opportunityRankings,
     factorIdeas,
     strategyIdeas,
     runs,
@@ -49,6 +59,9 @@ export async function loadDashboardData() {
     listLogs(),
     listReports(),
     getResearchTodos(),
+    listResearchNotes(),
+    listOpportunityThemes(),
+    listOpportunityRankings(),
     listFactorIdeas(),
     listStrategyIdeas(),
     listRuns(),
@@ -71,6 +84,9 @@ export async function loadDashboardData() {
     logs,
     reports,
     researchTodos,
+    researchNotes,
+    opportunityThemes,
+    opportunityRankings,
     factorIdeas,
     strategyIdeas,
     runs,

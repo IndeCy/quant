@@ -1,5 +1,12 @@
 import { getJson, postJson } from "../../shared/api/client";
-import type { StrategyDefinition, StrategyInstance, StrategyInstanceState, StrategyMetric, StrategyTemplate } from "./model";
+import type {
+  StrategyDefinition,
+  StrategyInstance,
+  StrategyInstanceState,
+  StrategyMetric,
+  StrategyTemplate,
+  StrategyTransitionPayload
+} from "./model";
 
 export function listStrategies(): Promise<StrategyDefinition[]> {
   return getJson<StrategyDefinition[]>("/api/strategies");
@@ -28,4 +35,8 @@ export function saveStrategyInstance(payload: StrategyInstance): Promise<Strateg
 
 export function getStrategyInstanceState(strategyId: string): Promise<StrategyInstanceState> {
   return getJson<StrategyInstanceState>(`/api/strategy-instances/${strategyId}/state`);
+}
+
+export function transitionStrategyInstance(strategyId: string, payload: StrategyTransitionPayload): Promise<StrategyInstance> {
+  return postJson<StrategyInstance>(`/api/strategy-instances/${strategyId}/transition`, payload);
 }

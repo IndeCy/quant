@@ -131,6 +131,11 @@ class MonitoringRepository:
                 params=[strategy_id],
             )
 
+    def delete_strategy_history(self, strategy_id: str) -> None:
+        """删除废弃策略的监控曲线，避免看板继续展示旧口径。"""
+        with self._connect() as con:
+            con.execute("DELETE FROM strategy_nav_daily WHERE strategy_id = ?", [strategy_id])
+
     def load_market_history(self, benchmark_id: str) -> pd.DataFrame:
         """读取某基准完整大盘观测历史。"""
         with self._connect() as con:

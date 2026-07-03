@@ -16,19 +16,14 @@ import pandas as pd
 from backtest.cache import MarketDataCache
 from backtest.mainline_observer import WARMUP_DAYS
 from backtest.paper_trading import PaperTradingStore
-from examples.compare_chain_stock_selection import (
-    ADJUST as STOCK_ADJUST,
-    FREQUENCY as STOCK_FREQUENCY,
-    TENCENT_PROVIDER as STOCK_PROVIDER,
-    build_default_chain_definitions,
-)
-from examples.shanghai_index_ma_backtest import (
-    ADJUST as INDEX_ADJUST,
-    FREQUENCY as INDEX_FREQUENCY,
-    SYMBOL as BENCHMARK_SYMBOL,
-    TENCENT_PROVIDER as INDEX_PROVIDER,
-)
+from examples.compare_chain_stock_selection import ADJUST as STOCK_ADJUST, FREQUENCY as STOCK_FREQUENCY, build_default_chain_definitions
+from examples.shanghai_index_ma_backtest import ADJUST as INDEX_ADJUST, FREQUENCY as INDEX_FREQUENCY, SYMBOL as BENCHMARK_SYMBOL
 from runtime.paths import RuntimePaths
+
+TUSHARE_PROVIDER = "tushare"
+STOCK_PROVIDER = TUSHARE_PROVIDER
+INDEX_PROVIDER = TUSHARE_PROVIDER
+DEFAULT_SYNC_START_DATE = date(2021, 1, 1)
 
 
 @dataclass(frozen=True)
@@ -45,9 +40,10 @@ class MainlineCacheSyncResult:
 
 def sync_mainline_cache_from_increment(
     paths: RuntimePaths,
-    account_id: int,
+    account_id: int | None,
     requested_date: date,
     cache_path: Path,
+    extra_stock_symbols: Iterable[str] = (),
 ) -> MainlineCacheSyncResult:
     """把 DuckDB 增量行情同步到主线链动使用的 SQLite 行情缓存。
 
@@ -56,16 +52,11 @@ def sync_mainline_cache_from_increment(
     """
     chains = build_default_chain_definitions()
     fund_symbols = tuple(sorted({chain.proxy_symbol for chain in chains}))
-    store = PaperTradingStore(paths.paper_trading_path)
-    try:
-        account = store.get_account(account_id)
-        position_symbols = {str(item["symbol"]) for item in store.list_positions(account_id)}
-    finally:
-        store.close()
+    start_date, position_symbols = _load_account_context(paths, account_id)
 
     chain_stock_symbols = {stock.symbol for chain in chains for stock in chain.stocks}
-    stock_symbols = tuple(sorted(position_symbols | chain_stock_symbols))
-    start_date = _parse_date(account["start_date"]) - timedelta(days=WARMUP_DAYS)
+    stock_symbols = tuple(sorted(position_symbols | chain_stock_symbols | {str(symbol) for symbol in extra_stock_symbols}))
+    start_date = start_date - timedelta(days=WARMUP_DAYS)
 
     cache = MarketDataCache(cache_path)
     missing: list[str] = []
@@ -106,6 +97,21 @@ def sync_mainline_cache_from_increment(
         rows_written=rows_written,
         missing_symbols=tuple(sorted(set(missing))),
     )
+
+
+def _load_account_context(paths: RuntimePaths, account_id: int | None) -> tuple[date, set[str]]:
+    """读取旧模拟盘上下文；没有账户时使用固定起点，避免同步依赖手工账户。"""
+    if account_id is None:
+        return DEFAULT_SYNC_START_DATE, set()
+    store = PaperTradingStore(paths.paper_trading_path)
+    try:
+        account = store.get_account(account_id)
+        positions = {str(item["symbol"]) for item in store.list_positions(account_id)}
+        return _parse_date(account["start_date"]), positions
+    except Exception:
+        return DEFAULT_SYNC_START_DATE, set()
+    finally:
+        store.close()
 
 
 def mainline_proxy_fund_symbols() -> tuple[str, ...]:
