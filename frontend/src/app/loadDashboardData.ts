@@ -2,6 +2,7 @@ import { getBackupManifest } from "../entities/backup/api";
 import { listFactors } from "../entities/factor/api";
 import { listLogs } from "../entities/log/api";
 import { getMarketSeries } from "../entities/market/api";
+import { getOperationsObservation } from "../entities/operations/api";
 import { getReadinessReport } from "../entities/readiness/api";
 import { listReports } from "../entities/report/api";
 import {
@@ -37,6 +38,7 @@ export async function loadDashboardData() {
     backupManifest,
     factors,
     logs,
+    operationsObservation,
     reports,
     researchTodos,
     researchNotes,
@@ -57,6 +59,7 @@ export async function loadDashboardData() {
     getBackupManifest(),
     listFactors(),
     listLogs(),
+    getOperationsObservation(),
     listReports(),
     getResearchTodos(),
     listResearchNotes(),
@@ -82,6 +85,7 @@ export async function loadDashboardData() {
     strategy,
     factors,
     logs,
+    operationsObservation,
     reports,
     researchTodos,
     researchNotes,

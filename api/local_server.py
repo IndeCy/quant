@@ -65,6 +65,11 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
         """返回本地常驻服务巡检状态。"""
         return api_service.service_status()
 
+    @app.get("/api/operations/observation")
+    def operations_observation() -> dict[str, Any]:
+        """返回长期运行观察摘要。"""
+        return api_service.operations_observation()
+
     @app.get("/api/logs")
     def logs() -> list[dict[str, Any]]:
         """返回运行日志索引。"""

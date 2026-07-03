@@ -335,6 +335,55 @@
   word-break: break-all;
 }
 
+.observation-summary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.observation-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.observation-block {
+  border: 1px solid #e5edf6;
+  border-radius: 8px;
+  background: #fbfdff;
+  padding: 12px;
+  min-width: 0;
+}
+
+.observation-block h3 {
+  margin: 0 0 10px;
+  color: #172033;
+  font-size: 14px;
+}
+
+.observation-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  padding: 8px 0;
+  border-top: 1px solid #eef2f7;
+}
+
+.observation-row span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 800;
+  word-break: break-word;
+}
+
+.observation-row em {
+  font-style: normal;
+  white-space: nowrap;
+}
+
 .scheduler-form {
   display: grid;
   grid-template-columns: 92px 92px minmax(120px, 1fr) minmax(120px, 1fr) 112px;
@@ -379,6 +428,10 @@
 
   .research-grid,
   .service-list {
+    grid-template-columns: 1fr;
+  }
+
+  .observation-grid {
     grid-template-columns: 1fr;
   }
 

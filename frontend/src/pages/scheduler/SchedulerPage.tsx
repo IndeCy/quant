@@ -1,6 +1,7 @@
 import { useOutletContext } from "react-router-dom";
 
 import type { DashboardContext } from "../../app/types";
+import { observationStatusTone } from "../../entities/operations/status";
 import { schedulerNextRunLabel, schedulerStateLabel } from "../../entities/scheduler/status";
 import { formatCommand } from "../../entities/service/format";
 import { PageHeader } from "../../shared/ui/PageHeader";
@@ -8,6 +9,12 @@ import { PageHeader } from "../../shared/ui/PageHeader";
 export function SchedulerPage() {
   const data = useOutletContext<DashboardContext>();
   const scheduler = data.schedulerStatus;
+  const observation = data.operationsObservation;
+  const observationSections = [
+    ["日报产物", observation.run_artifacts],
+    ["调度证据", observation.scheduler],
+    ["报告产物", observation.held_reports]
+  ] as const;
   return (
     <>
       <PageHeader title="调度" description="查看本地 APScheduler 每日任务、执行命令和下一次运行时间。" />
@@ -50,6 +57,53 @@ export function SchedulerPage() {
         <div className="path-block">
           <span>调度日志</span>
           <code>{scheduler.log_path}</code>
+        </div>
+      </section>
+      <section className="panel detail-panel">
+        <div className="detail-heading">
+          <div>
+            <h2>运行观察</h2>
+            <p>最新完整日报和最新运行活动分开统计，盘前检查不会被误判为盘后日报缺失。</p>
+          </div>
+          <span className={`status ${observation.ready_for_daily_review ? "success" : "warning"}`}>
+            {observation.ready_for_daily_review ? "可观察" : "需检查"}
+          </span>
+        </div>
+        <div className="config-grid">
+          <div>
+            <span>最新完整日报</span>
+            <strong>{observation.latest_run_date || "暂无"}</strong>
+          </div>
+          <div>
+            <span>最新活动</span>
+            <strong>{observation.latest_activity_date || "暂无"}</strong>
+          </div>
+          <div>
+            <span>活动类型</span>
+            <strong>{observation.latest_activity_type || "unknown"}</strong>
+          </div>
+          <div>
+            <span>Bark</span>
+            <strong>{observation.notification.details}</strong>
+          </div>
+        </div>
+        <div className="observation-summary">
+          <span className="status success">PASS {observation.summary.pass}</span>
+          <span className="status warning">WARN {observation.summary.warn}</span>
+          <span className="status danger">FAIL {observation.summary.fail}</span>
+        </div>
+        <div className="observation-grid">
+          {observationSections.map(([title, items]) => (
+            <div className="observation-block" key={title}>
+              <h3>{title}</h3>
+              {Object.entries(items).map(([name, status]) => (
+                <div className="observation-row" key={name}>
+                  <span>{name}</span>
+                  <em className={`status ${observationStatusTone(status)}`}>{status}</em>
+                </div>
+              ))}
+            </div>
+          ))}
         </div>
       </section>
       <section className="panel table-panel">

@@ -2,11 +2,11 @@
 
 ## Active Milestone
 
-Enterprise Quant Platform / Milestone E15：运行体验与告警闭环
+Enterprise Quant Platform / Milestone E16：通知决策面与异常闭环
 
 ## Active Phase
 
-Phase E15.1：Operations UX and Alert Loop
+Phase E16.1：Operations Alert Decision Surface
 
 ## Current Status
 
@@ -84,15 +84,19 @@ pending
 - 更新 `runtime/operations_observation.py`，区分 `latest_activity_date` 与 `latest_run_date`。
 - 当前真实摘要：`latest_activity_date=20260703`、`latest_activity_type=pre_market_only`、`latest_run_date=20260702`，PASS 13、WARN 0、FAIL 0。
 - 后端全量测试通过：`441 passed`。
+- Phase E15.1：Operations UX and Alert Loop。
+- 新增 `/api/operations/observation`，将长期运行观察摘要接入本地 API。
+- 调度页新增“运行观察”面板，展示最新完整日报、最新活动、Bark 状态、PASS/WARN/FAIL 和日报/调度/报告产物状态。
+- 后端全量测试通过：`442 passed`；前端全量测试通过：`25 files / 49 tests`；`npm run build:pre` 通过，本地服务已重启。
 
 ## Next Action
 
-进入 Phase E15.1：Operations UX and Alert Loop。继续把运行观察摘要接入更直接的前端/通知视角，减少每天人工翻文件成本。
+进入 Phase E16.1：Operations Alert Decision Surface。继续把异常通知、操作建议和“今天是否需要人工干预”的决策面收敛到统一入口。
 
 ## Resume Prompt
 
 ```text
-继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E15.1：Operations UX and Alert Loop。
+继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E16.1：Operations Alert Decision Surface。
 ```
 
 ## Verification Commands
@@ -118,6 +122,7 @@ test -f docs/development_workflow.md
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_safe_commit_review.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_post_baseline_audit.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_observation.py -q
+/Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_observation_api.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_git_baseline_report.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_safe_commit_review.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/run_post_baseline_audit.py --output-dir docs/release

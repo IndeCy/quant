@@ -161,5 +161,13 @@
 ### Phase E15.1：Operations UX and Alert Loop
 
 - 优先级：P4
-- 状态：pending
+- 状态：done
 - 目标：把运行观察摘要接入更直接的前端/通知视角，降低每天人工翻文件成本。
+
+## Milestone E16：通知决策面与异常闭环
+
+### Phase E16.1：Operations Alert Decision Surface
+
+- 优先级：P4
+- 状态：pending
+- 目标：把异常通知、操作建议和“今天是否需要人工干预”的判断沉淀成统一可追踪入口。
