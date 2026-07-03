@@ -384,6 +384,39 @@
   white-space: nowrap;
 }
 
+.decision-action-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.decision-action-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.9fr) 92px minmax(180px, 1.2fr) minmax(180px, 1.2fr);
+  gap: 10px;
+  align-items: center;
+  border-top: 1px solid #eef2f7;
+  padding: 10px 0;
+}
+
+.decision-action-row strong,
+.decision-action-row small {
+  display: block;
+}
+
+.decision-action-row small,
+.decision-action-row p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.decision-action-row em {
+  width: fit-content;
+  font-style: normal;
+}
+
 .scheduler-form {
   display: grid;
   grid-template-columns: 92px 92px minmax(120px, 1fr) minmax(120px, 1fr) 112px;
@@ -432,6 +465,10 @@
   }
 
   .observation-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .decision-action-row {
     grid-template-columns: 1fr;
   }
 

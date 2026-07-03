@@ -16,6 +16,7 @@ from runtime.data_catalog_runner import refresh_data_catalog
 from runtime.data_quality_gate import run_data_quality_gate
 from runtime.logs import list_log_files, read_log_file
 from runtime.notification_config import resolve_bark_url
+from runtime.operations_decision import build_operations_decision
 from runtime.operations_observation import build_operations_observation
 from runtime.opportunity_catalog import register_builtin_opportunity_themes
 from runtime.paths import RuntimePaths, get_runtime_paths
@@ -97,6 +98,10 @@ class LocalApiService:
     def operations_observation(self) -> dict[str, Any]:
         """返回长期运行观察摘要，不触发任何任务。"""
         return _json_ready(build_operations_observation(self.paths.root))
+
+    def operations_decision(self) -> dict[str, Any]:
+        """返回今天是否需要人工处理的运行决策。"""
+        return _json_ready(build_operations_decision(self.paths.root, self.readiness()))
 
     def readiness(self) -> dict[str, Any]:
         """返回生产候选系统运行就绪度。"""

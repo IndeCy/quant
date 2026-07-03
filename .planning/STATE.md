@@ -2,11 +2,11 @@
 
 ## Active Milestone
 
-Enterprise Quant Platform / Milestone E16：通知决策面与异常闭环
+Enterprise Quant Platform / Milestone E17：异常确认与处置回溯
 
 ## Active Phase
 
-Phase E16.1：Operations Alert Decision Surface
+Phase E17.1：Operations Acknowledgement Log
 
 ## Current Status
 
@@ -88,15 +88,20 @@ pending
 - 新增 `/api/operations/observation`，将长期运行观察摘要接入本地 API。
 - 调度页新增“运行观察”面板，展示最新完整日报、最新活动、Bark 状态、PASS/WARN/FAIL 和日报/调度/报告产物状态。
 - 后端全量测试通过：`442 passed`；前端全量测试通过：`25 files / 49 tests`；`npm run build:pre` 通过，本地服务已重启。
+- Phase E16.1：Operations Alert Decision Surface。
+- 新增 `runtime/operations_decision.py`，聚合运行观察和就绪度审计，输出 `NO_ACTION/ACTION_REQUIRED`、严重级别、下一步建议和人工处理 action。
+- 新增 `/api/operations/decision`，调度页新增“今日操作判断”面板，第一屏展示是否需要人工介入。
+- 当前真实接口返回：`decision=NO_ACTION`、`severity=NORMAL`、`manual_intervention_required=false`、`latest_run_date=20260702`。
+- 后端全量测试通过：`445 passed`；前端全量测试通过：`26 files / 50 tests`；`npm run build:pre` 通过，本地服务已重启。
 
 ## Next Action
 
-进入 Phase E16.1：Operations Alert Decision Surface。继续把异常通知、操作建议和“今天是否需要人工干预”的决策面收敛到统一入口。
+进入 Phase E17.1：Operations Acknowledgement Log。继续把人工确认、异常处理记录和处置结果做成可回溯闭环。
 
 ## Resume Prompt
 
 ```text
-继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E16.1：Operations Alert Decision Surface。
+继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E17.1：Operations Acknowledgement Log。
 ```
 
 ## Verification Commands
@@ -123,6 +128,7 @@ test -f docs/development_workflow.md
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_post_baseline_audit.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_observation.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_observation_api.py -q
+/Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_decision.py tests/test_operations_decision_api.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_git_baseline_report.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_safe_commit_review.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/run_post_baseline_audit.py --output-dir docs/release

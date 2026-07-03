@@ -25,7 +25,8 @@
 | E13-001 | E13.1 | P4 | done | Codex | 下一轮运维迭代 | `pytest tests/test_operations_observation.py -q` |
 | E14-001 | E14.1 | P4 | done | Codex | 日报 WARN 收敛 | `pytest tests/test_operations_observation.py -q` |
 | E15-001 | E15.1 | P4 | done | Codex | 运行体验与告警闭环 | `/api/operations/observation` 与调度页运行观察面板 |
-| E16-001 | E16.1 | P4 | pending | Codex | 通知决策面与异常闭环 | 异常通知和人工干预建议统一可追踪 |
+| E16-001 | E16.1 | P4 | done | Codex | 通知决策面与异常闭环 | `/api/operations/decision` 与调度页今日操作判断 |
+| E17-001 | E17.1 | P4 | pending | Codex | 异常确认与处置回溯 | 人工确认、异常处理动作和结果可回溯 |
 
 ## 状态规则
 

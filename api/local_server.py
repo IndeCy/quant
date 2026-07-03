@@ -70,6 +70,11 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
         """返回长期运行观察摘要。"""
         return api_service.operations_observation()
 
+    @app.get("/api/operations/decision")
+    def operations_decision() -> dict[str, Any]:
+        """返回今天是否需要人工处理的运行决策。"""
+        return api_service.operations_decision()
+
     @app.get("/api/logs")
     def logs() -> list[dict[str, Any]]:
         """返回运行日志索引。"""

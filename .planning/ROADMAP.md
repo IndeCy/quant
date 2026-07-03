@@ -169,5 +169,13 @@
 ### Phase E16.1：Operations Alert Decision Surface
 
 - 优先级：P4
-- 状态：pending
+- 状态：done
 - 目标：把异常通知、操作建议和“今天是否需要人工干预”的判断沉淀成统一可追踪入口。
+
+## Milestone E17：异常确认与处置回溯
+
+### Phase E17.1：Operations Acknowledgement Log
+
+- 优先级：P4
+- 状态：pending
+- 目标：记录人工确认、异常处理动作和处置结果，让 Shadow Live 运维闭环可追溯。
