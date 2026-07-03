@@ -38,6 +38,7 @@ from monitoring.metrics import build_market_monitor_frame, build_strategy_monito
 from monitoring.repository import MonitoringRepository
 from pipeline.production_daily import build_monthly_review, is_month_end_trade_date, write_daily_artifacts, write_run_log
 from runtime.mainline_cache_sync import mainline_proxy_fund_symbols
+from runtime.config import get_config_value
 from runtime.notification_config import resolve_bark_url
 from runtime.paths import get_runtime_paths
 from runtime.repository import SystemRepository
@@ -61,7 +62,7 @@ REDUCED_EXPOSURE = 0.30
 def update_incremental(end_date: str) -> tuple[list[str], list[str]]:
     """补齐日线增量，接口受限时保留最后完整缓存并告警。"""
     warnings: list[str] = []
-    token = os.getenv("TUSHARE_TOKEN", "")
+    token = get_config_value("TUSHARE_TOKEN")
     if not token:
         return [], ["未检测到TUSHARE_TOKEN，本次未更新行情"]
     import duckdb
@@ -80,7 +81,7 @@ def update_incremental(end_date: str) -> tuple[list[str], list[str]]:
 
 def update_benchmark_incremental(end_date: str) -> list[str]:
     """补齐510300、主线代理ETF和上证指数基准缓存。"""
-    token = os.getenv("TUSHARE_TOKEN", "")
+    token = get_config_value("TUSHARE_TOKEN")
     if not token:
         return ["未检测到TUSHARE_TOKEN，本次未更新ETF/指数基准"]
     store = BenchmarkIncrementalStore(BENCHMARK_INCREMENT_PATH)

@@ -31,6 +31,7 @@ DEFAULT_LIVE_RISK_DELAY_MINUTES = 25
 DEFAULT_WATCHDOG_DELAY_MINUTES = 35
 DEFAULT_PRE_MARKET_HOUR = 9
 DEFAULT_PRE_MARKET_MINUTE = 20
+DEFAULT_MISFIRE_GRACE_SECONDS = 15 * 60
 
 
 def project_root() -> Path:
@@ -124,6 +125,7 @@ def install_daily_pipeline_job(
         minute=minute,
         id=TRADING_PIPELINE_JOB_ID,
         replace_existing=True,
+        misfire_grace_time=DEFAULT_MISFIRE_GRACE_SECONDS,
         kwargs={
             "command": command,
             "cwd": str(project_root()),
@@ -149,6 +151,7 @@ def install_daily_data_update_job(
         minute=minute,
         id=DATA_UPDATE_JOB_ID,
         replace_existing=True,
+        misfire_grace_time=DEFAULT_MISFIRE_GRACE_SECONDS,
         kwargs={
             "command": command,
             "cwd": str(project_root()),
@@ -175,6 +178,7 @@ def install_strategy_batch_job(
         minute=minute,
         id=STRATEGY_BATCH_JOB_ID,
         replace_existing=True,
+        misfire_grace_time=DEFAULT_MISFIRE_GRACE_SECONDS,
         kwargs={
             "command": command,
             "cwd": str(project_root()),
@@ -201,6 +205,7 @@ def install_pre_market_check_job(
         minute=minute,
         id=PRE_MARKET_CHECK_JOB_ID,
         replace_existing=True,
+        misfire_grace_time=DEFAULT_MISFIRE_GRACE_SECONDS,
         kwargs={
             "command": command,
             "cwd": str(project_root()),
@@ -227,6 +232,7 @@ def install_live_risk_guard_job(
         minute=minute,
         id=LIVE_RISK_GUARD_JOB_ID,
         replace_existing=True,
+        misfire_grace_time=DEFAULT_MISFIRE_GRACE_SECONDS,
         kwargs={
             "command": command,
             "cwd": str(project_root()),
@@ -253,6 +259,7 @@ def install_research_monitor_job(
         minute=minute,
         id=RESEARCH_MONITOR_JOB_ID,
         replace_existing=True,
+        misfire_grace_time=DEFAULT_MISFIRE_GRACE_SECONDS,
         kwargs={
             "command": command,
             "cwd": str(project_root()),
@@ -279,6 +286,7 @@ def install_scheduler_watchdog_job(
         minute=minute,
         id=SCHEDULER_WATCHDOG_JOB_ID,
         replace_existing=True,
+        misfire_grace_time=DEFAULT_MISFIRE_GRACE_SECONDS,
         kwargs={
             "command": command,
             "cwd": str(project_root()),

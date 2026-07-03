@@ -65,11 +65,18 @@ def test_install_daily_pipeline_job_registers_quality_cron_job(tmp_path: Path) -
     scheduler = create_scheduler(paths)
 
     job = install_daily_pipeline_job(scheduler, paths, hour=16, minute=10, skip_update=True)
+    scheduler.start(paused=True)
+    try:
+        registered = scheduler.get_job(TRADING_PIPELINE_JOB_ID)
+    finally:
+        scheduler.shutdown()
 
     assert job.id == TRADING_PIPELINE_JOB_ID
     assert job.kwargs["cwd"].endswith("quant")
     assert job.kwargs["log_path"].endswith("logs/scheduler.log")
     assert job.kwargs["command"][:2] == [sys.executable, "scripts/run_daily_pipeline.py"]
+    assert registered is not None
+    assert registered.misfire_grace_time >= 900
 
 
 def test_install_daily_pipeline_jobs_registers_data_then_batch_runner(tmp_path: Path) -> None:
@@ -79,6 +86,11 @@ def test_install_daily_pipeline_jobs_registers_data_then_batch_runner(tmp_path: 
     scheduler = create_scheduler(paths)
 
     jobs = install_daily_pipeline_jobs(scheduler, paths, hour=16, minute=10, skip_update=True, push=True)
+    scheduler.start(paused=True)
+    try:
+        registered_jobs = scheduler.get_jobs()
+    finally:
+        scheduler.shutdown()
 
     assert [job.id for job in jobs] == [
         "pre_market_check_pipeline",
@@ -113,6 +125,7 @@ def test_install_daily_pipeline_jobs_registers_data_then_batch_runner(tmp_path: 
         "scripts/run_scheduler_watchdog.py",
     ]
     assert "--push" in jobs[4].kwargs["command"]
+    assert all(job.misfire_grace_time >= 900 for job in registered_jobs)
 
 
 def test_install_daily_pipeline_jobs_removes_legacy_strategy_jobs(tmp_path: Path) -> None:
