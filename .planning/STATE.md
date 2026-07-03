@@ -2,11 +2,11 @@
 
 ## Active Milestone
 
-Enterprise Quant Platform / Milestone E12：长期运行观察
+Enterprise Quant Platform / Milestone E13：后续策略与运维迭代
 
 ## Active Phase
 
-Phase E12.1：Post-Baseline Operations
+Phase E13.1：Next Operations Iteration
 
 ## Current Status
 
@@ -70,15 +70,20 @@ pending
 - 新增 `docs/superpowers/plans/2026-07-03-selective-commit-release-baseline-plan.md`，明确选择性暂存、验证门禁和运行产物排除规则。
 - 本阶段使用 `docs/release/safe_commit_review.json` 的 `stage_candidates` 执行选择性暂存，不使用 `git add -A`。
 - `reports/dashboard.html`、`reports/dashboard_data.json`、`reports/quality_overlay_paper_latest.md` 保持 hold，不进入本次提交。
+- Phase E12.1：Post-Baseline Operations。
+- 新增 `runtime/post_baseline_audit.py` 和 `scripts/run_post_baseline_audit.py`，生成基线后本地运行观察审计。
+- 当前审计报告位于 `docs/release/post_baseline_operations_audit.md` 和 `docs/release/post_baseline_operations_audit.json`。
+- 当前审计结果：5 PASS、0 WARN、0 FAIL，`ready_for_observation=True`。
+- 后端全量测试通过：`437 passed`。
 
 ## Next Action
 
-进入 Phase E12.1：Post-Baseline Operations。基线提交后继续围绕长期 Shadow Live / Paper 运行，观察调度、通知、日报、投研和策略资产化的稳定性。
+进入 Phase E13.1：Next Operations Iteration。继续围绕长期 Shadow Live / Paper 的调度稳定性、通知闭环、日报可视化、投研资产化和策略资产化做后续小步迭代。
 
 ## Resume Prompt
 
 ```text
-继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E12.1：Post-Baseline Operations。
+继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E13.1：Next Operations Iteration。
 ```
 
 ## Verification Commands
@@ -102,8 +107,10 @@ test -f docs/development_workflow.md
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_release_baseline.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_git_baseline.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_safe_commit_review.py -q
+/Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_post_baseline_audit.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_git_baseline_report.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_safe_commit_review.py --output-dir docs/release
+/Users/admin/recommend_analysis/.venv/bin/python3 scripts/run_post_baseline_audit.py --output-dir docs/release
 cd frontend && PATH=/opt/homebrew/opt/node@22/bin:$PATH npm test
 cd frontend && PATH=/opt/homebrew/opt/node@22/bin:$PATH npm run build:pre
 ```

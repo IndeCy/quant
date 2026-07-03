@@ -137,5 +137,13 @@
 ### Phase E12.1：Post-Baseline Operations
 
 - 优先级：P4
-- 状态：pending
+- 状态：done
 - 目标：基线提交后持续观察 Shadow Live / Paper 运行稳定性，围绕调度、通知、日报、投研和策略资产化做后续迭代。
+
+## Milestone E13：后续策略与运维迭代
+
+### Phase E13.1：Next Operations Iteration
+
+- 优先级：P4
+- 状态：pending
+- 目标：基于基线后运行审计结果，继续完善调度稳定性、通知闭环、日报可视化、投研资产化和策略资产化。
