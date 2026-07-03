@@ -9,6 +9,7 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.service import LocalApiService
+from runtime.environment_audit import build_environment_audit
 from runtime.operations_ack import list_operations_ack, record_operations_ack
 from runtime.operations_quality_report import build_operations_quality_report
 from runtime.operations_review import build_operations_review
@@ -34,6 +35,11 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
     def readiness() -> dict[str, Any]:
         """返回生产候选系统运行就绪度。"""
         return api_service.readiness()
+
+    @app.get("/api/environment/audit")
+    def environment_audit() -> dict[str, Any]:
+        """返回本机进程和 launchd 关键环境变量一致性。"""
+        return build_environment_audit()
 
     @app.get("/api/scheduler/status")
     def scheduler_status() -> dict[str, Any]:

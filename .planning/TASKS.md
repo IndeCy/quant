@@ -29,7 +29,8 @@
 | E17-001 | E17.1 | P4 | done | Codex | 异常确认与处置回溯 | `/api/operations/acknowledgements` 与调度页人工确认记录 |
 | E18-001 | E18.1 | P4 | done | Codex | 运维闭环复盘指标 | `/api/operations/review` 与调度页闭环复盘面板 |
 | E19-001 | E19.1 | P4 | done | Codex | 运维质量趋势报告 | `operations_quality_review` 登记到报告索引 |
-| E20-001 | E20.1 | P4 | pending | Codex | 运行环境一致性审计 | 终端、API 服务和调度器关键环境变量一致性 |
+| E20-001 | E20.1 | P4 | done | Codex | 运行环境一致性审计 | `/api/environment/audit` 暴露 API 进程缺少 `TUSHARE_TOKEN` |
+| E21-001 | E21.1 | P4 | pending | Codex | Launchd 环境修复闭环 | 修复前后 `/api/environment/audit` 对比记录 |
 
 ## 状态规则
 

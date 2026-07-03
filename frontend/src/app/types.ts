@@ -1,4 +1,5 @@
 import type { BackupManifest } from "../entities/backup/model";
+import type { EnvironmentAudit } from "../entities/environment/model";
 import type { FactorDefinition } from "../entities/factor/model";
 import type { RuntimeLog } from "../entities/log/model";
 import type { MarketMetric } from "../entities/market/model";
@@ -25,6 +26,7 @@ import type { StrategyDraft } from "../entities/strategyDraft/model";
 export interface DashboardData {
   strategies: StrategyDefinition[];
   backupManifest: BackupManifest;
+  environmentAudit: EnvironmentAudit;
   strategy: StrategyDefinition;
   factors: FactorDefinition[];
   logs: RuntimeLog[];

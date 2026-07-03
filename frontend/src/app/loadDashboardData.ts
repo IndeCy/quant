@@ -1,4 +1,5 @@
 import { getBackupManifest } from "../entities/backup/api";
+import { getEnvironmentAudit } from "../entities/environment/api";
 import { listFactors } from "../entities/factor/api";
 import { listLogs } from "../entities/log/api";
 import { getMarketSeries } from "../entities/market/api";
@@ -39,6 +40,7 @@ export async function loadDashboardData() {
   const strategyId = chooseDefaultStrategyId(strategyDetailsList);
   const [
     backupManifest,
+    environmentAudit,
     factors,
     logs,
     operationsAcknowledgements,
@@ -63,6 +65,7 @@ export async function loadDashboardData() {
     readiness
   ] = await Promise.all([
     getBackupManifest(),
+    getEnvironmentAudit(),
     listFactors(),
     listLogs(),
     listOperationsAcknowledgements(),
@@ -91,6 +94,7 @@ export async function loadDashboardData() {
   return {
     strategies,
     backupManifest,
+    environmentAudit,
     strategy,
     factors,
     logs,

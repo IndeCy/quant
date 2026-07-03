@@ -23,6 +23,7 @@ import "./shared/styles/features.css";
 import "./shared/styles/operations.css";
 import "./shared/styles/acknowledgement.css";
 import "./shared/styles/workbench.css";
+import "./shared/styles/environment.css";
 
 function App() {
   const [data, setData] = useState<DashboardData | null>(null);

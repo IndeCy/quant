@@ -201,5 +201,13 @@
 ### Phase E20.1：Runtime Environment Consistency Audit
 
 - 优先级：P4
-- 状态：pending
+- 状态：done
 - 目标：检查终端、API 服务和调度器的关键环境变量一致性，降低配置漂移导致的假异常。
+
+## Milestone E21：运行环境修复闭环
+
+### Phase E21.1：Launchd Environment Repair Workflow
+
+- 优先级：P4
+- 状态：pending
+- 目标：基于 E20 审计结果，按可回滚方式同步 API launchd 的关键环境变量，并形成修复前后验收记录。

@@ -2,11 +2,11 @@
 
 ## Active Milestone
 
-Enterprise Quant Platform / Milestone E20：运行环境一致性审计
+Enterprise Quant Platform / Milestone E21：运行环境修复闭环
 
 ## Active Phase
 
-Phase E20.1：Runtime Environment Consistency Audit
+Phase E21.1：Launchd Environment Repair Workflow
 
 ## Current Status
 
@@ -109,15 +109,20 @@ pending
 - 真实服务已生成 `reports/operations_quality/20260703/operations_quality_review.md`，报告索引显示 `operations_quality_review / operations / 运维质量趋势 20260703`。
 - 当前真实报告暴露服务进程缺少 `TUSHARE_TOKEN`，闭环状态为 `OPEN`，这是 E20 需要处理的环境一致性问题。
 - 后端全量测试通过：`453 passed`；前端全量测试通过：`28 files / 52 tests`；`npm run build:pre` 通过，本地服务已重启。
+- Phase E20.1：Runtime Environment Consistency Audit。
+- 新增 `runtime/environment_audit.py`，只读检查当前进程、API launchd、调度器 launchd 和前端 launchd 的关键环境变量一致性。
+- 新增 `/api/environment/audit`，设置页新增“运行环境一致性”面板，不暴露 `TUSHARE_TOKEN` 或 Bark URL 原文，只展示存在性和指纹。
+- 当前真实审计结果：`status=FAIL`，`TUSHARE_TOKEN` 缺失于 `process` 和 `api_launchd`，`scheduler_launchd` 已配置；`QUANT_HOME` 和 Bark 通道检查通过。
+- 后端全量测试通过：`456 passed`；前端全量测试通过：`29 files / 53 tests`；`npm run build:pre` 通过，本地服务已重启。
 
 ## Next Action
 
-进入 Phase E20.1：Runtime Environment Consistency Audit。继续检查终端、launchd/API 服务和调度器环境变量是否一致，防止 token 等关键配置漂移。
+进入 Phase E21.1：Launchd Environment Repair Workflow。基于 E20 审计结果，修复 API launchd 缺少 `TUSHARE_TOKEN` 的配置漂移，并保留修复前后验收证据。
 
 ## Resume Prompt
 
 ```text
-继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E20.1：Runtime Environment Consistency Audit。
+继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E21.1：Launchd Environment Repair Workflow。
 ```
 
 ## Verification Commands
@@ -148,6 +153,7 @@ test -f docs/development_workflow.md
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_ack.py tests/test_operations_ack_api.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_review.py tests/test_operations_review_api.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_quality_report.py tests/test_operations_quality_report_api.py -q
+/Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_environment_audit.py tests/test_environment_audit_api.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_git_baseline_report.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_safe_commit_review.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/run_post_baseline_audit.py --output-dir docs/release

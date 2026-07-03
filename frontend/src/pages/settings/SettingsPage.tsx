@@ -3,6 +3,7 @@ import { useOutletContext } from "react-router-dom";
 
 import type { DashboardContext } from "../../app/types";
 import { formatBytes } from "../../entities/backup/format";
+import { environmentAuditTitle, environmentAuditTone, sourceLabel } from "../../entities/environment/status";
 import { getReadinessReport } from "../../entities/readiness/api";
 import { configureSchedulerJob } from "../../entities/scheduler/api";
 import { validateSchedulerConfig } from "../../entities/scheduler/config";
@@ -23,6 +24,7 @@ export function SettingsPage() {
   const [push, setPush] = useState(false);
   const [schedulerMessage, setSchedulerMessage] = useState("");
   const backup = data.backupManifest;
+  const environmentAudit = data.environmentAudit;
   const serviceManifest = data.serviceManifest;
   const serviceStatus = data.serviceStatus;
   const schedulerValidation = validateSchedulerConfig(hour, minute);
@@ -117,6 +119,41 @@ export function SettingsPage() {
 
         <div className="detail-panel">
           <ReadinessPanel report={readiness} />
+          <section className="panel detail-panel environment-panel">
+            <div className="detail-heading">
+              <div>
+                <h2>运行环境一致性</h2>
+                <p>检查终端进程、API、调度器和前端 launchd 是否读取同一套关键配置。</p>
+              </div>
+              <span className={`status ${environmentAuditTone(environmentAudit.status)}`}>
+                {environmentAuditTitle(environmentAudit.status)}
+              </span>
+            </div>
+            <div className="environment-checks">
+              {environmentAudit.checks.map((check) => (
+                <div key={check.name} className="environment-check">
+                  <div>
+                    <strong>{check.name}</strong>
+                    <span className={`status ${environmentAuditTone(check.status)}`}>{check.status}</span>
+                  </div>
+                  <p>
+                    缺失来源：
+                    {check.missing_in.length > 0 ? check.missing_in.map(sourceLabel).join("、") : "无"}
+                  </p>
+                  {check.mismatch_sources.length > 0 ? <p>指纹不一致：{check.mismatch_sources.map(sourceLabel).join("、")}</p> : null}
+                  {check.recommendation ? <p className="inline-error">{check.recommendation}</p> : null}
+                </div>
+              ))}
+            </div>
+            <div className="path-block">
+              <span>审计时间</span>
+              <code>{environmentAudit.generated_at}</code>
+            </div>
+            <div className="path-block">
+              <span>密钥原文暴露</span>
+              <code>{environmentAudit.secret_values_exposed ? "是，需要立即修复" : "否"}</code>
+            </div>
+          </section>
           <section className="panel detail-panel">
             <div className="detail-heading">
               <div>
