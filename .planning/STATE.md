@@ -2,11 +2,11 @@
 
 ## Active Milestone
 
-Enterprise Quant Platform / Milestone E13：后续策略与运维迭代
+Enterprise Quant Platform / Milestone E14：日报与运行告警收敛
 
 ## Active Phase
 
-Phase E13.1：Next Operations Iteration
+Phase E14.1：Daily Report Warning Closure
 
 ## Current Status
 
@@ -75,15 +75,20 @@ pending
 - 当前审计报告位于 `docs/release/post_baseline_operations_audit.md` 和 `docs/release/post_baseline_operations_audit.json`。
 - 当前审计结果：5 PASS、0 WARN、0 FAIL，`ready_for_observation=True`。
 - 后端全量测试通过：`437 passed`。
+- Phase E13.1：Operations Observation Summary。
+- 新增 `runtime/operations_observation.py` 和 `scripts/run_operations_observation.py`，生成长期运行观察摘要。
+- 当前摘要位于 `docs/release/operations_observation_summary.md` 和 `docs/release/operations_observation_summary.json`。
+- 当前摘要结果：PASS 8、WARN 5、FAIL 0，最新运行日 `20260703`，WARN 集中在最新运行日缺少完整盘后日报/指标/持仓/调仓/run_log 产物。
+- 后端全量测试通过：`440 passed`。
 
 ## Next Action
 
-进入 Phase E13.1：Next Operations Iteration。继续围绕长期 Shadow Live / Paper 的调度稳定性、通知闭环、日报可视化、投研资产化和策略资产化做后续小步迭代。
+进入 Phase E14.1：Daily Report Warning Closure。围绕 `operations_observation_summary` 暴露的 WARN，区分盘前检查日与完整盘后运行日，避免把非盘后目录误判为缺失日报。
 
 ## Resume Prompt
 
 ```text
-继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E13.1：Next Operations Iteration。
+继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E14.1：Daily Report Warning Closure。
 ```
 
 ## Verification Commands
@@ -108,9 +113,11 @@ test -f docs/development_workflow.md
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_git_baseline.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_safe_commit_review.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_post_baseline_audit.py -q
+/Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_observation.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_git_baseline_report.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_safe_commit_review.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/run_post_baseline_audit.py --output-dir docs/release
+/Users/admin/recommend_analysis/.venv/bin/python3 scripts/run_operations_observation.py --output-dir docs/release
 cd frontend && PATH=/opt/homebrew/opt/node@22/bin:$PATH npm test
 cd frontend && PATH=/opt/homebrew/opt/node@22/bin:$PATH npm run build:pre
 ```
