@@ -21,7 +21,9 @@ def build_operations_observation(repo_root: Path) -> dict[str, object]:
     """生成长期观察摘要，只读取本地状态，不触发任何运行任务。"""
 
     root = repo_root.resolve()
-    latest_run_date = _latest_run_date(root / "runs")
+    latest_activity_date = _latest_activity_date(root / "runs")
+    latest_activity_type = _run_type(root / "runs" / latest_activity_date) if latest_activity_date else ""
+    latest_run_date = _latest_complete_run_date(root / "runs")
     run_artifacts = _run_artifacts(root, latest_run_date)
     scheduler = _scheduler_evidence(root)
     reports = _held_reports(root)
@@ -30,6 +32,8 @@ def build_operations_observation(repo_root: Path) -> dict[str, object]:
     return {
         "repo_root": str(root),
         "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "latest_activity_date": latest_activity_date,
+        "latest_activity_type": latest_activity_type,
         "latest_run_date": latest_run_date,
         "summary": summary,
         "run_artifacts": run_artifacts,
@@ -55,11 +59,29 @@ def write_operations_observation(
     return {"markdown": markdown_path, "json": json_path}
 
 
-def _latest_run_date(runs_dir: Path) -> str:
+def _latest_activity_date(runs_dir: Path) -> str:
     if not runs_dir.exists():
         return ""
     dates = sorted(path.name for path in runs_dir.iterdir() if path.is_dir() and path.name.isdigit())
     return dates[-1] if dates else ""
+
+
+def _latest_complete_run_date(runs_dir: Path) -> str:
+    if not runs_dir.exists():
+        return ""
+    dates = sorted(path.name for path in runs_dir.iterdir() if path.is_dir() and path.name.isdigit())
+    for day in reversed(dates):
+        if _run_type(runs_dir / day) == "complete_daily_run":
+            return day
+    return dates[-1] if dates else ""
+
+
+def _run_type(run_dir: Path) -> str:
+    if all((run_dir / name).exists() for name in REQUIRED_RUN_ARTIFACTS):
+        return "complete_daily_run"
+    if (run_dir / "pre_market_check.md").exists() or (run_dir / "execution_checklist.csv").exists():
+        return "pre_market_only"
+    return "partial_activity"
 
 
 def _run_artifacts(root: Path, latest_run_date: str) -> dict[str, str]:
@@ -121,6 +143,8 @@ def _render_markdown(report: Mapping[str, object]) -> str:
         "",
         f"- repo_root: `{report.get('repo_root', '')}`",
         f"- generated_at: `{report.get('generated_at', '')}`",
+        f"- latest_activity_date: `{report.get('latest_activity_date', '')}`",
+        f"- latest_activity_type: `{report.get('latest_activity_type', '')}`",
         f"- latest_run_date: `{report.get('latest_run_date', '')}`",
         f"- ready_for_daily_review: `{report.get('ready_for_daily_review')}`",
         "",

@@ -153,5 +153,13 @@
 ### Phase E14.1：Daily Report Warning Closure
 
 - 优先级：P4
-- 状态：pending
+- 状态：done
 - 目标：根据运行观察摘要中的 WARN，区分盘前检查产物与完整盘后日报产物，减少误报并提升日常巡检可读性。
+
+## Milestone E15：运行体验与告警闭环
+
+### Phase E15.1：Operations UX and Alert Loop
+
+- 优先级：P4
+- 状态：pending
+- 目标：把运行观察摘要接入更直接的前端/通知视角，降低每天人工翻文件成本。

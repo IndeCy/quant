@@ -23,7 +23,8 @@
 | E11-001 | E11.1 | P4 | done | Codex | 选择性暂存和提交 | `git diff --cached --name-only` 不包含 runtime/report 数据 |
 | E12-001 | E12.1 | P4 | done | Codex | 基线后运行观察 | `pytest tests/test_post_baseline_audit.py -q` |
 | E13-001 | E13.1 | P4 | done | Codex | 下一轮运维迭代 | `pytest tests/test_operations_observation.py -q` |
-| E14-001 | E14.1 | P4 | pending | Codex | 日报 WARN 收敛 | 区分盘前检查目录与完整盘后运行目录，减少 operations observation 误报 |
+| E14-001 | E14.1 | P4 | done | Codex | 日报 WARN 收敛 | `pytest tests/test_operations_observation.py -q` |
+| E15-001 | E15.1 | P4 | pending | Codex | 运行体验与告警闭环 | 将运行观察摘要接入前端/通知视角，减少人工翻文件 |
 
 ## 状态规则
 

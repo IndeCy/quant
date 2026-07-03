@@ -2,11 +2,11 @@
 
 ## Active Milestone
 
-Enterprise Quant Platform / Milestone E14：日报与运行告警收敛
+Enterprise Quant Platform / Milestone E15：运行体验与告警闭环
 
 ## Active Phase
 
-Phase E14.1：Daily Report Warning Closure
+Phase E15.1：Operations UX and Alert Loop
 
 ## Current Status
 
@@ -80,15 +80,19 @@ pending
 - 当前摘要位于 `docs/release/operations_observation_summary.md` 和 `docs/release/operations_observation_summary.json`。
 - 当前摘要结果：PASS 8、WARN 5、FAIL 0，最新运行日 `20260703`，WARN 集中在最新运行日缺少完整盘后日报/指标/持仓/调仓/run_log 产物。
 - 后端全量测试通过：`440 passed`。
+- Phase E14.1：Daily Report Warning Closure。
+- 更新 `runtime/operations_observation.py`，区分 `latest_activity_date` 与 `latest_run_date`。
+- 当前真实摘要：`latest_activity_date=20260703`、`latest_activity_type=pre_market_only`、`latest_run_date=20260702`，PASS 13、WARN 0、FAIL 0。
+- 后端全量测试通过：`441 passed`。
 
 ## Next Action
 
-进入 Phase E14.1：Daily Report Warning Closure。围绕 `operations_observation_summary` 暴露的 WARN，区分盘前检查日与完整盘后运行日，避免把非盘后目录误判为缺失日报。
+进入 Phase E15.1：Operations UX and Alert Loop。继续把运行观察摘要接入更直接的前端/通知视角，减少每天人工翻文件成本。
 
 ## Resume Prompt
 
 ```text
-继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E14.1：Daily Report Warning Closure。
+继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E15.1：Operations UX and Alert Loop。
 ```
 
 ## Verification Commands

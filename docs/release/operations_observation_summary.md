@@ -1,25 +1,27 @@
 # Operations Observation Summary
 
 - repo_root: `/Users/admin/PycharmProjects/quant`
-- generated_at: `2026-07-03T09:55:11`
-- latest_run_date: `20260703`
+- generated_at: `2026-07-03T09:59:29`
+- latest_activity_date: `20260703`
+- latest_activity_type: `pre_market_only`
+- latest_run_date: `20260702`
 - ready_for_daily_review: `True`
 
 ## Summary
 
-- PASS: 8
-- WARN: 5
+- PASS: 13
+- WARN: 0
 - FAIL: 0
 
 ## Run Artifacts
 
 | 项目 | 状态 |
 |---|---|
-| `daily_report.md` | WARN |
-| `strategy_metrics.json` | WARN |
-| `portfolio_snapshot.csv` | WARN |
-| `rebalance_plan.csv` | WARN |
-| `run_log.txt` | WARN |
+| `daily_report.md` | PASS |
+| `strategy_metrics.json` | PASS |
+| `portfolio_snapshot.csv` | PASS |
+| `rebalance_plan.csv` | PASS |
+| `run_log.txt` | PASS |
 
 ## Scheduler
 
