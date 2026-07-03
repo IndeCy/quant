@@ -2,11 +2,11 @@
 
 ## Active Milestone
 
-Enterprise Quant Platform / Milestone E21：运行环境修复闭环
+Enterprise Quant Platform / Milestone E22：运行配置迁移与备份校验
 
 ## Active Phase
 
-Phase E21.1：Launchd Environment Repair Workflow
+Phase E22.1：Runtime Config Migration Check
 
 ## Current Status
 
@@ -114,15 +114,21 @@ pending
 - 新增 `/api/environment/audit`，设置页新增“运行环境一致性”面板，不暴露 `TUSHARE_TOKEN` 或 Bark URL 原文，只展示存在性和指纹。
 - 当前真实审计结果：`status=FAIL`，`TUSHARE_TOKEN` 缺失于 `process` 和 `api_launchd`，`scheduler_launchd` 已配置；`QUANT_HOME` 和 Bark 通道检查通过。
 - 后端全量测试通过：`456 passed`；前端全量测试通过：`29 files / 53 tests`；`npm run build:pre` 通过，本地服务已重启。
+- Phase E21.1：Local Properties Config。
+- 新增 `runtime/config.py`，统一读取项目根目录 `.env.properties`，环境变量仅作为兼容兜底。
+- 新增 `.env.properties.example`，真实 `.env.properties` 已创建并被 `.gitignore` 排除，不会进入 Git。
+- Tushare token、Bark URL、QUANT_HOME、券商交易开关已切到统一配置读取；环境审计改为以 `config_file` 为核心配置来源。
+- 当前真实接口：`/api/readiness` 返回 `READY`，`/api/environment/audit` 返回 `PASS` 且 `secret_values_exposed=false`。
+- 后端全量测试通过：`459 passed`；前端全量测试通过：`29 files / 53 tests`；`npm run build:pre` 通过，本地服务已重启。
 
 ## Next Action
 
-进入 Phase E21.1：Launchd Environment Repair Workflow。基于 E20 审计结果，修复 API launchd 缺少 `TUSHARE_TOKEN` 的配置漂移，并保留修复前后验收证据。
+进入 Phase E22.1：Runtime Config Migration Check。把 `.env.properties` 纳入迁移和备份检查清单，但继续排除 Git 提交。
 
 ## Resume Prompt
 
 ```text
-继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E21.1：Launchd Environment Repair Workflow。
+继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E22.1：Runtime Config Migration Check。
 ```
 
 ## Verification Commands
@@ -154,6 +160,7 @@ test -f docs/development_workflow.md
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_review.py tests/test_operations_review_api.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_quality_report.py tests/test_operations_quality_report_api.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_environment_audit.py tests/test_environment_audit_api.py -q
+/Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_runtime_config.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_git_baseline_report.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_safe_commit_review.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/run_post_baseline_audit.py --output-dir docs/release

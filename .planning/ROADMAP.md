@@ -204,10 +204,18 @@
 - 状态：done
 - 目标：检查终端、API 服务和调度器的关键环境变量一致性，降低配置漂移导致的假异常。
 
-## Milestone E21：运行环境修复闭环
+## Milestone E21：本地私密配置统一
 
-### Phase E21.1：Launchd Environment Repair Workflow
+### Phase E21.1：Local Properties Config
+
+- 优先级：P4
+- 状态：done
+- 目标：用项目根目录 `.env.properties` 统一承载 Tushare、Bark、QUANT_HOME 和运行开关，避免 API 与调度器依赖不同进程环境。
+
+## Milestone E22：运行配置迁移与备份校验
+
+### Phase E22.1：Runtime Config Migration Check
 
 - 优先级：P4
 - 状态：pending
-- 目标：基于 E20 审计结果，按可回滚方式同步 API launchd 的关键环境变量，并形成修复前后验收记录。
+- 目标：把 `.env.properties` 纳入迁移检查清单但继续排除 Git，确保迁移 Mac mini 时不会遗漏本地私密配置。

@@ -25,6 +25,7 @@ htmlcov/
 .DS_Store
 .vscode/
 .idea/
+.env.properties
 *.swp
 *.swo
 *~

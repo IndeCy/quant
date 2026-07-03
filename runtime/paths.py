@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import os
 from pathlib import Path
+
+from runtime.config import get_config_value
 
 
 def _project_root() -> Path:
@@ -14,7 +15,7 @@ def _project_root() -> Path:
 
 def _runtime_root() -> Path:
     """优先使用 QUANT_HOME；未配置时保持旧的项目目录落盘方式。"""
-    value = os.getenv("QUANT_HOME", "").strip()
+    value = get_config_value("QUANT_HOME", prefer_environ=True)
     return Path(value).expanduser().resolve() if value else _project_root()
 
 

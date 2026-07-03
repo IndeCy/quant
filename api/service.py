@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 from pathlib import Path
 import sqlite3
 from typing import Any
@@ -11,6 +10,7 @@ import pandas as pd
 
 from monitoring.repository import MonitoringRepository
 from runtime.backup import build_backup_manifest
+from runtime.config import get_config_flag, get_config_value
 from runtime.daily_pipeline import run_production_daily_pipeline
 from runtime.data_catalog_runner import refresh_data_catalog
 from runtime.data_quality_gate import run_data_quality_gate
@@ -107,7 +107,7 @@ class LocalApiService:
         """返回生产候选系统运行就绪度。"""
         return _json_ready(
             build_readiness_report(
-                token_present=bool(os.getenv("TUSHARE_TOKEN", "").strip()),
+                token_present=bool(get_config_value("TUSHARE_TOKEN")),
                 data_health=self.data_health(),
                 scheduler_status=self.scheduler_status(),
                 service_status=self.service_status(),
@@ -483,7 +483,7 @@ def _manual_order_tables_ready(path: Path) -> bool:
 
 def _env_flag(key: str) -> bool:
     """读取显式开关，只有常见真值才视为开启。"""
-    return os.getenv(key, "").strip().lower() in {"1", "true", "yes", "on"}
+    return get_config_flag(key)
 
 
 def _json_ready(value: Any) -> Any:

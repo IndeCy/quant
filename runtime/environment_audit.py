@@ -8,6 +8,8 @@ from pathlib import Path
 import plistlib
 from typing import Mapping
 
+from runtime.config import default_config_path, load_properties_file
+
 
 LAUNCHD_FILES = {
     "api_launchd": "com.quant.api.plist",
@@ -20,17 +22,18 @@ BARK_KEYS = ("BARK_PUSH_URL", "BARK_URL", "QUANT_BARK_URL")
 def build_environment_audit(
     env: Mapping[str, str] | None = None,
     launch_agents_dir: Path | None = None,
+    config_path: Path | None = None,
 ) -> dict[str, object]:
     """构建运行环境一致性审计结果，避免不同进程读取到不同关键配置。"""
     process_env = dict(env or os.environ)
     launch_dir = launch_agents_dir or Path.home() / "Library" / "LaunchAgents"
-    raw_sources = _load_sources(process_env, launch_dir)
+    raw_sources = _load_sources(process_env, launch_dir, config_path or default_config_path())
     checks = [
         _required_value_check(
             "TUSHARE_TOKEN",
             raw_sources,
-            ("process", "api_launchd", "scheduler_launchd"),
-            "把 TUSHARE_TOKEN 同步到 API 服务和调度器的 launchd 环境中，然后重启对应服务。",
+            ("config_file",),
+            "把 TUSHARE_TOKEN 写入项目根目录 .env.properties，避免不同进程读取不同环境。",
         ),
         _required_value_check(
             "QUANT_HOME",
@@ -59,8 +62,8 @@ def build_environment_audit(
     return payload
 
 
-def _load_sources(process_env: Mapping[str, str], launch_agents_dir: Path) -> dict[str, dict[str, str]]:
-    sources = {"process": dict(process_env)}
+def _load_sources(process_env: Mapping[str, str], launch_agents_dir: Path, config_path: Path) -> dict[str, dict[str, str]]:
+    sources = {"process": dict(process_env), "config_file": load_properties_file(config_path)}
     for source, filename in LAUNCHD_FILES.items():
         sources[source] = _read_launchd_env(launch_agents_dir / filename)
     return sources
@@ -109,7 +112,7 @@ def _required_value_check(
 
 def _bark_channel_check(sources: Mapping[str, Mapping[str, str]]) -> dict[str, object]:
     candidates: dict[str, str] = {}
-    for source in ("process", "scheduler_launchd"):
+    for source in ("config_file", "process", "scheduler_launchd"):
         for key in BARK_KEYS:
             value = sources.get(source, {}).get(key, "")
             if value:
@@ -118,11 +121,11 @@ def _bark_channel_check(sources: Mapping[str, Mapping[str, str]]) -> dict[str, o
     return {
         "name": "BARK_CHANNEL",
         "status": status,
-        "required_sources": ["process", "scheduler_launchd"],
-        "missing_in": [] if candidates else ["process", "scheduler_launchd"],
+        "required_sources": ["config_file", "process", "scheduler_launchd"],
+        "missing_in": [] if candidates else ["config_file", "process", "scheduler_launchd"],
         "mismatch_sources": [],
         "fingerprints": candidates,
-        "recommendation": "" if status == "PASS" else "配置 Bark 推送地址，确保调度异常可以触达手机。",
+        "recommendation": "" if status == "PASS" else "在 .env.properties 配置 Bark 推送地址，确保调度异常可以触达手机。",
     }
 
 

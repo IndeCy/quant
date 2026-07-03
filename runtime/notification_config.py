@@ -3,11 +3,11 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-import os
 from pathlib import Path
 import plistlib
 
 from backtest.notifier import NotificationMessage, build_notifier
+from runtime.config import get_config_value
 
 
 BARK_ENV_KEYS = ("BARK_PUSH_URL", "BARK_URL", "QUANT_BARK_URL")
@@ -25,7 +25,7 @@ class NotificationResult:
 def resolve_bark_url() -> str:
     """按统一优先级读取 Bark 推送地址。"""
     for key in BARK_ENV_KEYS:
-        value = os.getenv(key, "").strip()
+        value = get_config_value(key)
         if value:
             return value
     value = _read_bark_url_from_launchd(SCHEDULER_PLIST_PATH)

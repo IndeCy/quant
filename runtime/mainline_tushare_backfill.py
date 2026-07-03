@@ -4,7 +4,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import date, datetime
-import os
 import time
 from typing import Protocol
 
@@ -12,6 +11,7 @@ import pandas as pd
 
 from backtest.cache import MarketDataCache
 from examples.compare_chain_stock_selection import build_default_chain_definitions
+from runtime.config import get_config_value
 from runtime.paths import RuntimePaths, get_runtime_paths
 
 
@@ -100,7 +100,7 @@ def backfill_mainline_tushare_cache(
     runtime_paths = paths or get_runtime_paths()
     runtime_paths.ensure_directories()
     end = end_date or datetime.now().strftime("%Y%m%d")
-    client = client or TushareBackfillProClient(os.getenv("TUSHARE_TOKEN", ""))
+    client = client or TushareBackfillProClient(get_config_value("TUSHARE_TOKEN"))
     chains = build_default_chain_definitions()
     stock_symbols = sorted({stock.symbol for chain in chains for stock in chain.stocks})
     fund_symbols = sorted({chain.proxy_symbol for chain in chains})
