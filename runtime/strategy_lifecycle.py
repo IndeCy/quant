@@ -9,15 +9,16 @@ class StrategyLifecycleError(RuntimeError):
     """策略生命周期校验失败。"""
 
 
-RUNNABLE_STATUSES = {"paper", "shadow_live", "live"}
-VALID_STATUSES = {"draft", "research", "paper", "shadow_live", "live", "paused", "retired"}
+RUNNABLE_STATUSES = {"research_observation", "paper", "shadow_live", "live"}
+VALID_STATUSES = {"draft", "research", "research_observation", "paper", "shadow_live", "live", "paused", "retired"}
 ALLOWED_TRANSITIONS = {
-    "draft": {"research", "paused", "retired"},
-    "research": {"paper", "paused", "retired"},
+    "draft": {"research", "research_observation", "paused", "retired"},
+    "research": {"research_observation", "paper", "paused", "retired"},
+    "research_observation": {"paper", "paused", "retired"},
     "paper": {"shadow_live", "paused", "retired"},
     "shadow_live": {"live", "paused", "retired"},
     "live": {"paused", "retired"},
-    "paused": {"paper", "retired"},
+    "paused": {"research_observation", "paper", "retired"},
     "retired": set(),
 }
 
@@ -51,5 +52,5 @@ def validate_strategy_for_run(strategy: dict[str, Any], contract_validation: dic
     if not strategy.get("construction"):
         raise StrategyLifecycleError("construction is required")
     missing = list(contract_validation.get("missing_factors") or [])
-    if missing:
+    if missing and str(strategy.get("template_id") or "") != "opportunity_observer":
         raise StrategyLifecycleError(f"missing factor contracts: {missing}")

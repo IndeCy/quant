@@ -154,8 +154,28 @@ def register_mainline_chain_factor_v1(repository: SystemRepository) -> None:
     )
 
 
+def register_innovative_drug_observer_v0(repository: SystemRepository) -> None:
+    """登记创新药出海观察策略，不生成交易调仓。"""
+    repository.upsert_strategy(
+        strategy_id="innovative_drug_globalization_observer_v0",
+        name="创新药出海观察策略 V0",
+        status="research_observation",
+        strategy_type="opportunity_observer",
+        description="基于创新药出海投研观察池生成Top5等权观察组合，仅用于研究观察。",
+        config={
+            "theme_id": "innovative_drug_globalization",
+            "top_n": 5,
+            "weighting": "equal_weight",
+            "exclude_mature": True,
+            "adjust_policy": "qfq",
+            "trade_policy": "observation_only",
+        },
+    )
+
+
 def register_builtin_strategies(repository: SystemRepository) -> None:
     """登记当前系统内置策略，供策略目录和前端运行中心统一读取。"""
     repository.delete_strategy_artifacts("mainline_chain_b")
+    register_innovative_drug_observer_v0(repository)
     register_quality_alpha_v1(repository)
     register_mainline_chain_factor_v1(repository)

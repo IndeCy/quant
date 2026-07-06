@@ -81,6 +81,29 @@ def test_strategy_lifecycle_requires_factor_contract_before_run_state(tmp_path: 
         repository.transition_strategy_instance_status("quality_test", "paper", enable=True)
 
 
+def test_research_observation_is_runnable_but_separate_from_paper(tmp_path: Path) -> None:
+    """观察策略允许每日运行，但状态语义不同于 paper。"""
+    repository = SystemRepository(tmp_path / "state" / "quant_system.sqlite")
+    repository.upsert_strategy_instance(
+        {
+            "strategy_id": "observer",
+            "name": "Observer",
+            "template_id": "opportunity_observer",
+            "status": "research_observation",
+            "enabled": True,
+            "universe": "opportunity_theme:innovative_drug_globalization",
+            "filters": ["exclude_rejected", "exclude_mature"],
+            "factors": [],
+            "construction": {"top_n": 5, "weighting": "equal_weight"},
+            "benchmark": "510300",
+        }
+    )
+
+    runnable = repository.list_runnable_strategy_instances()
+
+    assert [item["strategy_id"] for item in runnable] == ["observer"]
+
+
 def test_list_runnable_strategy_instances_filters_lifecycle_status(tmp_path: Path) -> None:
     """draft/research/retired 即使 enabled=True 也不能进入每日批处理。"""
     repository = SystemRepository(tmp_path / "state" / "quant_system.sqlite")
@@ -88,6 +111,7 @@ def test_list_runnable_strategy_instances_filters_lifecycle_status(tmp_path: Pat
     for strategy_id, status in [
         ("draft_on", "draft"),
         ("research_on", "research"),
+        ("observer_on", "research_observation"),
         ("paper_on", "paper"),
         ("shadow_on", "shadow_live"),
         ("retired_on", "retired"),
@@ -107,4 +131,4 @@ def test_list_runnable_strategy_instances_filters_lifecycle_status(tmp_path: Pat
 
     runnable = repository.list_runnable_strategy_instances()
 
-    assert [item["strategy_id"] for item in runnable] == ["paper_on", "shadow_on"]
+    assert [item["strategy_id"] for item in runnable] == ["observer_on", "paper_on", "shadow_on"]

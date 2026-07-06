@@ -10,6 +10,26 @@ def register_builtin_strategy_instances(repository: SystemRepository) -> None:
     repository.delete_strategy_artifacts("mainline_chain_b")
     repository.upsert_strategy_instance(
         {
+            "strategy_id": "innovative_drug_globalization_observer_v0",
+            "name": "创新药出海观察策略 V0",
+            "template_id": "opportunity_observer",
+            "status": "research_observation",
+            "enabled": True,
+            "universe": "opportunity_theme:innovative_drug_globalization",
+            "filters": ["verified_opportunity_stock", "exclude_rejected", "exclude_mature", "qfq"],
+            "factors": [],
+            "construction": {"top_n": 5, "weighting": "equal_weight"},
+            "risk_overlay": "observation_only",
+            "benchmark": "510300",
+            "config": {
+                "theme_id": "innovative_drug_globalization",
+                "exclude_mature": True,
+                "trade_policy": "observation_only",
+            },
+        }
+    )
+    repository.upsert_strategy_instance(
+        {
             "strategy_id": "quality_overlay",
             "name": "Quality Alpha V1",
             "template_id": "factor_topn_monthly",

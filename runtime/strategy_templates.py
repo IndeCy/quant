@@ -18,4 +18,11 @@ def list_strategy_templates() -> list[dict[str, object]]:
             "required_sections": ["universe", "filters", "factors", "construction", "benchmark"],
             "supported_status": ["draft", "research", "paper", "shadow_live", "paused", "archived"],
         },
+        {
+            "template_id": "opportunity_observer",
+            "name": "产业机会观察策略",
+            "description": "把投研机会主题转为每日观察组合和净值曲线，不生成交易建议。",
+            "required_sections": ["universe", "construction", "benchmark"],
+            "supported_status": ["research_observation", "paused", "retired"],
+        },
     ]
