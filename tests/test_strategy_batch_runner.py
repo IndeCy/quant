@@ -72,6 +72,37 @@ def test_batch_runner_skips_enabled_research_instances(tmp_path: Path) -> None:
     assert repository.latest_run("research_test") is None
 
 
+def test_strategy_batch_dispatches_opportunity_observer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """批处理应能分发观察策略模板。"""
+    paths = RuntimePaths(tmp_path / "runtime")
+    paths.ensure_directories()
+    repository = SystemRepository(paths.system_state_path)
+    repository.upsert_strategy_instance(
+        {
+            "strategy_id": "innovative_drug_globalization_observer_v0",
+            "name": "创新药出海观察策略 V0",
+            "template_id": "opportunity_observer",
+            "status": "research_observation",
+            "enabled": True,
+            "universe": "opportunity_theme:innovative_drug_globalization",
+            "filters": [],
+            "factors": [],
+            "construction": {"top_n": 5},
+            "benchmark": "510300",
+            "config": {"theme_id": "innovative_drug_globalization"},
+        }
+    )
+    monkeypatch.setattr(
+        "runtime.strategy_batch_runner.run_opportunity_observer_instance",
+        lambda instance, paths: {"selected_count": 3, "nav": 1.0},
+    )
+
+    result = run_enabled_strategy_instances(paths)
+
+    assert result["success_count"] == 1
+    assert result["results"][0]["message"] == "observation selected 3 symbols, nav 1.000000"
+
+
 @pytest.mark.parametrize(
     ("push", "bark_url", "expected"),
     [

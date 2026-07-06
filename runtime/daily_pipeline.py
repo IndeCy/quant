@@ -265,6 +265,15 @@ def _format_strategy_operation_block(metrics: dict[str, object]) -> list[str]:
     """把任意策略最新监控指标格式化成统一关注字段。"""
     volatility = float(metrics.get("volatility_20", 0.0))
     drawdown = float(metrics.get("drawdown", 0.0))
+    if str(metrics.get("strategy_id") or "").endswith("_observer_v0"):
+        return [
+            str(metrics.get("strategy_name") or metrics.get("strategy_id")),
+            "- 状态：观察策略，不构成调仓建议",
+            f"- 观察仓位：{float(metrics.get('exposure', 0.0)):.2%}",
+            f"- 当日收益：{float(metrics.get('daily_return', 0.0)):.2%}",
+            f"- 当前回撤：{drawdown:.2%}",
+            "- 操作建议：不操作",
+        ]
     return [
         str(metrics.get("strategy_name") or metrics.get("strategy_id")),
         f"- 仓位：{float(metrics.get('exposure', 0.0)):.2%}",

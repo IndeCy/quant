@@ -186,6 +186,51 @@ def test_daily_pipeline_notification_uses_unified_operation_summary(
     assert "风险状态：HIGH_VOL" in body
 
 
+def test_daily_pipeline_operation_summary_marks_observer_as_non_trading(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """观察策略进入日报摘要时必须明确不可交易。"""
+    paths = RuntimePaths(tmp_path / "runtime")
+    paths.ensure_directories()
+    dates = pd.to_datetime(["2026-07-01", "2026-07-02"])
+    MonitoringRepository(paths.monitoring_path).upsert_strategy_daily(
+        build_strategy_monitor_frame(
+            strategy_id="innovative_drug_globalization_observer_v0",
+            strategy_name="创新药出海观察策略 V0",
+            daily_values=pd.Series([1.0, 1.02], index=dates),
+            exposure=pd.Series([1.0, 1.0], index=dates),
+        )
+    )
+    captured: list[dict[str, str]] = []
+
+    monkeypatch.setattr("runtime.daily_pipeline.run_data_update", lambda: "data ok")
+    monkeypatch.setattr("runtime.daily_pipeline.run_data_quality_gate", lambda paths: _quality_pass())
+    monkeypatch.setattr(
+        "runtime.daily_pipeline.run_strategy_batch",
+        lambda paths, push=False: {
+            "trade_date": "20260702",
+            "enabled_count": 1,
+            "success_count": 1,
+            "failed_count": 0,
+            "results": [{"strategy_id": "innovative_drug_globalization_observer_v0", "status": "SUCCESS", "message": "ok"}],
+        },
+    )
+
+    def capture_notification(title: str, body: str) -> NotificationResult:
+        captured.append({"title": title, "body": body})
+        return NotificationResult("SUCCESS", "sent")
+
+    monkeypatch.setattr("runtime.daily_pipeline.send_bark_notification", capture_notification)
+
+    run_production_daily_pipeline(paths=paths, push=True, source="manual")
+
+    body = captured[-1]["body"]
+    assert "创新药出海观察策略 V0" in body
+    assert "状态：观察策略，不构成调仓建议" in body
+    assert "操作建议：不操作" in body
+
+
 def test_daily_pipeline_sends_data_update_template(
     monkeypatch: pytest.MonkeyPatch,
     tmp_path: Path,

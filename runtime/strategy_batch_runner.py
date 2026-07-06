@@ -12,6 +12,7 @@ from backtest.notifier import NotificationMessage, build_notifier
 from runtime.paths import RuntimePaths, get_runtime_paths
 from runtime.notification_config import resolve_bark_url
 from runtime.repository import SystemRepository
+from strategies.opportunity_observer_runner import run_opportunity_observer_instance
 from strategies.factor_topn_runner import run_factor_topn_monthly_instance
 from strategies.mainline_chain_factor_runner import run_factor_chain_rotation_instance
 
@@ -68,6 +69,17 @@ def _run_instance(
             result = run_factor_chain_rotation_instance(instance, paths)
             message = f"selected {result['selected_count']} symbols, nav {result['nav']:.6f}"
             _send_native_notification(instance, message, push, bark_url)
+            return {"strategy_id": strategy_id, "status": "SUCCESS", "message": message}
+        except Exception as exc:
+            message = str(exc)
+            repository.record_strategy_run(strategy_id, trade_date, "FAILED", paths.runs_dir / trade_date, message)
+            _send_native_notification(instance, f"FAILED: {message}", push, bark_url)
+            return {"strategy_id": strategy_id, "status": "FAILED", "message": message}
+    if command is None and instance.get("template_id") == "opportunity_observer":
+        try:
+            result = run_opportunity_observer_instance(instance, paths)
+            message = f"observation selected {result['selected_count']} symbols, nav {result['nav']:.6f}"
+            _send_native_notification(instance, f"{message}\n观察策略，不构成调仓建议", push, bark_url)
             return {"strategy_id": strategy_id, "status": "SUCCESS", "message": message}
         except Exception as exc:
             message = str(exc)
