@@ -73,7 +73,7 @@ def _seed_success_state(paths: RuntimePaths, trade_date: str) -> None:
     repository.record_strategy_run("daily_trading_pipeline", trade_date, "SUCCESS", run_dir, "ok")
     for sequence, step_name in enumerate(["data_update", "data_notification", "strategy_batch", "notification"], start=1):
         repository.record_run_step("daily_trading_pipeline", trade_date, sequence, step_name, "SUCCESS", "ok")
-    for strategy_id in ["quality_overlay", "mainline_chain_factor_v1"]:
+    for strategy_id in ["quality_overlay", "mainline_chain_factor_v1", "innovative_drug_globalization_observer_v0"]:
         repository.record_strategy_run(strategy_id, trade_date, "SUCCESS", run_dir, "ok")
     repository.record_research_monitor_run("theme_a", trade_date, "SUCCESS", "ok", {"upgrade_candidate": False})
     repository.record_opportunity_direction_ranking(
@@ -84,7 +84,7 @@ def _seed_success_state(paths: RuntimePaths, trade_date: str) -> None:
     )
     dates = pd.to_datetime(["2026-07-01", "2026-07-02"])
     monitoring = MonitoringRepository(paths.monitoring_path)
-    for strategy_id in ["quality_overlay", "mainline_chain_factor_v1"]:
+    for strategy_id in ["quality_overlay", "mainline_chain_factor_v1", "innovative_drug_globalization_observer_v0"]:
         monitoring.upsert_strategy_daily(
             build_strategy_monitor_frame(
                 strategy_id=strategy_id,

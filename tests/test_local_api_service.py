@@ -63,6 +63,19 @@ def test_local_api_service_exposes_strategy_detail(tmp_path: Path) -> None:
     assert len(detail["factors"]) == 3
 
 
+def test_local_api_service_exposes_innovative_drug_observer(tmp_path: Path) -> None:
+    """本地 API 应暴露创新药观察策略定义和实例。"""
+    service = LocalApiService(RuntimePaths(tmp_path / "runtime"))
+
+    strategies = service.strategies()
+    instances = service.strategy_instances()
+
+    assert any(item["strategy_id"] == "innovative_drug_globalization_observer_v0" for item in strategies)
+    observer = next(item for item in instances if item["strategy_id"] == "innovative_drug_globalization_observer_v0")
+    assert observer["status"] == "research_observation"
+    assert observer["template_id"] == "opportunity_observer"
+
+
 def test_local_api_service_exposes_factor_detail(tmp_path: Path) -> None:
     """因子详情应包含 as-of 配置和使用该因子的策略关系。"""
     service = LocalApiService(_seed_runtime(tmp_path))
