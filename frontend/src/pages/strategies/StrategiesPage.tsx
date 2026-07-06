@@ -54,6 +54,7 @@ export function StrategiesPage() {
     () => instances.find((instance) => instance.strategy_id === selectedInstanceId) ?? instances[0] ?? null,
     [instances, selectedInstanceId]
   );
+  const selectedIsObservation = selectedInstance?.status === "research_observation";
   const accountPositions = useMemo(() => sortAccountPositions(accountSnapshot?.positions ?? []), [accountSnapshot]);
 
   useEffect(() => {
@@ -451,6 +452,17 @@ export function StrategiesPage() {
           ))}
         </div>
       </section>
+      {selectedIsObservation ? (
+        <section className="panel">
+          <div className="detail-heading">
+            <div>
+              <h2>观察策略</h2>
+              <p>该策略仅用于投研观察和净值跟踪，不构成调仓建议，不进入真实组合账户。</p>
+            </div>
+            <span className="status neutral">观察中，不可交易</span>
+          </div>
+        </section>
+      ) : null}
       <StrategyOperationsPanel selectedInstance={selectedInstance} onTransition={handleTransition} />
       <StrategyAccountSnapshotPanel accountMessage={accountMessage} accountPositions={accountPositions} accountSnapshot={accountSnapshot} />
       <ManualOrderPanel
