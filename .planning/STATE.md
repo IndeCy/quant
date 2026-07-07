@@ -2,11 +2,11 @@
 
 ## Active Milestone
 
-Enterprise Quant Platform / Milestone E22：运行配置迁移与备份校验
+Hot Money Behavior Engine / Milestone Y3：主线板块与龙头识别
 
 ## Active Phase
 
-Phase E22.1：Runtime Config Migration Check
+Phase Y3.1：Sector Momentum and Leader Stock Engine
 
 ## Current Status
 
@@ -120,15 +120,22 @@ pending
 - Tushare token、Bark URL、QUANT_HOME、券商交易开关已切到统一配置读取；环境审计改为以 `config_file` 为核心配置来源。
 - 当前真实接口：`/api/readiness` 返回 `READY`，`/api/environment/audit` 返回 `PASS` 且 `secret_values_exposed=false`。
 - 后端全量测试通过：`459 passed`；前端全量测试通过：`29 files / 53 tests`；`npm run build:pre` 通过，本地服务已重启。
+- Phase Y1/Y2.1：Hot Money Emotion State Engine。
+- 新增 `data/tushare_limit_incremental.py`，通过 Tushare `limit_list_d` 写入本地 DuckDB 涨跌停缓存，字段统一为 `limit_type`。
+- 新增 `runtime/hot_money_emotion.py`，聚合每日涨停数、跌停数、炸板数、炸板率、涨跌停成交额和市场成交额变化。
+- 新增 `runtime/hot_money_state.py`，输出 `ICE_COLD/REBOUND/EXPANSION/BUBBLE/DISTRIBUTION` 状态、情绪分、风险分和状态转移原因。
+- 新增 `scripts/run_hot_money_state.py`，从本地缓存生成研究报告，不执行交易、不接入真实调仓。
+- 新增测试 `tests/test_tushare_limit_incremental.py`、`tests/test_hot_money_emotion.py`、`tests/test_hot_money_state.py`、`tests/test_hot_money_state_cli.py`。
+- 新增测试通过：`7 passed`；后端全量测试通过：`475 passed`；本地尚无 `data/limit_list_increment.duckdb`，真实 smoke 报告已按计划跳过。
 
 ## Next Action
 
-进入 Phase E22.1：Runtime Config Migration Check。把 `.env.properties` 纳入迁移和备份检查清单，但继续排除 Git 提交。
+进入 Phase Y3.1：Sector Momentum and Leader Stock Engine。基于涨跌停情绪缓存继续识别主线板块、唯一龙头、次级龙头和杂毛过滤原因。
 
 ## Resume Prompt
 
 ```text
-继续企业级量化系统项目，从 .planning/STATE.md 恢复，执行 Phase E22.1：Runtime Config Migration Check。
+继续游资行为引擎项目，从 .planning/STATE.md 恢复，执行 Phase Y3.1：Sector Momentum and Leader Stock Engine。
 ```
 
 ## Verification Commands
@@ -161,6 +168,7 @@ test -f docs/development_workflow.md
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_quality_report.py tests/test_operations_quality_report_api.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_environment_audit.py tests/test_environment_audit_api.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_runtime_config.py -q
+/Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_tushare_limit_incremental.py tests/test_hot_money_emotion.py tests/test_hot_money_state.py tests/test_hot_money_state_cli.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_git_baseline_report.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_safe_commit_review.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/run_post_baseline_audit.py --output-dir docs/release

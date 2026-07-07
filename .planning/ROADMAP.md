@@ -219,3 +219,19 @@
 - 优先级：P4
 - 状态：pending
 - 目标：把 `.env.properties` 纳入迁移检查清单但继续排除 Git，确保迁移 Mac mini 时不会遗漏本地私密配置。
+
+## Milestone Y1/Y2：游资情绪数据层与市场状态机
+
+### Phase Y1/Y2.1：Hot Money Emotion State Engine
+
+- 优先级：P2
+- 状态：done
+- 目标：接入 Tushare 涨跌停缓存，聚合每日市场情绪指标，并输出平滑后的短线市场状态。
+
+## Milestone Y3：主线板块与龙头识别
+
+### Phase Y3.1：Sector Momentum and Leader Stock Engine
+
+- 优先级：P2
+- 状态：pending
+- 目标：基于情绪数据、板块涨停分布和个股强度识别 1-3 个主线板块、唯一龙头和次级龙头。

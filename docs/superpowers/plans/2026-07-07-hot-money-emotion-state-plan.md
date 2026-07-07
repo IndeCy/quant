@@ -45,7 +45,7 @@
 - Produces: `class LimitListDuckDBStore`
 - Produces: `update_limit_list_range(store, client, trade_dates) -> dict[str, object]`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Create tests that:
 - use a fake client returning one涨停 and one跌停 row;
@@ -61,7 +61,7 @@ assert rows["limit_type"].tolist() == ["U", "D"]
 assert len(rows_after_second_update) == 2
 ```
 
-- [ ] **Step 2: Run red test**
+- [x] **Step 2: Run red test**
 
 ```bash
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_tushare_limit_incremental.py -q
@@ -69,7 +69,7 @@ assert len(rows_after_second_update) == 2
 
 Expected: import failure because `data.tushare_limit_incremental` does not exist.
 
-- [ ] **Step 3: Implement cache module**
+- [x] **Step 3: Implement cache module**
 
 Implementation requirements:
 - `TushareLimitClient` reads token with `get_config_value("TUSHARE_TOKEN")`;
@@ -79,7 +79,7 @@ Implementation requirements:
 - `PRIMARY KEY (trade_date, ts_code)` supports idempotent `INSERT OR REPLACE`;
 - `load(start_date, end_date)` returns rows ordered by `trade_date, ts_code`.
 
-- [ ] **Step 4: Run green test**
+- [x] **Step 4: Run green test**
 
 ```bash
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_tushare_limit_incremental.py -q
@@ -97,7 +97,7 @@ Expected: `2 passed`.
 - Consumes standardized limit rows with `trade_date`, `ts_code`, `limit_type`, `open_times`, `amount`.
 - Produces: `build_market_emotion_daily(limit_rows: pd.DataFrame, market_amount: pd.DataFrame | None = None) -> pd.DataFrame`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Create tests that verify:
 - `U` rows count as `limit_up_count`;
@@ -116,7 +116,7 @@ assert row["open_board_rate"] == 0.5
 assert round(float(second_day["market_amount_chg"]), 4) == 0.2
 ```
 
-- [ ] **Step 2: Run red test**
+- [x] **Step 2: Run red test**
 
 ```bash
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_hot_money_emotion.py -q
@@ -124,7 +124,7 @@ assert round(float(second_day["market_amount_chg"]), 4) == 0.2
 
 Expected: import failure because `runtime.hot_money_emotion` does not exist.
 
-- [ ] **Step 3: Implement emotion aggregation**
+- [x] **Step 3: Implement emotion aggregation**
 
 Implementation requirements:
 - returns columns `trade_date`, `limit_up_count`, `limit_down_count`, `zha_ban_count`, `open_board_rate`, `limit_amount`, `market_amount`, `market_amount_chg`;
@@ -132,7 +132,7 @@ Implementation requirements:
 - all numeric fields are coerced safely;
 - result is sorted by `trade_date`.
 
-- [ ] **Step 4: Run green test**
+- [x] **Step 4: Run green test**
 
 ```bash
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_hot_money_emotion.py -q
@@ -151,7 +151,7 @@ Expected: `2 passed`.
 - Produces: `MarketState` enum.
 - Produces: `MarketStateEngine.classify_series(emotion: pd.DataFrame) -> pd.DataFrame`
 
-- [ ] **Step 1: Write failing tests**
+- [x] **Step 1: Write failing tests**
 
 Create tests that verify:
 - extreme跌停/炸板 risk directly enters `DISTRIBUTION`;
@@ -168,7 +168,7 @@ assert result.iloc[1]["raw_state"] == MarketState.BUBBLE.value
 assert result.iloc[1]["smoothed_state"] in {MarketState.REBOUND.value, MarketState.EXPANSION.value}
 ```
 
-- [ ] **Step 2: Run red test**
+- [x] **Step 2: Run red test**
 
 ```bash
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_hot_money_state.py -q
@@ -176,7 +176,7 @@ assert result.iloc[1]["smoothed_state"] in {MarketState.REBOUND.value, MarketSta
 
 Expected: import failure because `runtime.hot_money_state` does not exist.
 
-- [ ] **Step 3: Implement state engine**
+- [x] **Step 3: Implement state engine**
 
 Implementation requirements:
 - define states `ICE_COLD`, `REBOUND`, `EXPANSION`, `BUBBLE`, `DISTRIBUTION`;
@@ -186,7 +186,7 @@ Implementation requirements:
 - normal transitions move at most one state step per day;
 - extreme risk can immediately force `DISTRIBUTION`.
 
-- [ ] **Step 4: Run green test**
+- [x] **Step 4: Run green test**
 
 ```bash
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_hot_money_state.py -q
@@ -204,14 +204,14 @@ Expected: `2 passed`.
 - Consumes: `LimitListDuckDBStore.load`, `build_market_emotion_daily`, `MarketStateEngine.classify_series`.
 - Produces: `market_state_report.md`.
 
-- [ ] **Step 1: Write failing CLI test**
+- [x] **Step 1: Write failing CLI test**
 
 Create a test that:
 - seeds a temporary `LimitListDuckDBStore`;
 - runs `scripts/run_hot_money_state.py --cache-path ... --start-date ... --end-date ... --output-dir ...`;
 - asserts `market_state_report.md` exists and contains `市场状态`.
 
-- [ ] **Step 2: Run red test**
+- [x] **Step 2: Run red test**
 
 ```bash
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_hot_money_state_cli.py -q
@@ -219,7 +219,7 @@ Create a test that:
 
 Expected: script missing failure.
 
-- [ ] **Step 3: Implement CLI**
+- [x] **Step 3: Implement CLI**
 
 Implementation requirements:
 - arguments: `--cache-path`, `--start-date`, `--end-date`, `--output-dir`;
@@ -228,7 +228,7 @@ Implementation requirements:
 - prints report path to stdout;
 - does not call Tushare and does not write trading artifacts.
 
-- [ ] **Step 4: Run green test**
+- [x] **Step 4: Run green test**
 
 ```bash
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_hot_money_state_cli.py -q
@@ -243,19 +243,19 @@ Expected: `1 passed`.
 - Modify: `/Users/admin/PycharmProjects/quant/.planning/STATE.md`
 - Modify: `/Users/admin/PycharmProjects/quant/.planning/TASKS.md`
 
-- [ ] **Step 1: Run focused verification**
+- [x] **Step 1: Run focused verification**
 
 ```bash
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_tushare_limit_incremental.py tests/test_hot_money_emotion.py tests/test_hot_money_state.py tests/test_hot_money_state_cli.py -q
 ```
 
-- [ ] **Step 2: Run full backend verification**
+- [x] **Step 2: Run full backend verification**
 
 ```bash
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest -q
 ```
 
-- [ ] **Step 3: Optional smoke report**
+- [x] **Step 3: Optional smoke report**
 
 Only if `data/limit_list_increment.duckdb` exists locally, run:
 
@@ -269,7 +269,7 @@ Only if `data/limit_list_increment.duckdb` exists locally, run:
 
 Do not commit the generated `runs/` output.
 
-- [ ] **Step 4: Update planning state**
+- [x] **Step 4: Update planning state**
 
 Update `.planning/ROADMAP.md`, `.planning/STATE.md`, and `.planning/TASKS.md` with:
 
@@ -279,7 +279,7 @@ Status：done after verification
 Next Action：Phase Y3 主线板块与龙头识别
 ```
 
-- [ ] **Step 5: Stage safely**
+- [x] **Step 5: Stage safely**
 
 ```bash
 git add data/tushare_limit_incremental.py runtime/hot_money_emotion.py runtime/hot_money_state.py scripts/run_hot_money_state.py tests/test_tushare_limit_incremental.py tests/test_hot_money_emotion.py tests/test_hot_money_state.py tests/test_hot_money_state_cli.py .planning/ROADMAP.md .planning/STATE.md .planning/TASKS.md docs/superpowers/plans/2026-07-07-hot-money-emotion-state-plan.md
@@ -288,7 +288,7 @@ if [ -n "$bad" ]; then echo "$bad"; exit 1; fi
 git diff --cached --check
 ```
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git commit -m "feat: add hot money emotion state engine"
