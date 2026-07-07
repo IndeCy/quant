@@ -1,0 +1,47 @@
+.hot-money-sector-row {
+  width: 100%;
+  border-left: 0;
+  border-right: 0;
+  border-top: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  text-align: left;
+}
+
+.hot-money-sector-row:hover,
+.hot-money-sector-row.selected-row {
+  background: #f8fafc;
+}
+
+.hot-money-sector-row.selected-row {
+  box-shadow: inset 3px 0 0 #2563eb;
+}
+
+.hot-money-detail {
+  margin-top: 14px;
+  border: 1px solid #e5edf6;
+  border-radius: 8px;
+  padding: 12px;
+  background: #ffffff;
+}
+
+.compact-heading {
+  margin-bottom: 8px;
+}
+
+.compact-heading h3 {
+  margin: 0 0 4px;
+  font-size: 15px;
+}
+
+.compact-heading p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+}
+
+.hot-money-limit-row {
+  grid-template-columns: minmax(170px, 1fr) 58px minmax(180px, 0.8fr);
+}

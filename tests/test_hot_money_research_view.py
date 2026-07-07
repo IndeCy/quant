@@ -35,6 +35,11 @@ def test_build_hot_money_research_view_returns_latest_mainlines(tmp_path: Path) 
     assert view["latest_trade_date"] == "20260706"
     assert view["mainlines"][0]["sector_name"] == "算力"
     assert view["leaders"][0]["role"] == "LEADER"
+    assert [row["name"] for row in view["sector_limit_ups"]] == ["A1", "A2"]
+    assert view["sector_limit_ups"][0]["sector_name"] == "算力"
+    assert view["sector_limit_ups"][0]["role"] == "LEADER"
+    assert view["sector_limit_ups"][1]["role"] == "SECONDARY_LEADER"
+    assert view["sector_limit_ups"][0]["amount"] == 120.0
 
 
 def test_build_hot_money_research_view_reports_missing_cache(tmp_path: Path) -> None:

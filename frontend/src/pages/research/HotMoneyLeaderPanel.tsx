@@ -1,7 +1,18 @@
+import { useMemo, useState } from "react";
+
 import type { HotMoneyLeaderView } from "../../entities/research/model";
 import { hotMoneyStatusLabel } from "../../entities/research/hotMoney";
+import { formatNumber, formatPercent } from "../../shared/lib/formatters";
 
 export function HotMoneyLeaderPanel({ view }: { view: HotMoneyLeaderView }) {
+  const defaultSector = view.mainlines[0]?.sector_name ?? "";
+  const [selectedSector, setSelectedSector] = useState(defaultSector);
+  const activeSector = view.mainlines.some((item) => item.sector_name === selectedSector) ? selectedSector : defaultSector;
+  const selectedStocks = useMemo(
+    () => view.sector_limit_ups.filter((item) => item.sector_name === activeSector),
+    [activeSector, view.sector_limit_ups]
+  );
+
   return (
     <section className="panel opportunity-panel">
       <div className="detail-heading">
@@ -34,7 +45,12 @@ export function HotMoneyLeaderPanel({ view }: { view: HotMoneyLeaderView }) {
       <div className="mini-table opportunity-ranking-table">
         {view.mainlines.length === 0 ? <p className="muted-text">暂无主线识别结果，等待涨跌停缓存生成。</p> : null}
         {view.mainlines.map((item) => (
-          <div key={`${item.trade_date}:${item.sector_name}`} className="mini-row opportunity-ranking-row">
+          <button
+            key={`${item.trade_date}:${item.sector_name}`}
+            className={`mini-row opportunity-ranking-row hot-money-sector-row ${item.sector_name === activeSector ? "selected-row" : ""}`}
+            type="button"
+            onClick={() => setSelectedSector(item.sector_name)}
+          >
             <span>
               {item.rank}. {item.sector_name}
               <small>{item.reason}</small>
@@ -43,12 +59,49 @@ export function HotMoneyLeaderPanel({ view }: { view: HotMoneyLeaderView }) {
               {item.sector_score.toFixed(1)}
               <small>强度分</small>
             </strong>
-          </div>
+            <em>点击查看涨停票</em>
+          </button>
         ))}
       </div>
+      {activeSector ? (
+        <div className="hot-money-detail">
+          <div className="detail-heading compact-heading">
+            <div>
+              <h3>{activeSector} 涨停票</h3>
+              <p>展示该板块最新交易日全部涨停样本，龙头/次级龙头来自同一套识别结果。</p>
+            </div>
+            <span className="status neutral">{selectedStocks.length}</span>
+          </div>
+          <div className="mini-table opportunity-stocks">
+            {selectedStocks.map((item) => (
+              <div key={`${item.trade_date}:${item.sector_name}:${item.ts_code}`} className="mini-row hot-money-limit-row">
+                <span>
+                  {item.name}
+                  <small>{item.ts_code} / {item.role}</small>
+                  <small>首次 {item.first_time || "-"} / 最后 {item.last_time || "-"}</small>
+                </span>
+                <strong>
+                  {item.limit_streak}
+                  <small>连板</small>
+                </strong>
+                <em>
+                  涨幅 {formatPercent(item.pct_chg / 100)}
+                  <br />
+                  成交额 {formatNumber(item.amount)}
+                  <br />
+                  占板块 {formatPercent(item.amount_share)}
+                  <br />
+                  开板 {item.open_times} 次
+                </em>
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : null}
       <div className="mini-table opportunity-stocks">
+        {view.leaders.length > 0 ? <p className="muted-text">龙头候选摘要</p> : null}
         {view.leaders.map((item) => (
-          <div key={`${item.trade_date}:${item.ts_code}:${item.role}`} className="mini-row opportunity-stock-row">
+          <div key={`${item.trade_date}:${item.sector_name}:${item.ts_code}:${item.role}`} className="mini-row opportunity-stock-row">
             <span>
               {item.name}
               <small>{item.ts_code} / {item.sector_name}</small>

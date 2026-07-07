@@ -136,6 +136,16 @@ export interface HotMoneyLeader {
   reason: string;
 }
 
+export interface HotMoneyLimitUpStock extends HotMoneyLeader {
+  close: number;
+  pct_chg: number;
+  amount: number;
+  fd_amount: number;
+  first_time: string;
+  last_time: string;
+  open_times: number;
+}
+
 export interface HotMoneyLeaderView {
   status: string;
   message: string;
@@ -143,4 +153,5 @@ export interface HotMoneyLeaderView {
   latest_trade_date: string;
   mainlines: HotMoneyMainline[];
   leaders: HotMoneyLeader[];
+  sector_limit_ups: HotMoneyLimitUpStock[];
 }
