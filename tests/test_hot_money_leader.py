@@ -49,3 +49,31 @@ def test_leader_engine_filters_non_mainline_stocks() -> None:
     result = build_leader_stock_daily(limit_rows, sector_momentum, sector_map)
 
     assert result[result["ts_code"] == "000009.SZ"]["role"].tolist() == ["FILTERED"]
+
+
+def test_leader_streak_is_not_inflated_by_multi_sector_mapping() -> None:
+    """同一股票映射多个概念时，股票自身连板数不能被概念展开重复计数。"""
+    limit_rows = pd.DataFrame(
+        [
+            {"trade_date": "20260703", "ts_code": "000001.SZ", "name": "A1", "limit_type": "U", "amount": 80.0, "pct_chg": 10.0, "open_times": 0},
+            {"trade_date": "20260706", "ts_code": "000001.SZ", "name": "A1", "limit_type": "U", "amount": 120.0, "pct_chg": 10.0, "open_times": 0},
+        ]
+    )
+    sector_map = pd.DataFrame(
+        [
+            {"ts_code": "000001.SZ", "sector_name": "算力"},
+            {"ts_code": "000001.SZ", "sector_name": "机器人"},
+        ]
+    )
+    sector_momentum = pd.DataFrame(
+        [
+            {"trade_date": "20260706", "sector_name": "算力", "is_mainline": True},
+            {"trade_date": "20260706", "sector_name": "机器人", "is_mainline": True},
+        ]
+    )
+
+    result = build_leader_stock_daily(limit_rows, sector_momentum, sector_map)
+    daily = result[result["trade_date"] == "20260706"]
+
+    assert daily["sector_name"].tolist() == ["机器人", "算力"]
+    assert daily["limit_streak"].tolist() == [2, 2]
