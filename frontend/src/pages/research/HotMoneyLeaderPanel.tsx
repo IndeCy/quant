@@ -1,7 +1,7 @@
 import { useMemo, useState } from "react";
 
 import type { HotMoneyLeaderView } from "../../entities/research/model";
-import { hotMoneyStatusLabel } from "../../entities/research/hotMoney";
+import { formatHotMoneyTradeDate, hotMoneyStatusLabel } from "../../entities/research/hotMoney";
 import { formatNumber, formatPercent } from "../../shared/lib/formatters";
 
 export function HotMoneyLeaderPanel({ view }: { view: HotMoneyLeaderView }) {
@@ -27,7 +27,7 @@ export function HotMoneyLeaderPanel({ view }: { view: HotMoneyLeaderView }) {
       <div className="config-grid">
         <div>
           <span>最新交易日</span>
-          <strong>{view.latest_trade_date || "-"}</strong>
+          <strong>{formatHotMoneyTradeDate(view.latest_trade_date)}</strong>
         </div>
         <div>
           <span>主线数量</span>
@@ -40,6 +40,10 @@ export function HotMoneyLeaderPanel({ view }: { view: HotMoneyLeaderView }) {
         <div>
           <span>状态说明</span>
           <strong>{view.message}</strong>
+        </div>
+        <div>
+          <span>数据口径</span>
+          <strong>Tushare涨跌停榜缓存，非实时盘口</strong>
         </div>
       </div>
       <div className="mini-table opportunity-ranking-table">
@@ -67,8 +71,8 @@ export function HotMoneyLeaderPanel({ view }: { view: HotMoneyLeaderView }) {
         <div className="hot-money-detail">
           <div className="detail-heading compact-heading">
             <div>
-              <h3>{activeSector} 涨停票</h3>
-              <p>展示该板块最新交易日全部涨停样本，龙头/次级龙头来自同一套识别结果。</p>
+              <h3>{formatHotMoneyTradeDate(view.latest_trade_date)} {activeSector}涨停明细</h3>
+              <p>展示该交易日缓存中的全部涨停样本，不代表今天盘中实时状态。</p>
             </div>
             <span className="status neutral">{selectedStocks.length}</span>
           </div>
