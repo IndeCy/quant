@@ -115,3 +115,32 @@ export interface OpportunityRanking {
   created_at?: string;
   modified_at?: string;
 }
+
+export interface HotMoneyMainline {
+  trade_date: string;
+  sector_name: string;
+  sector_score: number;
+  rank: number;
+  reason: string;
+}
+
+export interface HotMoneyLeader {
+  trade_date: string;
+  sector_name: string;
+  ts_code: string;
+  name: string;
+  role: string;
+  leader_score: number;
+  limit_streak: number;
+  amount_share: number;
+  reason: string;
+}
+
+export interface HotMoneyLeaderView {
+  status: string;
+  message: string;
+  cache_path: string;
+  latest_trade_date: string;
+  mainlines: HotMoneyMainline[];
+  leaders: HotMoneyLeader[];
+}

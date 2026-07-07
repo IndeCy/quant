@@ -11,6 +11,7 @@ import { getReadinessReport } from "../entities/readiness/api";
 import { listReports } from "../entities/report/api";
 import {
   getResearchTodos,
+  getHotMoneyLeaders,
   listFactorIdeas,
   listOpportunityRankings,
   listOpportunityThemes,
@@ -49,6 +50,7 @@ export async function loadDashboardData() {
     operationsReview,
     reports,
     researchTodos,
+    hotMoneyLeaders,
     researchNotes,
     opportunityThemes,
     opportunityRankings,
@@ -74,6 +76,7 @@ export async function loadDashboardData() {
     getOperationsReview(),
     listReports(),
     getResearchTodos(),
+    getHotMoneyLeaders(),
     listResearchNotes(),
     listOpportunityThemes(),
     listOpportunityRankings(),
@@ -104,6 +107,7 @@ export async function loadDashboardData() {
     operationsReview,
     reports,
     researchTodos,
+    hotMoneyLeaders,
     researchNotes,
     opportunityThemes,
     opportunityRankings,

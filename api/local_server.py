@@ -12,6 +12,7 @@ from api.service import LocalApiService
 from runtime.environment_audit import build_environment_audit
 from runtime.operations_ack import list_operations_ack, record_operations_ack
 from runtime.operations_quality_report import build_operations_quality_report
+from runtime.hot_money_research_view import build_hot_money_research_view
 from runtime.operations_review import build_operations_review
 
 
@@ -190,6 +191,12 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
     def opportunity_rankings() -> list[dict[str, Any]]:
         """返回最近一次产业方向强势排行。"""
         return api_service.opportunity_rankings()
+
+    @app.get("/api/research/hot-money-leaders")
+    def hot_money_leaders() -> dict[str, Any]:
+        """返回游资主线与龙头识别摘要。"""
+        cache_path = api_service.paths.data_dir / "limit_list_increment.duckdb"
+        return build_hot_money_research_view(cache_path)
 
     @app.post("/api/research/opportunities")
     def save_opportunity_theme(payload: dict[str, Any]) -> dict[str, Any]:

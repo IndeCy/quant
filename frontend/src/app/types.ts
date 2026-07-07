@@ -11,6 +11,7 @@ import type { ReadinessReport } from "../entities/readiness/model";
 import type { ReportIndex } from "../entities/report/model";
 import type {
   FactorIdea,
+  HotMoneyLeaderView,
   OpportunityRanking,
   OpportunityTheme,
   ResearchNote,
@@ -36,6 +37,7 @@ export interface DashboardData {
   operationsReview: OperationsReview;
   reports: ReportIndex[];
   researchTodos: ResearchTodos;
+  hotMoneyLeaders: HotMoneyLeaderView;
   researchNotes: ResearchNote[];
   opportunityThemes: OpportunityTheme[];
   opportunityRankings: OpportunityRanking[];

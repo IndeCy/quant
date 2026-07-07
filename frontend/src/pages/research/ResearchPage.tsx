@@ -4,6 +4,7 @@ import { useOutletContext } from "react-router-dom";
 import type { DashboardContext } from "../../app/types";
 import { saveFactorIdea, saveResearchNote, saveStrategyIdea } from "../../entities/research/api";
 import { PageHeader } from "../../shared/ui/PageHeader";
+import { HotMoneyLeaderPanel } from "./HotMoneyLeaderPanel";
 
 export function ResearchPage() {
   const data = useOutletContext<DashboardContext>();
@@ -85,6 +86,7 @@ export function ResearchPage() {
   return (
     <>
       <PageHeader title="研究" description="集中维护非紧急研究、Agent 分析入口和可回溯研究材料。" />
+      <HotMoneyLeaderPanel view={data.hotMoneyLeaders} />
       <div className="research-grid">
         <section className="panel detail-panel">
           <div className="detail-heading">

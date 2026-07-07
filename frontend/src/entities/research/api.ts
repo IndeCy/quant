@@ -1,6 +1,7 @@
 import { getJson, postJson } from "../../shared/api/client";
 import type {
   FactorIdea,
+  HotMoneyLeaderView,
   OpportunityRanking,
   OpportunityStock,
   OpportunityTheme,
@@ -47,6 +48,10 @@ export function listOpportunityThemes(): Promise<OpportunityTheme[]> {
 
 export function listOpportunityRankings(): Promise<OpportunityRanking[]> {
   return getJson<OpportunityRanking[]>("/api/research/opportunity-rankings");
+}
+
+export function getHotMoneyLeaders(): Promise<HotMoneyLeaderView> {
+  return getJson<HotMoneyLeaderView>("/api/research/hot-money-leaders");
 }
 
 export function saveOpportunityTheme(payload: OpportunityTheme): Promise<OpportunityTheme> {
