@@ -17,8 +17,13 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--push", action="store_true", help="运行完成后发送统一 Bark 汇总通知")
     parser.add_argument("--source", default="manual", choices=["manual", "scheduler", "api"], help="触发来源")
+    parser.add_argument("--trade-date", default="", help="指定补跑交易日，格式 YYYYMMDD；默认使用当天")
     args = parser.parse_args()
-    summary = run_production_daily_pipeline(push=args.push, source=args.source)
+    summary = run_production_daily_pipeline(
+        push=args.push,
+        source=args.source,
+        trade_date=args.trade_date or None,
+    )
     print(summary)
 
 

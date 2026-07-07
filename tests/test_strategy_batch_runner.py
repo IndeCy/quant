@@ -7,7 +7,7 @@ import pytest
 
 from runtime.paths import RuntimePaths
 from runtime.repository import SystemRepository
-from runtime.strategy_batch_runner import _with_push_args, run_enabled_strategy_instances
+from runtime.strategy_batch_runner import _with_push_args, _with_run_args, run_enabled_strategy_instances
 
 
 def test_batch_runner_runs_enabled_factor_topn_instances(tmp_path: Path) -> None:
@@ -94,7 +94,7 @@ def test_strategy_batch_dispatches_opportunity_observer(tmp_path: Path, monkeypa
     )
     monkeypatch.setattr(
         "runtime.strategy_batch_runner.run_opportunity_observer_instance",
-        lambda instance, paths: {"selected_count": 3, "nav": 1.0},
+        lambda instance, paths, trade_date=None: {"selected_count": 3, "nav": 1.0},
     )
 
     result = run_enabled_strategy_instances(paths)
@@ -114,6 +114,21 @@ def test_strategy_batch_dispatches_opportunity_observer(tmp_path: Path, monkeypa
 def test_batch_runner_appends_push_args(push: bool, bark_url: str, expected: list[str]) -> None:
     """批处理开启通知时，应把统一 Bark 配置透传给兼容策略脚本。"""
     assert _with_push_args(["python", "script.py"], push, bark_url) == expected
+
+
+def test_batch_runner_appends_requested_run_date_to_compat_script() -> None:
+    """兼容策略脚本必须收到补跑日期，避免记录落到当天。"""
+    command = _with_run_args(["python", "script.py"], "20260707", True, "https://example.invalid/token")
+
+    assert command == [
+        "python",
+        "script.py",
+        "--run-date",
+        "20260707",
+        "--push",
+        "--bark-url",
+        "https://example.invalid/token",
+    ]
 
 
 def _seed_factor_scores(paths: RuntimePaths) -> None:

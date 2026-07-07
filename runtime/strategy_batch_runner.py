@@ -22,20 +22,24 @@ COMPAT_ADAPTER_COMMANDS: dict[str, list[str]] = {
 }
 
 
-def run_enabled_strategy_instances(paths: RuntimePaths | None = None, push: bool = False) -> dict[str, object]:
+def run_enabled_strategy_instances(
+    paths: RuntimePaths | None = None,
+    push: bool = False,
+    trade_date: str | None = None,
+) -> dict[str, object]:
     """运行所有启用的策略实例，并记录每个实例的运行结果。"""
     runtime_paths = paths or get_runtime_paths()
     runtime_paths.ensure_directories()
     repository = SystemRepository(runtime_paths.system_state_path)
     instances = repository.list_runnable_strategy_instances()
-    trade_date = datetime.now().strftime("%Y%m%d")
+    target_date = trade_date or datetime.now().strftime("%Y%m%d")
     bark_url = resolve_bark_url() if push else ""
     results = [
-        _run_instance(instance, runtime_paths, repository, trade_date, push=push, bark_url=bark_url)
+        _run_instance(instance, runtime_paths, repository, target_date, push=push, bark_url=bark_url)
         for instance in instances
     ]
     return {
-        "trade_date": trade_date,
+        "trade_date": target_date,
         "enabled_count": len(instances),
         "success_count": sum(1 for item in results if item["status"] == "SUCCESS"),
         "failed_count": sum(1 for item in results if item["status"] == "FAILED"),
@@ -77,7 +81,7 @@ def _run_instance(
             return {"strategy_id": strategy_id, "status": "FAILED", "message": message}
     if command is None and instance.get("template_id") == "opportunity_observer":
         try:
-            result = run_opportunity_observer_instance(instance, paths)
+            result = run_opportunity_observer_instance(instance, paths, trade_date=trade_date)
             message = f"observation selected {result['selected_count']} symbols, nav {result['nav']:.6f}"
             _send_native_notification(instance, f"{message}\n观察策略，不构成调仓建议", push, bark_url)
             return {"strategy_id": strategy_id, "status": "SUCCESS", "message": message}
@@ -90,7 +94,7 @@ def _run_instance(
         message = f"unsupported_template: {instance.get('template_id')}"
         repository.record_strategy_run(strategy_id, trade_date, "FAILED", paths.runs_dir / trade_date, message)
         return {"strategy_id": strategy_id, "status": "FAILED", "message": message}
-    command = _with_push_args(command, push, bark_url)
+    command = _with_run_args(command, trade_date, push, bark_url)
     result = subprocess.run(command, cwd=Path(__file__).resolve().parents[1], text=True, capture_output=True, check=False)
     status = "SUCCESS" if result.returncode == 0 else "FAILED"
     message = _last_message(result.stdout, result.stderr) if result.returncode == 0 else result.stderr[-500:]
@@ -105,8 +109,19 @@ def _last_message(stdout: str, stderr: str) -> str:
     return text.splitlines()[-1][-500:]
 
 
+def _with_run_args(command: list[str], trade_date: str, push: bool, bark_url: str) -> list[str]:
+    """按需给兼容策略脚本追加统一运行参数。"""
+    result = list(command)
+    result.extend(["--run-date", trade_date])
+    if not push or not bark_url:
+        return result
+    result.append("--push")
+    result.extend(["--bark-url", bark_url])
+    return result
+
+
 def _with_push_args(command: list[str], push: bool, bark_url: str) -> list[str]:
-    """按需给兼容策略脚本追加统一通知参数。"""
+    """兼容旧测试和外部调用，仅追加通知参数。"""
     result = list(command)
     if not push or not bark_url:
         return result

@@ -65,6 +65,23 @@ def test_scheduler_watchdog_notifies_when_trading_pipeline_missing(
     assert "建议" in notifications[0]["body"]
 
 
+def test_scheduler_watchdog_accepts_requested_trade_date(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """补跑巡检时应能指定历史交易日，而不是硬查当天。"""
+    paths = RuntimePaths(tmp_path / "runtime")
+    _seed_success_state(paths, "20260707")
+    _seed_success_state(paths, "20260708")
+
+    monkeypatch.setattr("runtime.scheduler_watchdog._today", lambda: "20260708")
+
+    result = run_scheduler_watchdog(paths, push=True, trade_date="20260707")
+
+    assert result.trade_date == "20260707"
+    assert result.status == "SUCCESS"
+
+
 def _seed_success_state(paths: RuntimePaths, trade_date: str) -> None:
     paths.ensure_directories()
     repository = SystemRepository(paths.system_state_path)
@@ -82,7 +99,8 @@ def _seed_success_state(paths: RuntimePaths, trade_date: str) -> None:
         {"strength_score": 1.0, "upgrade_candidate": False},
         "ok",
     )
-    dates = pd.to_datetime(["2026-07-01", "2026-07-02"])
+    latest_date = pd.to_datetime(trade_date, format="%Y%m%d")
+    dates = pd.to_datetime([latest_date - pd.Timedelta(days=1), latest_date])
     monitoring = MonitoringRepository(paths.monitoring_path)
     for strategy_id in ["quality_overlay", "mainline_chain_factor_v1", "innovative_drug_globalization_observer_v0"]:
         monitoring.upsert_strategy_daily(

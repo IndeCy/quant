@@ -80,6 +80,7 @@ class LocalApiService:
                 paths=self.paths,
                 push=bool(data.get("push", False)),
                 source="api",
+                trade_date=str(data.get("trade_date") or "") or None,
             )
         )
 

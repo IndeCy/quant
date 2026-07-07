@@ -70,6 +70,36 @@ def test_opportunity_observer_selects_top5_equal_weight_and_excludes_mature(tmp_
     assert float(latest["exposure"]) == 1.0
 
 
+def test_opportunity_observer_accepts_requested_trade_date(tmp_path: Path, monkeypatch) -> None:
+    """批处理补跑历史日期时，观察策略记录必须落到指定交易日。"""
+    paths = _paths(tmp_path)
+    paths.ensure_directories()
+    repository = SystemRepository(paths.system_state_path)
+    repository.upsert_opportunity_theme({"theme_id": "innovative_drug_globalization", "name": "创新药出海"})
+    _seed_stock(repository, "688235.SH", "S", 80.0, 10.0)
+    monkeypatch.setattr("strategies.opportunity_observer_runner._today", lambda: "20260708")
+    monkeypatch.setattr("strategies.opportunity_observer_runner._load_prices", lambda paths, trade_date, symbols: {"688235.SH": 10.0})
+
+    result = run_opportunity_observer_instance(
+        {
+            "strategy_id": "innovative_drug_globalization_observer_v0",
+            "name": "创新药出海观察策略 V0",
+            "benchmark": "510300",
+            "construction": {"top_n": 1, "weighting": "equal_weight"},
+            "config": {"theme_id": "innovative_drug_globalization", "exclude_mature": True},
+        },
+        paths,
+        trade_date="20260707",
+    )
+
+    run = repository.get_run("innovative_drug_globalization_observer_v0", "20260707")
+    latest = MonitoringRepository(paths.monitoring_path).load_latest_strategy_metrics("innovative_drug_globalization_observer_v0")
+    assert result["trade_date"] == "20260707"
+    assert run is not None
+    assert latest is not None
+    assert latest["trade_date"] == "20260707"
+
+
 def test_opportunity_observer_rolls_nav_from_previous_holdings(tmp_path: Path, monkeypatch) -> None:
     """观察净值应由上一期观察持仓的最新价格滚动，不应每天固定为 1。"""
     paths = _paths(tmp_path)

@@ -462,8 +462,9 @@ def main() -> None:
     parser.add_argument("--skip-update", action="store_true", help="只使用当前完整缓存")
     parser.add_argument("--push", action="store_true", help="通过Bark推送摘要")
     parser.add_argument("--bark-url", default=resolve_bark_url())
+    parser.add_argument("--run-date", default="", help="指定运行日期，格式 YYYYMMDD；默认使用当天")
     args = parser.parse_args()
-    run_date = datetime.now().strftime("%Y%m%d")
+    run_date = args.run_date or datetime.now().strftime("%Y%m%d")
     run_log_dir = RUNS_ROOT / run_date
     try:
         updated_dates: list[str] = []
@@ -486,25 +487,14 @@ def main() -> None:
                 raise SystemExit("--push需要--bark-url或BARK_PUSH_URL")
             push_report(snapshot, args.bark_url)
             SystemRepository(RUNTIME_PATHS.system_state_path).record_run_step(
-                "quality_overlay",
-                snapshot.trade_date,
-                6,
-                "notification",
-                "SUCCESS",
-                "Bark 推送完成",
-                "",
+                "quality_overlay", snapshot.trade_date, 6, "notification", "SUCCESS", "Bark 推送完成", "",
             )
     except Exception as exc:
         write_run_log(run_log_dir, "FAILED", str(exc))
         SystemRepository(RUNTIME_PATHS.system_state_path).record_strategy_run(
-            "quality_overlay",
-            run_date,
-            "FAILED",
-            run_log_dir,
-            str(exc),
+            "quality_overlay", run_date, "FAILED", run_log_dir, str(exc),
         )
         raise
-
 
 if __name__ == "__main__":
     main()

@@ -18,8 +18,9 @@ def main() -> None:
     """命令行入口，供 APScheduler 调用。"""
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--push", action="store_true", help="仅异常时发送 Bark 通知")
+    parser.add_argument("--trade-date", default="", help="指定巡检交易日，格式 YYYYMMDD；默认使用当天")
     args = parser.parse_args()
-    result = run_scheduler_watchdog(push=args.push)
+    result = run_scheduler_watchdog(push=args.push, trade_date=args.trade_date or None)
     print(json.dumps(asdict(result), ensure_ascii=False))
 
 

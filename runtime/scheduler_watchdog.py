@@ -29,20 +29,24 @@ class WatchdogResult:
     issues: list[str]
 
 
-def run_scheduler_watchdog(paths: RuntimePaths | None = None, push: bool = False) -> WatchdogResult:
+def run_scheduler_watchdog(
+    paths: RuntimePaths | None = None,
+    push: bool = False,
+    trade_date: str | None = None,
+) -> WatchdogResult:
     """检查当天调度是否完整运行，只有异常时才发 Bark。"""
     runtime_paths = paths or get_runtime_paths()
     runtime_paths.ensure_directories()
-    trade_date = _today()
+    target_date = trade_date or _today()
     repository = SystemRepository(runtime_paths.system_state_path)
-    issues = _collect_issues(runtime_paths, repository, trade_date)
+    issues = _collect_issues(runtime_paths, repository, target_date)
     status = "FAILED" if issues else "SUCCESS"
-    message = _format_watchdog_message(trade_date, issues)
-    run_dir = runtime_paths.runs_dir / trade_date
-    repository.record_strategy_run(WATCHDOG_ID, trade_date, status, run_dir, message)
+    message = _format_watchdog_message(target_date, issues)
+    run_dir = runtime_paths.runs_dir / target_date
+    repository.record_strategy_run(WATCHDOG_ID, target_date, status, run_dir, message)
     if issues and push:
         send_bark_notification("量化调度异常", message)
-    return WatchdogResult(trade_date=trade_date, status=status, issue_count=len(issues), issues=issues)
+    return WatchdogResult(trade_date=target_date, status=status, issue_count=len(issues), issues=issues)
 
 
 def _collect_issues(paths: RuntimePaths, repository: SystemRepository, trade_date: str) -> list[str]:
@@ -64,8 +68,7 @@ def _collect_issues(paths: RuntimePaths, repository: SystemRepository, trade_dat
     monitoring = MonitoringRepository(paths.monitoring_path)
     for instance in repository.list_strategy_instances(enabled_only=True):
         strategy_id = str(instance["strategy_id"])
-        latest = monitoring.load_latest_strategy_metrics(strategy_id)
-        if not latest or str(latest.get("trade_date")) != trade_date:
+        if not _has_strategy_metrics_on_date(monitoring, strategy_id, trade_date):
             issues.append(f"{strategy_id} 监控净值未更新到 {trade_date}")
 
     if not repository.list_opportunity_direction_rankings(trade_date):
@@ -82,6 +85,13 @@ def _has_research_monitor_success(paths: RuntimePaths, trade_date: str) -> bool:
             [trade_date],
         ).fetchone()
     return bool(row and int(row[0]) > 0)
+
+
+def _has_strategy_metrics_on_date(monitoring: MonitoringRepository, strategy_id: str, trade_date: str) -> bool:
+    history = monitoring.load_strategy_history(strategy_id)
+    if history.empty:
+        return False
+    return bool(history["trade_date"].astype(str).eq(trade_date).any())
 
 
 def _format_watchdog_message(trade_date: str, issues: list[str]) -> str:

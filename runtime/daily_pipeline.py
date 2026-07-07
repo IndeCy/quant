@@ -25,34 +25,35 @@ def run_production_daily_pipeline(
     paths: RuntimePaths | None = None,
     push: bool = False,
     source: str = "manual",
+    trade_date: str | None = None,
 ) -> dict[str, object]:
     """执行每日原子流水线：数据更新成功后才运行策略批处理。"""
     runtime_paths = paths or get_runtime_paths()
     runtime_paths.ensure_directories()
     repository = SystemRepository(runtime_paths.system_state_path)
-    trade_date = datetime.now().strftime("%Y%m%d")
-    run_dir = runtime_paths.runs_dir / trade_date
+    target_date = trade_date or datetime.now().strftime("%Y%m%d")
+    run_dir = runtime_paths.runs_dir / target_date
     run_dir.mkdir(parents=True, exist_ok=True)
 
-    repository.record_strategy_run(PIPELINE_STRATEGY_ID, trade_date, "RUNNING", run_dir, f"source={source}")
+    repository.record_strategy_run(PIPELINE_STRATEGY_ID, target_date, "RUNNING", run_dir, f"source={source}")
     try:
-        data_message = run_data_update()
+        data_message = run_data_update(target_date)
         repository.record_run_step(
             PIPELINE_STRATEGY_ID,
-            trade_date,
+            target_date,
             1,
             "data_update",
             "SUCCESS",
             data_message,
             run_dir,
         )
-        _notify_data_update(repository, trade_date, run_dir, push, "SUCCESS", data_message)
+        _notify_data_update(repository, target_date, run_dir, push, "SUCCESS", data_message)
     except Exception as exc:
         message = f"数据更新失败，策略未执行: {exc}"
-        repository.record_run_step(PIPELINE_STRATEGY_ID, trade_date, 1, "data_update", "FAILED", str(exc), run_dir)
-        _notify_data_update(repository, trade_date, run_dir, push, "FAILED", str(exc))
-        notification = _notify_if_needed(repository, trade_date, run_dir, push, "FAILED", message)
-        repository.record_strategy_run(PIPELINE_STRATEGY_ID, trade_date, "FAILED", run_dir, _with_notification(message, notification))
+        repository.record_run_step(PIPELINE_STRATEGY_ID, target_date, 1, "data_update", "FAILED", str(exc), run_dir)
+        _notify_data_update(repository, target_date, run_dir, push, "FAILED", str(exc))
+        notification = _notify_if_needed(repository, target_date, run_dir, push, "FAILED", message)
+        repository.record_strategy_run(PIPELINE_STRATEGY_ID, target_date, "FAILED", run_dir, _with_notification(message, notification))
         raise
 
     try:
@@ -61,7 +62,7 @@ def run_production_daily_pipeline(
             raise RuntimeError(_summarize_quality_gate(quality_result))
         repository.record_run_step(
             PIPELINE_STRATEGY_ID,
-            trade_date,
+            target_date,
             3,
             "data_quality_gate",
             "SUCCESS",
@@ -72,24 +73,24 @@ def run_production_daily_pipeline(
         message = f"数据质量门禁失败，策略未执行: {exc}"
         repository.record_run_step(
             PIPELINE_STRATEGY_ID,
-            trade_date,
+            target_date,
             3,
             "data_quality_gate",
             "FAILED",
             str(exc),
             run_dir,
         )
-        notification = _notify_if_needed(repository, trade_date, run_dir, push, "FAILED", message)
-        repository.record_strategy_run(PIPELINE_STRATEGY_ID, trade_date, "FAILED", run_dir, _with_notification(message, notification))
+        notification = _notify_if_needed(repository, target_date, run_dir, push, "FAILED", message)
+        repository.record_strategy_run(PIPELINE_STRATEGY_ID, target_date, "FAILED", run_dir, _with_notification(message, notification))
         raise
 
     try:
-        strategy_summary = run_strategy_batch(runtime_paths, push=False)
+        strategy_summary = run_strategy_batch(runtime_paths, push=False, trade_date=target_date)
         strategy_status = "SUCCESS" if int(strategy_summary.get("failed_count", 0)) == 0 else "FAILED"
         strategy_message = _summarize_strategy_batch(strategy_summary)
         repository.record_run_step(
             PIPELINE_STRATEGY_ID,
-            trade_date,
+            target_date,
             4,
             "strategy_batch",
             strategy_status,
@@ -100,15 +101,15 @@ def run_production_daily_pipeline(
             raise RuntimeError(strategy_message)
     except Exception as exc:
         message = f"策略批处理失败: {exc}"
-        notification = _notify_if_needed(repository, trade_date, run_dir, push, "FAILED", message)
-        repository.record_strategy_run(PIPELINE_STRATEGY_ID, trade_date, "FAILED", run_dir, _with_notification(message, notification))
+        notification = _notify_if_needed(repository, target_date, run_dir, push, "FAILED", message)
+        repository.record_strategy_run(PIPELINE_STRATEGY_ID, target_date, "FAILED", run_dir, _with_notification(message, notification))
         raise
 
     message = _build_operation_summary(runtime_paths, strategy_summary)
-    notification = _notify_if_needed(repository, trade_date, run_dir, push, "SUCCESS", message)
-    repository.record_strategy_run(PIPELINE_STRATEGY_ID, trade_date, "SUCCESS", run_dir, _with_notification(message, notification))
+    notification = _notify_if_needed(repository, target_date, run_dir, push, "SUCCESS", message)
+    repository.record_strategy_run(PIPELINE_STRATEGY_ID, target_date, "SUCCESS", run_dir, _with_notification(message, notification))
     return {
-        "trade_date": trade_date,
+        "trade_date": target_date,
         "status": "SUCCESS",
         "source": source,
         "data_update": data_message,
@@ -117,19 +118,19 @@ def run_production_daily_pipeline(
     }
 
 
-def run_data_update() -> str:
+def run_data_update(trade_date: str | None = None) -> str:
     """运行统一数据更新脚本，供测试替换。"""
     from scripts.run_daily_data_update import main as data_update_main
 
     output = io.StringIO()
     with contextlib.redirect_stdout(output):
-        data_update_main()
+        data_update_main(trade_date=trade_date)
     return output.getvalue().strip().splitlines()[-1] if output.getvalue().strip() else "data update completed"
 
 
-def run_strategy_batch(paths: RuntimePaths, push: bool = False) -> dict[str, object]:
+def run_strategy_batch(paths: RuntimePaths, push: bool = False, trade_date: str | None = None) -> dict[str, object]:
     """运行所有启用策略实例，通知由本流水线统一发送。"""
-    return run_enabled_strategy_instances(paths=paths, push=push)
+    return run_enabled_strategy_instances(paths=paths, push=push, trade_date=trade_date)
 
 
 def _notify_if_needed(

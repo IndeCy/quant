@@ -23,11 +23,11 @@ from runtime.paths import get_runtime_paths
 from runtime.repository import SystemRepository
 
 
-def main() -> None:
+def main(trade_date: str | None = None) -> None:
     """更新 A 股行情、ETF/指数基准并校验复权因子完整性。"""
     paths = get_runtime_paths()
     paths.ensure_directories()
-    run_date = datetime.now().strftime("%Y%m%d")
+    run_date = trade_date or datetime.now().strftime("%Y%m%d")
     run_dir = paths.runs_dir / run_date
     repository = SystemRepository(paths.system_state_path)
     register_builtin_opportunity_themes(repository)

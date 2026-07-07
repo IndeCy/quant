@@ -17,12 +17,16 @@ from runtime.paths import RuntimePaths
 from runtime.repository import SystemRepository
 
 
-def run_opportunity_observer_instance(instance: dict[str, Any], paths: RuntimePaths) -> dict[str, Any]:
+def run_opportunity_observer_instance(
+    instance: dict[str, Any],
+    paths: RuntimePaths,
+    trade_date: str | None = None,
+) -> dict[str, Any]:
     """运行观察策略，生成观察组合和净值曲线，不生成交易建议。"""
     repository = SystemRepository(paths.system_state_path)
     strategy_id = str(instance["strategy_id"])
-    trade_date = _today()
-    run_dir = paths.runs_dir / trade_date
+    target_date = trade_date or _today()
+    run_dir = paths.runs_dir / target_date
     run_dir.mkdir(parents=True, exist_ok=True)
     theme_id = str((instance.get("config") or {}).get("theme_id") or "").strip()
     if not theme_id:
@@ -31,14 +35,14 @@ def run_opportunity_observer_instance(instance: dict[str, Any], paths: RuntimePa
     theme = repository.load_opportunity_theme(theme_id)
     selected, excluded = _select_holdings(theme, instance)
     target_weights = {item["symbol"]: float(item["weight"]) for item in selected}
-    current_prices = _current_prices(paths, trade_date, theme, list(target_weights))
-    nav = _update_observation_state(paths, strategy_id, trade_date, target_weights, current_prices)
-    _write_monitoring_snapshot(paths, instance, trade_date, nav, bool(selected))
-    artifacts = _write_artifacts(run_dir, strategy_id, trade_date, selected, excluded, nav)
-    repository.record_strategy_run(strategy_id, trade_date, "SUCCESS", run_dir, f"observation selected {len(selected)} symbols")
+    current_prices = _current_prices(paths, target_date, theme, list(target_weights))
+    nav = _update_observation_state(paths, strategy_id, target_date, target_weights, current_prices)
+    _write_monitoring_snapshot(paths, instance, target_date, nav, bool(selected))
+    artifacts = _write_artifacts(run_dir, strategy_id, target_date, selected, excluded, nav)
+    repository.record_strategy_run(strategy_id, target_date, "SUCCESS", run_dir, f"observation selected {len(selected)} symbols")
     for report_type, path in artifacts.items():
-        repository.upsert_report(report_type, strategy_id, trade_date, report_type, path, tags=["observation", "research"])
-    return {"strategy_id": strategy_id, "trade_date": trade_date, "selected_count": len(selected), "nav": nav}
+        repository.upsert_report(report_type, strategy_id, target_date, report_type, path, tags=["observation", "research"])
+    return {"strategy_id": strategy_id, "trade_date": target_date, "selected_count": len(selected), "nav": nav}
 
 
 def _today() -> str:

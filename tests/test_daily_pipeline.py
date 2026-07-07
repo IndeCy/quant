@@ -19,11 +19,11 @@ def test_daily_pipeline_runs_data_then_strategy_batch(monkeypatch: pytest.Monkey
     calls: list[str] = []
     notifications: list[str] = []
 
-    monkeypatch.setattr("runtime.daily_pipeline.run_data_update", lambda: calls.append("data") or "data ok")
+    monkeypatch.setattr("runtime.daily_pipeline.run_data_update", lambda trade_date=None: calls.append(f"data:{trade_date}") or "data ok")
     monkeypatch.setattr("runtime.daily_pipeline.run_data_quality_gate", lambda paths: _quality_pass())
     monkeypatch.setattr(
         "runtime.daily_pipeline.run_strategy_batch",
-        lambda paths, push=False: calls.append(f"strategy:{push}") or _strategy_summary(),
+        lambda paths, push=False, trade_date=None: calls.append(f"strategy:{push}:{trade_date}") or _strategy_summary(trade_date),
     )
     def capture_notification(title: str, body: str) -> NotificationResult:
         notifications.append(body)
@@ -35,7 +35,9 @@ def test_daily_pipeline_runs_data_then_strategy_batch(monkeypatch: pytest.Monkey
     repository = SystemRepository(paths.system_state_path)
     run = repository.latest_run(PIPELINE_STRATEGY_ID)
 
-    assert calls == ["data", "strategy:False"]
+    assert len(calls) == 2
+    assert calls[0].startswith("data:")
+    assert calls[1].startswith("strategy:False:")
     assert summary["status"] == "SUCCESS"
     assert run is not None
     assert run["status"] == "SUCCESS"
@@ -58,13 +60,13 @@ def test_daily_pipeline_stops_strategy_when_data_update_fails(
     paths = RuntimePaths(tmp_path / "runtime")
     strategy_called = False
 
-    def fail_data_update() -> str:
+    def fail_data_update(trade_date: str | None = None) -> str:
         raise RuntimeError("tushare failed")
 
-    def run_strategy(paths: RuntimePaths, push: bool = False) -> dict[str, object]:
+    def run_strategy(paths: RuntimePaths, push: bool = False, trade_date: str | None = None) -> dict[str, object]:
         nonlocal strategy_called
         strategy_called = True
-        return _strategy_summary()
+        return _strategy_summary(trade_date)
 
     monkeypatch.setattr("runtime.daily_pipeline.run_data_update", fail_data_update)
     monkeypatch.setattr("runtime.daily_pipeline.run_strategy_batch", run_strategy)
@@ -99,12 +101,12 @@ def test_daily_pipeline_stops_strategy_when_data_quality_gate_fails(
     def fail_quality_gate(*args, **kwargs) -> dict[str, object]:
         raise RuntimeError("复权因子缺失")
 
-    def run_strategy(paths: RuntimePaths, push: bool = False) -> dict[str, object]:
+    def run_strategy(paths: RuntimePaths, push: bool = False, trade_date: str | None = None) -> dict[str, object]:
         nonlocal strategy_called
         strategy_called = True
-        return _strategy_summary()
+        return _strategy_summary(trade_date)
 
-    monkeypatch.setattr("runtime.daily_pipeline.run_data_update", lambda: "data ok")
+    monkeypatch.setattr("runtime.daily_pipeline.run_data_update", lambda trade_date=None: "data ok")
     monkeypatch.setattr("runtime.daily_pipeline.run_data_quality_gate", fail_quality_gate)
     monkeypatch.setattr("runtime.daily_pipeline.run_strategy_batch", run_strategy)
     monkeypatch.setattr(
@@ -137,9 +139,9 @@ def test_daily_pipeline_records_missing_bark_when_push_enabled(
     """push 开启但 Bark 未配置时，应写入日志而不是静默跳过。"""
     paths = RuntimePaths(tmp_path / "runtime")
 
-    monkeypatch.setattr("runtime.daily_pipeline.run_data_update", lambda: "data ok")
+    monkeypatch.setattr("runtime.daily_pipeline.run_data_update", lambda trade_date=None: "data ok")
     monkeypatch.setattr("runtime.daily_pipeline.run_data_quality_gate", lambda paths: _quality_pass())
-    monkeypatch.setattr("runtime.daily_pipeline.run_strategy_batch", lambda paths, push=False: _strategy_summary())
+    monkeypatch.setattr("runtime.daily_pipeline.run_strategy_batch", lambda paths, push=False, trade_date=None: _strategy_summary(trade_date))
     monkeypatch.setattr(
         "runtime.daily_pipeline.send_bark_notification",
         lambda title, body: NotificationResult("SKIPPED", "Bark未配置"),
@@ -164,9 +166,9 @@ def test_daily_pipeline_notification_uses_unified_operation_summary(
     _seed_monitoring(paths)
     captured: list[dict[str, str]] = []
 
-    monkeypatch.setattr("runtime.daily_pipeline.run_data_update", lambda: "data ok")
+    monkeypatch.setattr("runtime.daily_pipeline.run_data_update", lambda trade_date=None: "data ok")
     monkeypatch.setattr("runtime.daily_pipeline.run_data_quality_gate", lambda paths: _quality_pass())
-    monkeypatch.setattr("runtime.daily_pipeline.run_strategy_batch", lambda paths, push=False: _strategy_summary())
+    monkeypatch.setattr("runtime.daily_pipeline.run_strategy_batch", lambda paths, push=False, trade_date=None: _strategy_summary(trade_date))
 
     def capture_notification(title: str, body: str) -> NotificationResult:
         captured.append({"title": title, "body": body})
@@ -204,12 +206,12 @@ def test_daily_pipeline_operation_summary_marks_observer_as_non_trading(
     )
     captured: list[dict[str, str]] = []
 
-    monkeypatch.setattr("runtime.daily_pipeline.run_data_update", lambda: "data ok")
+    monkeypatch.setattr("runtime.daily_pipeline.run_data_update", lambda trade_date=None: "data ok")
     monkeypatch.setattr("runtime.daily_pipeline.run_data_quality_gate", lambda paths: _quality_pass())
     monkeypatch.setattr(
         "runtime.daily_pipeline.run_strategy_batch",
-        lambda paths, push=False: {
-            "trade_date": "20260702",
+        lambda paths, push=False, trade_date=None: {
+            "trade_date": trade_date or "20260702",
             "enabled_count": 1,
             "success_count": 1,
             "failed_count": 0,
@@ -241,10 +243,10 @@ def test_daily_pipeline_sends_data_update_template(
 
     monkeypatch.setattr(
         "runtime.daily_pipeline.run_data_update",
-        lambda: "A股新增交易日 0 个，主线链动缓存已同步: 写入11502行，游资涨跌停缓存已同步: 写入85行",
+        lambda trade_date=None: "A股新增交易日 0 个，主线链动缓存已同步: 写入11502行，游资涨跌停缓存已同步: 写入85行",
     )
     monkeypatch.setattr("runtime.daily_pipeline.run_data_quality_gate", lambda paths: _quality_pass())
-    monkeypatch.setattr("runtime.daily_pipeline.run_strategy_batch", lambda paths, push=False: _strategy_summary())
+    monkeypatch.setattr("runtime.daily_pipeline.run_strategy_batch", lambda paths, push=False, trade_date=None: _strategy_summary(trade_date))
 
     def capture_notification(title: str, body: str) -> NotificationResult:
         notifications.append({"title": title, "body": body})
@@ -261,9 +263,38 @@ def test_daily_pipeline_sends_data_update_template(
     assert "策略执行：数据成功后继续执行" in notifications[0]["body"]
 
 
-def _strategy_summary() -> dict[str, object]:
+def test_daily_pipeline_backfill_uses_requested_trade_date(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """指定交易日补跑时，数据更新、策略批处理和运行记录都必须使用同一日期。"""
+    paths = RuntimePaths(tmp_path / "runtime")
+    calls: list[str] = []
+
+    monkeypatch.setattr("runtime.daily_pipeline.run_data_update", lambda trade_date=None: calls.append(f"data:{trade_date}") or "data ok")
+    monkeypatch.setattr("runtime.daily_pipeline.run_data_quality_gate", lambda paths: _quality_pass())
+    monkeypatch.setattr(
+        "runtime.daily_pipeline.run_strategy_batch",
+        lambda paths, push=False, trade_date=None: calls.append(f"strategy:{trade_date}") or _strategy_summary(trade_date),
+    )
+    monkeypatch.setattr(
+        "runtime.daily_pipeline.send_bark_notification",
+        lambda title, body: NotificationResult("SUCCESS", "sent"),
+    )
+
+    summary = run_production_daily_pipeline(paths=paths, push=True, source="api", trade_date="20260707")
+    repository = SystemRepository(paths.system_state_path)
+    run = repository.get_run(PIPELINE_STRATEGY_ID, "20260707")
+
+    assert summary["trade_date"] == "20260707"
+    assert calls == ["data:20260707", "strategy:20260707"]
+    assert run is not None
+    assert run["run_dir"].endswith("runs/20260707")
+
+
+def _strategy_summary(trade_date: str | None = None) -> dict[str, object]:
     return {
-        "trade_date": "20260702",
+        "trade_date": trade_date or "20260702",
         "enabled_count": 2,
         "success_count": 2,
         "failed_count": 0,
