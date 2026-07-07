@@ -9,11 +9,14 @@ import pandas as pd
 
 from runtime.hot_money_leader import build_leader_stock_daily
 from runtime.hot_money_sector import build_sector_momentum_daily
+from runtime.hot_money_sector_map import load_hot_money_sector_map
 
 
 def build_hot_money_research_view(
     cache_path: str | Path,
     sector_map: pd.DataFrame | None = None,
+    concept_path: str | Path | None = None,
+    industry_path: str | Path | None = None,
 ) -> dict[str, object]:
     """从本地涨跌停缓存生成前端可展示的最新主线龙头摘要。"""
     path = Path(cache_path)
@@ -22,6 +25,8 @@ def build_hot_money_research_view(
     limit_rows = _read_limit_rows(path)
     if limit_rows.empty:
         return _empty_view("NO_DATA", "涨跌停缓存为空")
+    if sector_map is None and concept_path is not None and industry_path is not None:
+        sector_map = load_hot_money_sector_map(concept_path, industry_path)
     sector = build_sector_momentum_daily(limit_rows, sector_map)
     leader = build_leader_stock_daily(limit_rows, sector, sector_map)
     if sector.empty:

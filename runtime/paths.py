@@ -67,6 +67,14 @@ class RuntimePaths:
         return self.data_dir / "limit_list_increment.duckdb"
 
     @property
+    def opportunity_concept_increment_path(self) -> Path:
+        return self.data_dir / "opportunity_concept_increment.duckdb"
+
+    @property
+    def industry_increment_path(self) -> Path:
+        return self.data_dir / "industry_increment.duckdb"
+
+    @property
     def benchmark_increment_path(self) -> Path:
         return self.data_dir / "benchmark_increment.duckdb"
 

@@ -45,7 +45,7 @@ def _attach_sector(limit_rows: pd.DataFrame, sector_map: pd.DataFrame | None) ->
     if sector_map is None or sector_map.empty:
         rows["sector_name"] = "UNKNOWN"
         return rows
-    mapping = sector_map[["ts_code", "sector_name"]].drop_duplicates("ts_code")
+    mapping = sector_map[["ts_code", "sector_name"]].drop_duplicates(["ts_code", "sector_name"])
     merged = rows.merge(mapping, on="ts_code", how="left")
     merged["sector_name"] = merged["sector_name"].fillna("UNKNOWN")
     return merged

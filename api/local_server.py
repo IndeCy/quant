@@ -195,7 +195,11 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
     @app.get("/api/research/hot-money-leaders")
     def hot_money_leaders() -> dict[str, Any]:
         """返回游资主线与龙头识别摘要。"""
-        return build_hot_money_research_view(api_service.paths.limit_list_increment_path)
+        return build_hot_money_research_view(
+            api_service.paths.limit_list_increment_path,
+            concept_path=api_service.paths.opportunity_concept_increment_path,
+            industry_path=api_service.paths.industry_increment_path,
+        )
 
     @app.post("/api/research/opportunities")
     def save_opportunity_theme(payload: dict[str, Any]) -> dict[str, Any]:
