@@ -204,6 +204,11 @@ def _format_data_update_lines(message: str) -> list[str]:
     if "主线链动缓存已同步" in message:
         cache = message.split("主线链动缓存已同步:", 1)[1].split("，", 1)[0].strip()
         lines.append(f"主线链动缓存：{cache}")
+    if "游资涨跌停缓存已同步" in message:
+        cache = message.split("游资涨跌停缓存已同步:", 1)[1].split("，", 1)[0].strip()
+        lines.append(f"游资涨跌停缓存：{cache}")
+    elif "游资涨跌停缓存：已是最新" in message:
+        lines.append("游资涨跌停缓存：已是最新")
     if not lines:
         lines.append(f"摘要：{message}")
     return lines

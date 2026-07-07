@@ -239,7 +239,10 @@ def test_daily_pipeline_sends_data_update_template(
     paths = RuntimePaths(tmp_path / "runtime")
     notifications: list[dict[str, str]] = []
 
-    monkeypatch.setattr("runtime.daily_pipeline.run_data_update", lambda: "A股新增交易日 0 个，主线链动缓存已同步: 写入11502行")
+    monkeypatch.setattr(
+        "runtime.daily_pipeline.run_data_update",
+        lambda: "A股新增交易日 0 个，主线链动缓存已同步: 写入11502行，游资涨跌停缓存已同步: 写入85行",
+    )
     monkeypatch.setattr("runtime.daily_pipeline.run_data_quality_gate", lambda paths: _quality_pass())
     monkeypatch.setattr("runtime.daily_pipeline.run_strategy_batch", lambda paths, push=False: _strategy_summary())
 
@@ -254,6 +257,7 @@ def test_daily_pipeline_sends_data_update_template(
     assert notifications[0]["title"] == "量化数据更新SUCCESS"
     assert "数据更新状态：SUCCESS" in notifications[0]["body"]
     assert "A股日线：已是最新，无新增交易日" in notifications[0]["body"]
+    assert "游资涨跌停缓存：写入85行" in notifications[0]["body"]
     assert "策略执行：数据成功后继续执行" in notifications[0]["body"]
 
 

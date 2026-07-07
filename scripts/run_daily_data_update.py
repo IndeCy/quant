@@ -17,6 +17,7 @@ from examples.run_quality_overlay_paper import (
 )
 from pipeline.production_daily import write_run_log
 from runtime.mainline_cache_sync import sync_mainline_cache_from_increment
+from runtime.hot_money_limit_cache_pipeline import resolve_hot_money_cache_dates, update_hot_money_limit_cache
 from runtime.opportunity_catalog import register_builtin_opportunity_themes
 from runtime.paths import get_runtime_paths
 from runtime.repository import SystemRepository
@@ -46,6 +47,7 @@ def main() -> None:
         if sync_result.missing_symbols:
             raise RuntimeError(f"主线链动缓存同步失败，缺失标的: {', '.join(sync_result.missing_symbols[:20])}")
         warnings.append(f"主线链动缓存已同步: 写入{sync_result.rows_written}行")
+        _append_hot_money_cache_message(paths, updated_dates, warnings)
         message = _build_success_message(updated_dates, warnings)
         write_run_log(run_dir, "SUCCESS", message)
         repository.record_strategy_run("system_data_update", run_date, "SUCCESS", run_dir, message)
@@ -73,6 +75,17 @@ def _build_success_message(updated_dates: list[str], warnings: list[str]) -> str
     if warnings:
         parts.append("; ".join(warnings))
     return "，".join(parts)
+
+
+def _append_hot_money_cache_message(paths, updated_dates: list[str], warnings: list[str]) -> list[str]:
+    """同步游资涨跌停缓存，并追加到数据更新摘要。"""
+    cache_dates = resolve_hot_money_cache_dates(paths, updated_dates)
+    result = update_hot_money_limit_cache(paths, cache_dates)
+    if result["updated_dates"]:
+        warnings.append(f"游资涨跌停缓存已同步: 写入{result['rows_written']}行")
+    else:
+        warnings.append("游资涨跌停缓存：已是最新，无新增交易日")
+    return warnings
 
 
 def _opportunity_symbols(repository: SystemRepository) -> list[str]:
