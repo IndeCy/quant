@@ -10,7 +10,7 @@ Phase Y3.1：Sector Momentum and Leader Stock Engine
 
 ## Current Status
 
-pending
+completed
 
 ## Last Completed
 
@@ -127,10 +127,14 @@ pending
 - 新增 `scripts/run_hot_money_state.py`，从本地缓存生成研究报告，不执行交易、不接入真实调仓。
 - 新增测试 `tests/test_tushare_limit_incremental.py`、`tests/test_hot_money_emotion.py`、`tests/test_hot_money_state.py`、`tests/test_hot_money_state_cli.py`。
 - 新增测试通过：`7 passed`；后端全量测试通过：`475 passed`；本地尚无 `data/limit_list_increment.duckdb`，真实 smoke 报告已按计划跳过。
+- Phase Y3.1：Sector Momentum and Leader Stock Engine。
+- 新增 `runtime/hot_money_sector.py`，基于涨停缓存和板块映射输出主线板块排名、强度分、唯一性分和主线标记。
+- 新增 `runtime/hot_money_leader.py`，基于主线板块识别唯一龙头、次级龙头和过滤对象，并输出连板、成交占比和过滤理由。
+- 新增 `scripts/run_hot_money_leaders.py`，从本地缓存生成主线与龙头研究报告，不执行交易、不接入调仓。
 
 ## Next Action
 
-进入 Phase Y3.1：Sector Momentum and Leader Stock Engine。基于涨跌停情绪缓存继续识别主线板块、唯一龙头、次级龙头和杂毛过滤原因。
+进入 Phase Y4.1：Strategy Router and Risk-Aware Hot Money Research Backtest。先生成状态到策略路由，不接真实交易。
 
 ## Resume Prompt
 

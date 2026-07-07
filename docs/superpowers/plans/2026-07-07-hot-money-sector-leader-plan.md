@@ -214,7 +214,7 @@ Implementation rules:
 - Mainline key is `(trade_date, sector_name)` where `sector_momentum.is_mainline == True`.
 - `amount_share = stock amount / sector amount`.
 - `leader_score = 35% streak + 30% amount_share + 20% open_times health + 15% pct_chg`.
-- For each mainline sector/day, top score is `LEADER`, next two with score >= 45 are `SECONDARY_LEADER`, others are `FILTERED`.
+- For each mainline sector/day, top score is `LEADER`, next two with score >= 35 are `SECONDARY_LEADER`, others are `FILTERED`.
 - For non-mainline sector/day, all rows are `FILTERED`.
 - Return exactly the interface columns above.
 

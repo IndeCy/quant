@@ -33,7 +33,7 @@
 | E21-001 | E21.1 | P4 | done | Codex | 本地私密配置统一 | `.env.properties` 已创建且 `/api/environment/audit` 为 PASS |
 | E22-001 | E22.1 | P4 | pending | Codex | 运行配置迁移与备份校验 | `.env.properties` 纳入迁移检查但不提交 Git |
 | Y1Y2-001 | Y1/Y2.1 | P2 | done | Codex | 游资情绪数据层与市场状态机 | `pytest tests/test_tushare_limit_incremental.py tests/test_hot_money_emotion.py tests/test_hot_money_state.py tests/test_hot_money_state_cli.py -q` |
-| Y3-001 | Y3.1 | P2 | pending | Codex | 主线板块与龙头识别 | 主线 Top3、唯一龙头、次级龙头和杂毛过滤原因 |
+| Y3-001 | Y3.1 | P2 | done | Codex | 主线板块与龙头识别 | 生成 sector momentum、leader stock 和报告 CLI |
 
 ## 状态规则
 
