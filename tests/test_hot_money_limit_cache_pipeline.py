@@ -75,6 +75,24 @@ def test_resolve_hot_money_cache_dates_uses_latest_daily_when_cache_missing(tmp_
     assert dates == ["20260706"]
 
 
+def test_resolve_hot_money_cache_dates_backfills_missing_limit_dates(tmp_path: Path) -> None:
+    """涨跌停缓存已有旧日期时，也应补齐 live_market 中缺失的历史交易日。"""
+    import duckdb
+
+    paths = RuntimePaths(tmp_path)
+    paths.ensure_directories()
+    with duckdb.connect(str(paths.live_market_increment_path)) as con:
+        con.execute("CREATE TABLE daily(ts_code VARCHAR, trade_date VARCHAR)")
+        con.execute("INSERT INTO daily VALUES ('000001.SZ', '20260706'), ('000001.SZ', '20260707')")
+    with duckdb.connect(str(paths.limit_list_increment_path)) as con:
+        con.execute("CREATE TABLE limit_list_daily(trade_date VARCHAR, ts_code VARCHAR)")
+        con.execute("INSERT INTO limit_list_daily VALUES ('20260706', '000001.SZ')")
+
+    dates = resolve_hot_money_cache_dates(paths, [])
+
+    assert dates == ["20260707"]
+
+
 def test_daily_data_update_message_includes_hot_money_cache(monkeypatch, tmp_path: Path) -> None:
     """每日数据更新成功摘要应包含游资涨跌停缓存结果，方便调度和通知排查。"""
     from scripts import run_daily_data_update

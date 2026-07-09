@@ -170,8 +170,9 @@ class TushareDailyUpdater:
     def update_through(self, end_date: str, now: datetime | None = None) -> IncrementalUpdateResult:
         """更新至目标日期；盘中运行时自动排除当天。"""
         current = now or datetime.now()
-        latest = max(filter(None, [self.base_latest_date, self.store.latest_date()]))
-        start = (datetime.strptime(latest, "%Y%m%d") + timedelta(days=1)).strftime("%Y%m%d")
+        # 从历史基线后一日开始扫描，才能发现增量库中间缺口。
+        # 已存在的完整日期由 store.contains_date 跳过，避免重复写入。
+        start = (datetime.strptime(self.base_latest_date, "%Y%m%d") + timedelta(days=1)).strftime("%Y%m%d")
         if start > end_date:
             return IncrementalUpdateResult(start, end_date, [], 0, 0)
 
