@@ -77,3 +77,21 @@ def test_leader_streak_is_not_inflated_by_multi_sector_mapping() -> None:
 
     assert daily["sector_name"].tolist() == ["机器人", "算力"]
     assert daily["limit_streak"].tolist() == [2, 2]
+
+
+def test_leader_streak_resets_when_previous_limit_is_not_previous_trade_date() -> None:
+    """上一条涨停记录不是上一交易日时，连板数必须重置。"""
+    limit_rows = pd.DataFrame(
+        [
+            {"trade_date": "20260706", "ts_code": "000001.SZ", "name": "A1", "limit_type": "U", "amount": 80.0, "pct_chg": 10.0, "open_times": 0},
+            {"trade_date": "20260707", "ts_code": "000002.SZ", "name": "A2", "limit_type": "U", "amount": 60.0, "pct_chg": 10.0, "open_times": 0},
+            {"trade_date": "20260708", "ts_code": "000001.SZ", "name": "A1", "limit_type": "U", "amount": 120.0, "pct_chg": 10.0, "open_times": 0},
+        ]
+    )
+    sector_map = pd.DataFrame([{"ts_code": "000001.SZ", "sector_name": "算力"}])
+    sector_momentum = pd.DataFrame([{"trade_date": "20260708", "sector_name": "算力", "is_mainline": True}])
+
+    result = build_leader_stock_daily(limit_rows, sector_momentum, sector_map)
+    daily = result[(result["trade_date"] == "20260708") & (result["ts_code"] == "000001.SZ")]
+
+    assert daily["limit_streak"].tolist() == [1]

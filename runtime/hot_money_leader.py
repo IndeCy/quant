@@ -54,14 +54,21 @@ def _attach_sector(limit_rows: pd.DataFrame, sector_map: pd.DataFrame | None) ->
 
 def _limit_streak(rows: pd.DataFrame) -> pd.Series:
     """按股票时间序列计算连续涨停天数。"""
+    trade_dates = sorted(str(item) for item in rows["trade_date"].dropna().unique())
+    previous_trade_date = {trade_dates[index]: trade_dates[index - 1] for index in range(1, len(trade_dates))}
     streaks: list[int] = []
     current_code = ""
+    current_date = ""
     current_streak = 0
     for row in rows.itertuples(index=False):
-        if str(row.ts_code) != current_code:
+        row_code = str(row.ts_code)
+        row_date = str(row.trade_date)
+        is_continuous = row_code == current_code and current_date == previous_trade_date.get(row_date)
+        if row_code != current_code or not is_continuous:
             current_code = str(row.ts_code)
             current_streak = 0
         current_streak = current_streak + 1 if str(row.limit_type) == "U" else 0
+        current_date = row_date
         streaks.append(current_streak)
     return pd.Series(streaks, index=rows.index)
 
