@@ -14,6 +14,28 @@
 - 新增核心逻辑时尽量补充测试，覆盖正常场景和边界场景。
 - Python 代码保持清晰类型提示，关键业务逻辑添加中文注释。
 
+## 开发围栏（强制）
+
+每次修改代码前必须阅读：
+
+- `docs/engineering/DEVELOPMENT_GUARDRAILS.md`
+- `docs/engineering/ARCHITECTURE.md`
+- `docs/engineering/DATA_OWNERSHIP.md`
+
+开发流程固定为：识别影响模块 -> 检查受保护边界 -> 小步实现 -> 运行
+`./scripts/verify.sh` -> 报告结果和剩余风险。
+
+以下变更必须先向用户明确说明并取得确认：
+
+- 修改 M0 可信回测文件、复权口径、交易日历或财务 as-of 规则。
+- 改变已有策略因子、参数、股票池、调仓频率或风险层。
+- 新增第二个日常 Pipeline、撮合入口或绕过标准数据层的读取路径。
+- 修改数据库 Schema 但不提供 migration，或原地覆盖已运行策略版本。
+
+调度、API、命令行和人工补跑必须复用 `runtime.pipeline_service.PipelineService`。
+策略只能输出信号，组合层决定权重，风险层调整目标暴露，Paper Broker 负责成交。
+禁止把 `runs/`、运行数据库、Token、日志和自动生成看板提交到 Git。
+
 ## 核心模块
 
 - `backtest/data.py`：行情数据管理，负责加载、存储和按日期查询股票数据。
@@ -93,6 +115,7 @@ python examples/simple_example.py
 
 ## 验收规范
 
+- 所有代码变更完成后执行 `./scripts/verify.sh`，不得只运行局部测试后宣称完成。
 - Python 代码修改完成后，优先执行 `pytest`。
 - 示例或回测流程变更后，执行 `python examples/simple_example.py` 做基础链路验证。
 - 不提交缓存、临时文件或无关格式化变更。

@@ -1,0 +1,44 @@
+{
+  "max_file_lines": 500,
+  "oversized_file_allowlist": {
+    "backtest/industry.py": "历史行业映射文件，后续单独拆分"
+  },
+  "protected_m0_paths": [
+    "data/calendar.py",
+    "data/schema.py",
+    "data/cleaning.py",
+    "data/adjustment.py",
+    "data/financial.py",
+    "data/financial_duckdb_source.py",
+    "backtest/execution_model.py",
+    "backtest/engine.py",
+    "backtest/analysis.py"
+  ],
+  "generated_paths": [
+    "runs/",
+    "reports/dashboard.html",
+    "reports/dashboard_data.json",
+    "reports/quality_overlay_paper_latest.md",
+    "reports/operations_quality/"
+  ],
+  "forbidden_imports": {
+    "api": [
+      "runtime.daily_pipeline",
+      "runtime.strategy_batch_runner",
+      "runtime.local_paper_broker",
+      "backtest.engine",
+      "strategies"
+    ],
+    "strategy_core": [
+      "api",
+      "runtime",
+      "monitoring"
+    ],
+    "strategy_runners": [
+      "api",
+      "runtime.scheduler",
+      "runtime.pipeline_service",
+      "runtime.local_paper_broker"
+    ]
+  }
+}

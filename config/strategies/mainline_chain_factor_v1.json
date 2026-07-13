@@ -1,0 +1,34 @@
+{
+  "strategy_id": "mainline_chain_factor_v1",
+  "name": "主线链动因子 V1",
+  "version": "1.0.0",
+  "template_id": "factor_chain_rotation",
+  "status": "shadow_live",
+  "enabled": true,
+  "universe": "industry_chain_pool",
+  "filters": ["market_gate", "local_standard_cache", "qfq"],
+  "factors": [
+    {"factor_id": "mainline_chain_strength_60d", "weight": 0.4, "transform": "momentum_return"},
+    {"factor_id": "mainline_stock_momentum_120d", "weight": 0.25, "transform": "momentum_return"},
+    {"factor_id": "mainline_stock_momentum_60d", "weight": 0.25, "transform": "momentum_return"},
+    {"factor_id": "mainline_chain_gate", "weight": 0.1, "transform": "gate_filter"}
+  ],
+  "construction": {
+    "mode": "multi_chain",
+    "top_n": 5,
+    "weighting": "equal_weight",
+    "rebalance_frequency": 5,
+    "chain_momentum_window": 60
+  },
+  "risk_overlay": "market_gate",
+  "benchmark": "000001.SH",
+  "adjust_policy": "qfq",
+  "execution_policy": "m0_t1",
+  "config": {
+    "data_cache": "data/market_cache.sqlite3",
+    "provider": "tushare",
+    "frequency": "1d",
+    "initial_capital": 1000000.0,
+    "execution_slippage_bps": 10.0
+  }
+}

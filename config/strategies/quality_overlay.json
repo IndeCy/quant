@@ -1,0 +1,21 @@
+{
+  "strategy_id": "quality_overlay",
+  "name": "Quality Alpha V1",
+  "version": "1.0.0",
+  "template_id": "factor_topn_monthly",
+  "status": "paper",
+  "enabled": true,
+  "universe": "all_a",
+  "filters": ["listed_3y", "exclude_st", "annual_report_1231"],
+  "factors": [
+    {"factor_id": "roe", "weight": 0.3333333333333333, "transform": "winsorize_zscore"},
+    {"factor_id": "roa", "weight": 0.3333333333333333, "transform": "winsorize_zscore"},
+    {"factor_id": "ocf_to_or", "weight": 0.3333333333333333, "transform": "winsorize_zscore"}
+  ],
+  "construction": {"top_n": 20, "weighting": "equal_weight", "rebalance": "monthly"},
+  "risk_overlay": "vol_20_45_to_30",
+  "benchmark": "510300",
+  "adjust_policy": "qfq",
+  "execution_policy": "m0_t1",
+  "config": {"adapter": "quality_overlay_compat"}
+}

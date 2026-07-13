@@ -1,11 +1,13 @@
 """冻结Quality Overlay策略的Paper状态测试。"""
 
+import importlib
 from pathlib import Path
 
 import pytest
 
 from backtest.quality_overlay_paper import QualityPaperSnapshot, QualityPaperStore, build_target_weights
 from examples import run_quality_overlay_paper
+from runtime.repository import SystemRepository
 
 
 def test_target_weights_respect_overlay_exposure() -> None:
@@ -60,3 +62,55 @@ def test_push_report_uses_notification_message(monkeypatch) -> None:
 
     assert sent[0].title == "Quality Overlay Paper"
     assert "目标仓位100%" in sent[0].body
+
+
+def test_daily_script_mutable_paths_follow_quant_home(monkeypatch, tmp_path: Path) -> None:
+    """设置 QUANT_HOME 后，每日运行产物必须集中写入运行目录。"""
+    runtime_home = tmp_path / "quant_runtime"
+    monkeypatch.setenv("QUANT_HOME", str(runtime_home))
+
+    reloaded = importlib.reload(run_quality_overlay_paper)
+
+    assert reloaded.INCREMENT_PATH == runtime_home / "data" / "live_market_increment.duckdb"
+    assert reloaded.BENCHMARK_INCREMENT_PATH == runtime_home / "data" / "benchmark_increment.duckdb"
+    assert reloaded.PAPER_PATH == runtime_home / "data" / "quality_overlay_paper.sqlite3"
+    assert reloaded.MONITORING_PATH == runtime_home / "data" / "monitoring.sqlite3"
+    assert reloaded.REPORT_PATH == runtime_home / "reports" / "quality_overlay_paper_latest.md"
+    assert reloaded.DASHBOARD_HTML_PATH == runtime_home / "reports" / "dashboard.html"
+    assert reloaded.RUNS_ROOT == runtime_home / "runs"
+
+    monkeypatch.delenv("QUANT_HOME", raising=False)
+    importlib.reload(run_quality_overlay_paper)
+
+
+def test_register_daily_artifacts_indexes_required_outputs(tmp_path: Path) -> None:
+    """日报、调仓建议、组合快照和指标 JSON 都要进入报告索引。"""
+    repository = SystemRepository(tmp_path / "state" / "quant_system.sqlite")
+    run_dir = tmp_path / "runs" / "20260624"
+
+    run_quality_overlay_paper.register_daily_artifacts(repository, "20260624", run_dir)
+
+    reports = repository.list_reports("quality_overlay")
+    report_types = {item["report_type"] for item in reports}
+    assert report_types == {"daily_report", "rebalance_plan", "portfolio_snapshot", "strategy_metrics"}
+    assert {Path(item["file_path"]).parent for item in reports} == {run_dir}
+
+
+def test_register_pipeline_steps_records_warning_status(tmp_path: Path) -> None:
+    """运行中心需要看到固定 pipeline 步骤和数据更新告警。"""
+    repository = SystemRepository(tmp_path / "state" / "quant_system.sqlite")
+    run_dir = tmp_path / "runs" / "20260624"
+
+    run_quality_overlay_paper.register_pipeline_steps(repository, "20260624", run_dir, ["基准已降级"])
+
+    steps = repository.list_run_steps("quality_overlay", "20260624")
+    assert [item["step_name"] for item in steps] == [
+        "data_update",
+        "data_validation",
+        "strategy_run",
+        "monitoring_dashboard",
+        "report_generation",
+        "notification",
+    ]
+    assert steps[0]["status"] == "WARNING"
+    assert steps[0]["message"] == "基准已降级"

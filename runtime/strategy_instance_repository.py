@@ -1,0 +1,166 @@
+"""策略实例仓库扩展。"""
+
+from __future__ import annotations
+
+import json
+from typing import Any
+
+from runtime.strategy_lifecycle import (
+    RUNNABLE_STATUSES,
+    validate_strategy_for_run,
+    validate_transition,
+)
+
+
+class StrategyInstanceRepositoryMixin:
+    """保存可运行策略实例配置。"""
+
+    def upsert_strategy_instance(self, payload: dict[str, Any]) -> dict[str, Any]:
+        """保存策略实例，实例启用后可被动态 runner 发现。"""
+        strategy_id = str(payload.get("strategy_id") or "").strip()
+        name = str(payload.get("name") or "").strip()
+        template_id = str(payload.get("template_id") or "").strip()
+        if not strategy_id or not name or not template_id:
+            raise ValueError("strategy_id, name and template_id are required")
+        with self._connect() as con:
+            con.execute(
+                """
+                INSERT INTO strategy_instances(
+                    strategy_id, name, template_id, status, enabled, universe,
+                    filters_json, factors_json, construction_json, risk_overlay,
+                    benchmark, config_json
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(strategy_id) DO UPDATE SET
+                    name=excluded.name, template_id=excluded.template_id,
+                    status=excluded.status, enabled=excluded.enabled,
+                    universe=excluded.universe, filters_json=excluded.filters_json,
+                    factors_json=excluded.factors_json,
+                    construction_json=excluded.construction_json,
+                    risk_overlay=excluded.risk_overlay, benchmark=excluded.benchmark,
+                    config_json=excluded.config_json, modified_at=CURRENT_TIMESTAMP
+                """,
+                [
+                    strategy_id,
+                    name,
+                    template_id,
+                    str(payload.get("status") or "draft"),
+                    1 if bool(payload.get("enabled", False)) else 0,
+                    str(payload.get("universe") or ""),
+                    json.dumps(list(payload.get("filters") or []), ensure_ascii=False, sort_keys=True),
+                    json.dumps(list(payload.get("factors") or []), ensure_ascii=False, sort_keys=True),
+                    json.dumps(dict(payload.get("construction") or {}), ensure_ascii=False, sort_keys=True),
+                    str(payload.get("risk_overlay") or ""),
+                    str(payload.get("benchmark") or ""),
+                    json.dumps(dict(payload.get("config") or {}), ensure_ascii=False, sort_keys=True),
+                ],
+            )
+        return self.load_strategy_instance(strategy_id)
+
+    def load_strategy_instance(self, strategy_id: str) -> dict[str, Any]:
+        """读取单个策略实例。"""
+        with self._connect() as con:
+            row = con.execute(
+                "SELECT * FROM strategy_instances WHERE strategy_id = ?",
+                [strategy_id],
+            ).fetchone()
+        if row is None:
+            raise KeyError(strategy_id)
+        return self._row_to_dict(row)
+
+    def list_strategy_instances(self, enabled_only: bool = False) -> list[dict[str, Any]]:
+        """读取策略实例列表。"""
+        sql = "SELECT * FROM strategy_instances"
+        params: list[Any] = []
+        if enabled_only:
+            sql += " WHERE enabled = 1"
+        sql += " ORDER BY strategy_id"
+        with self._connect() as con:
+            rows = con.execute(sql, params).fetchall()
+        return [self._row_to_dict(row) for row in rows]
+
+    def transition_strategy_instance_status(
+        self,
+        strategy_id: str,
+        target_status: str,
+        enable: bool | None = None,
+    ) -> dict[str, Any]:
+        """按生命周期状态机更新策略实例状态。"""
+        current = self.load_strategy_instance(strategy_id)
+        validate_transition(str(current["status"]), target_status)
+        updated = dict(current)
+        updated["status"] = target_status
+        if enable is not None:
+            updated["enabled"] = bool(enable)
+        if bool(updated.get("enabled")) and target_status in RUNNABLE_STATUSES:
+            validate_strategy_for_run(updated, self.validate_strategy_factor_contracts(strategy_id))
+        with self._connect() as con:
+            con.execute(
+                """
+                UPDATE strategy_instances
+                SET status = ?, enabled = ?, modified_at = CURRENT_TIMESTAMP
+                WHERE strategy_id = ?
+                """,
+                [target_status, 1 if bool(updated.get("enabled")) else 0, strategy_id],
+            )
+        return self.load_strategy_instance(strategy_id)
+
+    def list_runnable_strategy_instances(self) -> list[dict[str, Any]]:
+        """读取允许进入每日批处理的策略实例。"""
+        placeholders = ",".join("?" for _ in RUNNABLE_STATUSES)
+        with self._connect() as con:
+            rows = con.execute(
+                f"""
+                SELECT * FROM strategy_instances
+                WHERE enabled = 1 AND status IN ({placeholders})
+                ORDER BY strategy_id
+                """,
+                sorted(RUNNABLE_STATUSES),
+            ).fetchall()
+        result = []
+        for row in rows:
+            instance = self._row_to_dict(row)
+            try:
+                validate_strategy_for_run(
+                    instance,
+                    self.validate_strategy_factor_contracts(str(instance["strategy_id"])),
+                )
+            except Exception:
+                continue
+            result.append(instance)
+        return result
+
+    def load_strategy_instance_state(self, strategy_id: str) -> dict[str, Any]:
+        """读取策略实例最近一次 paper 状态和持仓。"""
+        with self._connect() as con:
+            if not _table_exists(con, "strategy_instance_state"):
+                return {"strategy_id": strategy_id, "trade_date": None, "nav": None, "holdings": []}
+            state = con.execute(
+                """
+                SELECT strategy_id, trade_date, nav
+                FROM strategy_instance_state
+                WHERE strategy_id = ?
+                """,
+                [strategy_id],
+            ).fetchone()
+            holdings = []
+            if _table_exists(con, "strategy_instance_holdings"):
+                rows = con.execute(
+                    """
+                    SELECT symbol, weight, last_close
+                    FROM strategy_instance_holdings
+                    WHERE strategy_id = ?
+                    ORDER BY symbol
+                    """,
+                    [strategy_id],
+                ).fetchall()
+                holdings = [self._row_to_dict(row) for row in rows]
+        if state is None:
+            return {"strategy_id": strategy_id, "trade_date": None, "nav": None, "holdings": []}
+        result = self._row_to_dict(state)
+        result["holdings"] = holdings
+        return result
+
+
+def _table_exists(con: Any, table: str) -> bool:
+    row = con.execute("SELECT name FROM sqlite_master WHERE type='table' AND name = ?", [table]).fetchone()
+    return row is not None

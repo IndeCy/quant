@@ -75,6 +75,23 @@ def test_updater_accepts_current_date_after_market_close(tmp_path: Path) -> None
     assert result.factor_rows == 1
 
 
+def test_updater_backfills_missing_date_before_latest_cache(tmp_path: Path) -> None:
+    """即使最大缓存日期已经靠后，也必须回补中间缺失交易日。"""
+    client = FakeTushareClient()
+    store = IncrementalDuckDBStore(tmp_path / "increment.duckdb")
+    store.upsert(client.daily("20260616"), client.adj_factor("20260616"))
+    store.upsert(client.daily("20260618"), client.adj_factor("20260618"))
+    client.daily_dates.clear()
+    client.factor_dates.clear()
+    updater = TushareDailyUpdater(client, store, base_latest_date="20260615")
+
+    result = updater.update_through("20260622", now=datetime(2026, 6, 22, 16, 0))
+
+    assert result.updated_dates == ["20260617", "20260622"]
+    assert client.daily_dates == ["20260617", "20260622"]
+    assert store.count_rows("daily") == 4
+
+
 def test_updater_falls_back_to_local_calendar_when_trade_cal_is_limited(tmp_path: Path) -> None:
     client = FailingTradeCalClient()
     store = IncrementalDuckDBStore(tmp_path / "increment.duckdb")

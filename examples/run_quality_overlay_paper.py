@@ -37,16 +37,23 @@ from monitoring.dashboard_data import build_dashboard_payload, write_dashboard_f
 from monitoring.metrics import build_market_monitor_frame, build_strategy_monitor_frame
 from monitoring.repository import MonitoringRepository
 from pipeline.production_daily import build_monthly_review, is_month_end_trade_date, write_daily_artifacts, write_run_log
+from runtime.mainline_cache_sync import mainline_proxy_fund_symbols
+from runtime.config import get_config_value
+from runtime.notification_config import resolve_bark_url
+from runtime.paths import get_runtime_paths
+from runtime.repository import SystemRepository
+from runtime.strategy_catalog import register_quality_alpha_v1
 
 
-INCREMENT_PATH = Path("data/live_market_increment.duckdb")
-BENCHMARK_INCREMENT_PATH = Path("data/benchmark_increment.duckdb")
-PAPER_PATH = Path("data/quality_overlay_paper.sqlite3")
-MONITORING_PATH = Path("data/monitoring.sqlite3")
-REPORT_PATH = Path("reports/quality_overlay_paper_latest.md")
-DASHBOARD_JSON_PATH = Path("reports/dashboard_data.json")
-DASHBOARD_HTML_PATH = Path("reports/dashboard.html")
-RUNS_ROOT = Path("runs")
+RUNTIME_PATHS = get_runtime_paths()
+INCREMENT_PATH = RUNTIME_PATHS.live_market_increment_path
+BENCHMARK_INCREMENT_PATH = RUNTIME_PATHS.benchmark_increment_path
+PAPER_PATH = RUNTIME_PATHS.quality_overlay_paper_path
+MONITORING_PATH = RUNTIME_PATHS.monitoring_path
+REPORT_PATH = RUNTIME_PATHS.latest_report_path
+DASHBOARD_JSON_PATH = RUNTIME_PATHS.dashboard_json_path
+DASHBOARD_HTML_PATH = RUNTIME_PATHS.dashboard_html_path
+RUNS_ROOT = RUNTIME_PATHS.runs_dir
 VOL_WINDOW = 20
 VOL_THRESHOLD = 0.45
 REDUCED_EXPOSURE = 0.30
@@ -55,7 +62,7 @@ REDUCED_EXPOSURE = 0.30
 def update_incremental(end_date: str) -> tuple[list[str], list[str]]:
     """补齐日线增量，接口受限时保留最后完整缓存并告警。"""
     warnings: list[str] = []
-    token = os.getenv("TUSHARE_TOKEN", "")
+    token = get_config_value("TUSHARE_TOKEN")
     if not token:
         return [], ["未检测到TUSHARE_TOKEN，本次未更新行情"]
     import duckdb
@@ -73,16 +80,20 @@ def update_incremental(end_date: str) -> tuple[list[str], list[str]]:
 
 
 def update_benchmark_incremental(end_date: str) -> list[str]:
-    """补齐510300 ETF和上证指数基准缓存。"""
-    token = os.getenv("TUSHARE_TOKEN", "")
+    """补齐510300、主线代理ETF和上证指数基准缓存。"""
+    token = get_config_value("TUSHARE_TOKEN")
     if not token:
         return ["未检测到TUSHARE_TOKEN，本次未更新ETF/指数基准"]
     store = BenchmarkIncrementalStore(BENCHMARK_INCREMENT_PATH)
     updater = TushareBenchmarkUpdater(TushareBenchmarkProClient(token), store)
+    fund_symbols = tuple(dict.fromkeys(("510300.SH", *mainline_proxy_fund_symbols())))
     try:
         result = updater.update(
             end_date=end_date,
-            fund_base_latest={"510300.SH": _latest_etf_base_date("510300.SH")},
+            fund_base_latest={
+                symbol: _latest_etf_base_date(symbol) if symbol == "510300.SH" else None
+                for symbol in fund_symbols
+            },
             index_base_latest={"000001.SH": _latest_index_base_date("000001.SH")},
         )
     except Exception as exc:
@@ -228,6 +239,7 @@ def write_production_artifacts(
     holdings: pd.DataFrame,
     run,
     benchmark_curve: pd.Series,
+    warnings: list[str] | None = None,
 ) -> Path:
     """写入 runs/YYYYMMDD 每日产物，并按月末生成月度复盘。"""
     store = QualityPaperStore(PAPER_PATH)
@@ -241,10 +253,78 @@ def write_production_artifacts(
         previous_snapshot=previous,
     )
     repository = MonitoringRepository(MONITORING_PATH)
+    system_repository = SystemRepository(RUNTIME_PATHS.system_state_path)
+    register_quality_alpha_v1(system_repository)
+    register_daily_artifacts(system_repository, snapshot.trade_date, run_dir)
+    system_repository.record_strategy_run(
+        "quality_overlay",
+        snapshot.trade_date,
+        "SUCCESS",
+        run_dir,
+        "daily pipeline completed",
+    )
+    register_pipeline_steps(system_repository, snapshot.trade_date, run_dir, warnings or [])
     if is_month_end_trade_date(snapshot.trade_date):
         month = snapshot.trade_date[:6]
-        build_monthly_review(RUNS_ROOT, month, repository.load_strategy_history("quality_overlay"))
+        monthly_path = build_monthly_review(RUNS_ROOT, month, repository.load_strategy_history("quality_overlay"))
+        system_repository.upsert_report(
+            report_type="monthly_review",
+            strategy_id="quality_overlay",
+            trade_date=snapshot.trade_date,
+            title=f"{month}月度复盘",
+            file_path=monthly_path,
+            tags=["monthly", "review"],
+        )
     return run_dir
+
+
+def register_daily_artifacts(repository: SystemRepository, trade_date: str, run_dir: Path) -> None:
+    """把每日固定产物登记到系统状态库，供前端和报告中心统一读取。"""
+    artifacts = [
+        ("daily_report", "每日策略报告", "daily_report.md", ["daily", "report"]),
+        ("rebalance_plan", "调仓建议", "rebalance_plan.csv", ["daily", "rebalance"]),
+        ("portfolio_snapshot", "组合快照", "portfolio_snapshot.csv", ["daily", "portfolio"]),
+        ("strategy_metrics", "策略指标", "strategy_metrics.json", ["daily", "metrics"]),
+    ]
+    for report_type, title, filename, tags in artifacts:
+        repository.upsert_report(
+            report_type=report_type,
+            strategy_id="quality_overlay",
+            trade_date=trade_date,
+            title=title,
+            file_path=run_dir / filename,
+            tags=tags,
+        )
+
+
+def register_pipeline_steps(
+    repository: SystemRepository,
+    trade_date: str,
+    run_dir: Path,
+    warnings: list[str],
+    notification_status: str = "SKIPPED",
+) -> None:
+    """登记生产候选流水线的分步骤状态。"""
+    update_status = "WARNING" if warnings else "SUCCESS"
+    update_message = "; ".join(warnings) if warnings else "数据更新完成"
+    steps = [
+        (1, "data_update", update_status, update_message, ""),
+        (2, "data_validation", "SUCCESS", "增量数据质量校验通过", ""),
+        (3, "strategy_run", "SUCCESS", "Quality Alpha V1 运行完成", ""),
+        (4, "monitoring_dashboard", "SUCCESS", "监控指标与 dashboard 数据已刷新", ""),
+        (5, "report_generation", "SUCCESS", "日报、调仓计划、组合快照和指标已生成", run_dir),
+        (6, "notification", notification_status, "未请求推送" if notification_status == "SKIPPED" else "推送完成", ""),
+    ]
+    for sequence, step_name, status, message, artifact_path in steps:
+        repository.record_run_step(
+            "quality_overlay",
+            trade_date,
+            sequence,
+            step_name,
+            status,
+            message,
+            artifact_path,
+        )
 
 
 def load_dashboard_benchmarks(con) -> tuple[pd.Series, pd.Series, str]:
@@ -381,9 +461,10 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--skip-update", action="store_true", help="只使用当前完整缓存")
     parser.add_argument("--push", action="store_true", help="通过Bark推送摘要")
-    parser.add_argument("--bark-url", default=os.getenv("BARK_PUSH_URL", ""))
+    parser.add_argument("--bark-url", default=resolve_bark_url())
+    parser.add_argument("--run-date", default="", help="指定运行日期，格式 YYYYMMDD；默认使用当天")
     args = parser.parse_args()
-    run_date = datetime.now().strftime("%Y%m%d")
+    run_date = args.run_date or datetime.now().strftime("%Y%m%d")
     run_log_dir = RUNS_ROOT / run_date
     try:
         updated_dates: list[str] = []
@@ -396,7 +477,7 @@ def main() -> None:
         validate_incremental_quality()
         snapshot, holdings, run, benchmark_curve, shanghai_curve = build_snapshot(warnings)
         update_monitoring_dashboard(run, benchmark_curve, shanghai_curve)
-        write_production_artifacts(snapshot, holdings, run, benchmark_curve)
+        write_production_artifacts(snapshot, holdings, run, benchmark_curve, warnings)
         QualityPaperStore(PAPER_PATH).save(snapshot)
         REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
         REPORT_PATH.write_text(render_report(snapshot, holdings, updated_dates), encoding="utf-8")
@@ -405,10 +486,15 @@ def main() -> None:
             if not args.bark_url:
                 raise SystemExit("--push需要--bark-url或BARK_PUSH_URL")
             push_report(snapshot, args.bark_url)
+            SystemRepository(RUNTIME_PATHS.system_state_path).record_run_step(
+                "quality_overlay", snapshot.trade_date, 6, "notification", "SUCCESS", "Bark 推送完成", "",
+            )
     except Exception as exc:
         write_run_log(run_log_dir, "FAILED", str(exc))
+        SystemRepository(RUNTIME_PATHS.system_state_path).record_strategy_run(
+            "quality_overlay", run_date, "FAILED", run_log_dir, str(exc),
+        )
         raise
-
 
 if __name__ == "__main__":
     main()

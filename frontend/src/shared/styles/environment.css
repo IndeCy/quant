@@ -1,0 +1,28 @@
+.environment-panel {
+  gap: 16px;
+}
+
+.environment-checks {
+  display: grid;
+  gap: 10px;
+}
+
+.environment-check {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px;
+  background: var(--surface-muted);
+}
+
+.environment-check > div {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.environment-check p {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  line-height: 1.5;
+}
