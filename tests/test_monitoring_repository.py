@@ -66,6 +66,10 @@ def test_repository_upserts_market_rows(tmp_path) -> None:
                 "breadth_down_count": 5,
                 "limit_up_count": 1,
                 "limit_down_count": 0,
+                "market_amount": 12000.0,
+                "amount_ratio_20": 1.2,
+                "ma20_above_ratio": 0.6,
+                "zero_volume_ratio": 0.01,
             }
         ]
     )
@@ -78,3 +82,35 @@ def test_repository_upserts_market_rows(tmp_path) -> None:
 
     assert len(history) == 1
     assert history.loc[0, "trend_state"] == "RISK"
+    assert history.loc[0, "market_amount"] == 12000.0
+    assert history.loc[0, "ma20_above_ratio"] == 0.6
+
+
+def test_repository_upserts_market_beta_snapshots(tmp_path) -> None:
+    """Beta 观测快照按交易日幂等覆盖，并保留可解释原因。"""
+    repo = MonitoringRepository(tmp_path / "monitoring.sqlite3")
+    row = {
+        "trade_date": "20260710",
+        "beta_state": "BETA_OFF",
+        "beta_score": 38.0,
+        "trend_score": 8.0,
+        "breadth_score": 7.0,
+        "sentiment_score": 6.0,
+        "liquidity_score": 7.5,
+        "funding_score": 4.0,
+        "valuation_score": 5.5,
+        "risk_level": "ELEVATED",
+        "reasons": ["指数低于MA120", "宽度偏弱"],
+    }
+
+    repo.upsert_market_beta(row)
+    row["beta_score"] = 40.0
+    repo.upsert_market_beta(row)
+
+    latest = repo.load_latest_market_beta()
+    history = repo.load_market_beta_history()
+
+    assert latest is not None
+    assert latest["beta_score"] == 40.0
+    assert latest["reasons"] == ["指数低于MA120", "宽度偏弱"]
+    assert len(history) == 1

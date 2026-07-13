@@ -15,7 +15,9 @@ from examples.run_quality_overlay_paper import (
     update_incremental,
     validate_incremental_quality,
 )
+from data.tushare_beta_incremental import BetaIncrementalStore, TushareBetaProClient, TushareBetaUpdater
 from pipeline.production_daily import write_run_log
+from runtime.config import get_config_value
 from runtime.mainline_cache_sync import sync_mainline_cache_from_increment
 from runtime.hot_money_limit_cache_pipeline import resolve_hot_money_cache_dates, update_hot_money_limit_cache
 from runtime.opportunity_catalog import register_builtin_opportunity_themes
@@ -34,6 +36,7 @@ def main(trade_date: str | None = None) -> None:
     try:
         updated_dates, warnings = update_incremental(run_date)
         warnings.extend(update_benchmark_incremental(run_date))
+        warnings.append(_update_beta_incremental(paths, run_date))
         if _has_blocking_update_warning(warnings):
             raise RuntimeError("; ".join(warnings))
         validate_incremental_quality()
@@ -86,6 +89,28 @@ def _append_hot_money_cache_message(paths, updated_dates: list[str], warnings: l
     else:
         warnings.append("游资涨跌停缓存：已是最新，无新增交易日")
     return warnings
+
+
+def _update_beta_incremental(paths, run_date: str) -> str:
+    """补充 Market Beta V1 所需 P0 数据，失败时记录但不阻断策略。"""
+    token = get_config_value("TUSHARE_TOKEN")
+    if not token:
+        return "Beta扩展数据未更新: 缺少TUSHARE_TOKEN"
+    try:
+        store = BetaIncrementalStore(paths.beta_increment_path)
+        updater = TushareBetaUpdater(TushareBetaProClient(token), store, fund_symbols=["510300.SH"])
+        result = updater.update(run_date)
+        rows = (
+            result.daily_basic_rows
+            + result.index_dailybasic_rows
+            + result.fund_share_rows
+            + result.moneyflow_hsgt_rows
+            + result.margin_rows
+            + result.margin_detail_rows
+        )
+        return f"Beta扩展数据已同步: 写入{rows}行"
+    except Exception as exc:
+        return f"Beta扩展数据未更新: {exc}"
 
 
 def _opportunity_symbols(repository: SystemRepository) -> list[str]:

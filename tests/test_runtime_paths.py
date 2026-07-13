@@ -27,6 +27,7 @@ def test_runtime_paths_use_quant_home(monkeypatch, tmp_path: Path) -> None:
     assert paths.root == runtime_home.resolve()
     assert paths.live_market_increment_path == runtime_home / "data" / "live_market_increment.duckdb"
     assert paths.benchmark_increment_path == runtime_home / "data" / "benchmark_increment.duckdb"
+    assert paths.beta_increment_path == runtime_home / "data" / "beta_increment.duckdb"
     assert paths.quality_overlay_paper_path == runtime_home / "data" / "quality_overlay_paper.sqlite3"
     assert paths.monitoring_path == runtime_home / "data" / "monitoring.sqlite3"
     assert paths.system_state_path == runtime_home / "state" / "quant_system.sqlite"

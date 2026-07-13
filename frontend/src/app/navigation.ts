@@ -1,4 +1,4 @@
-import { Activity, BarChart3, BookOpenText, CalendarClock, Database, FileSearch, FileText, FlaskConical, Gauge, ScrollText, Settings } from "lucide-react";
+import { Activity, BarChart3, BookOpenText, CalendarClock, Database, FileSearch, FileText, FlaskConical, Gauge, LineChart, ScrollText, Settings } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
 export interface NavigationItem {
@@ -9,6 +9,7 @@ export interface NavigationItem {
 
 export const navigationItems: NavigationItem[] = [
   { path: "/", label: "总览", icon: Gauge },
+  { path: "/market", label: "大盘", icon: LineChart },
   { path: "/strategies", label: "策略", icon: BarChart3 },
   { path: "/factors", label: "因子", icon: FlaskConical },
   { path: "/runs", label: "运行", icon: Activity },

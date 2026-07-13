@@ -8,6 +8,7 @@ from typing import Any
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
+from api.market_beta import latest_market_beta, market_beta_series
 from api.service import LocalApiService
 from runtime.environment_audit import build_environment_audit
 from runtime.operations_ack import list_operations_ack, record_operations_ack
@@ -427,6 +428,16 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
     def market_series(benchmark_id: str) -> list[dict[str, Any]]:
         """返回市场基准曲线。"""
         return api_service.market_series(benchmark_id)
+
+    @app.get("/api/market/beta/latest")
+    def market_beta_latest() -> dict[str, Any]:
+        """返回最新统一 beta 观测状态。"""
+        return latest_market_beta(api_service.paths)
+
+    @app.get("/api/market/beta/series")
+    def market_beta_history(limit: int = Query(default=120, ge=1, le=1000)) -> list[dict[str, Any]]:
+        """返回 beta 观测历史。"""
+        return market_beta_series(api_service.paths, limit=limit)
 
     return app
 

@@ -5,7 +5,9 @@ import sys
 
 from runtime.paths import RuntimePaths
 from runtime.scheduler import (
+    MARKET_OPEN_PAPER_EXECUTION_JOB_ID,
     TRADING_PIPELINE_JOB_ID,
+    build_market_open_paper_execution_command,
     build_live_risk_guard_command,
     build_pre_market_check_command,
     build_research_monitor_command,
@@ -94,6 +96,7 @@ def test_install_daily_pipeline_jobs_registers_data_then_batch_runner(tmp_path: 
 
     assert [job.id for job in jobs] == [
         "pre_market_check_pipeline",
+        "market_open_paper_execution_pipeline",
         "daily_trading_pipeline",
         "research_monitor_pipeline",
         "live_risk_guard_pipeline",
@@ -106,25 +109,30 @@ def test_install_daily_pipeline_jobs_registers_data_then_batch_runner(tmp_path: 
     assert "--push" in jobs[0].kwargs["command"]
     assert jobs[1].kwargs["command"][:2] == [
         sys.executable,
-        "scripts/run_daily_pipeline.py",
+        "scripts/run_market_open_paper_execution.py",
     ]
     assert "--push" in jobs[1].kwargs["command"]
-    assert jobs[1].kwargs["log_path"].endswith("logs/scheduler.log")
     assert jobs[2].kwargs["command"][:2] == [
         sys.executable,
-        "scripts/run_research_monitor.py",
+        "scripts/run_daily_pipeline.py",
     ]
     assert "--push" in jobs[2].kwargs["command"]
+    assert jobs[2].kwargs["log_path"].endswith("logs/scheduler.log")
     assert jobs[3].kwargs["command"][:2] == [
         sys.executable,
-        "scripts/run_live_risk_guard.py",
+        "scripts/run_research_monitor.py",
     ]
     assert "--push" in jobs[3].kwargs["command"]
     assert jobs[4].kwargs["command"][:2] == [
         sys.executable,
-        "scripts/run_scheduler_watchdog.py",
+        "scripts/run_live_risk_guard.py",
     ]
     assert "--push" in jobs[4].kwargs["command"]
+    assert jobs[5].kwargs["command"][:2] == [
+        sys.executable,
+        "scripts/run_scheduler_watchdog.py",
+    ]
+    assert "--push" in jobs[5].kwargs["command"]
     assert all(job.misfire_grace_time >= 900 for job in registered_jobs)
 
 
@@ -176,16 +184,18 @@ def test_load_scheduler_status_reports_registered_daily_job(tmp_path: Path) -> N
     assert "--push" in status["start_command"]
     assert [item["job_id"] for item in status["jobs"]] == [
         "pre_market_check_pipeline",
+        "market_open_paper_execution_pipeline",
         "daily_trading_pipeline",
         "research_monitor_pipeline",
         "live_risk_guard_pipeline",
         "scheduler_watchdog_pipeline",
     ]
     assert status["jobs"][0]["schedule"] == "mon-fri 09:20 Asia/Shanghai"
-    assert status["jobs"][1]["schedule"] == "mon-fri 16:10 Asia/Shanghai"
-    assert status["jobs"][2]["schedule"] == "mon-fri 16:25 Asia/Shanghai"
-    assert status["jobs"][3]["schedule"] == "mon-fri 16:35 Asia/Shanghai"
-    assert status["jobs"][4]["schedule"] == "mon-fri 16:45 Asia/Shanghai"
+    assert status["jobs"][1]["schedule"] == "mon-fri 09:35 Asia/Shanghai"
+    assert status["jobs"][2]["schedule"] == "mon-fri 16:10 Asia/Shanghai"
+    assert status["jobs"][3]["schedule"] == "mon-fri 16:25 Asia/Shanghai"
+    assert status["jobs"][4]["schedule"] == "mon-fri 16:35 Asia/Shanghai"
+    assert status["jobs"][5]["schedule"] == "mon-fri 16:45 Asia/Shanghai"
 
 
 def test_build_scheduler_watchdog_command_can_enable_push(tmp_path: Path) -> None:
@@ -205,5 +215,15 @@ def test_build_live_risk_commands_can_enable_push(tmp_path: Path) -> None:
     assert build_pre_market_check_command("python-test", push=True) == [
         "python-test",
         "scripts/run_pre_market_check.py",
+        "--push",
+    ]
+
+
+def test_build_market_open_paper_execution_command_can_enable_push() -> None:
+    """开盘撮合任务应具备统一 Bark 通知能力。"""
+    assert MARKET_OPEN_PAPER_EXECUTION_JOB_ID == "market_open_paper_execution_pipeline"
+    assert build_market_open_paper_execution_command("python-test", push=True) == [
+        "python-test",
+        "scripts/run_market_open_paper_execution.py",
         "--push",
     ]

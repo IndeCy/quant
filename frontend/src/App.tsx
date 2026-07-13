@@ -11,6 +11,7 @@ import { DashboardPage } from "./pages/dashboard/DashboardPage";
 import { DataHealthPage } from "./pages/data/DataHealthPage";
 import { FactorsPage } from "./pages/factors/FactorsPage";
 import { LogsPage } from "./pages/logs/LogsPage";
+import { MarketPage } from "./pages/market/MarketPage";
 import { ReportsPage } from "./pages/reports/ReportsPage";
 import { ResearchPage } from "./pages/research/ResearchPage";
 import { RiskPage } from "./pages/risk/RiskPage";
@@ -25,6 +26,7 @@ import "./shared/styles/hotMoney.css";
 import "./shared/styles/acknowledgement.css";
 import "./shared/styles/workbench.css";
 import "./shared/styles/environment.css";
+import "./shared/styles/market.css";
 
 function App() {
   const [data, setData] = useState<DashboardData | null>(null);
@@ -67,6 +69,7 @@ function App() {
       element: <AppLayout data={context} />,
       children: [
         { index: true, element: <DashboardPage /> },
+        { path: "market", element: <MarketPage /> },
         { path: "strategies", element: <StrategiesPage /> },
         { path: "factors", element: <FactorsPage /> },
         { path: "runs", element: <RunsPage /> },

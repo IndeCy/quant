@@ -87,12 +87,13 @@ def test_local_api_service_configures_scheduler_job(tmp_path: Path) -> None:
     assert "--skip-update" not in status["start_command"]
     assert [item["job_id"] for item in status["jobs"]] == [
         "pre_market_check_pipeline",
+        "market_open_paper_execution_pipeline",
         "daily_trading_pipeline",
         "research_monitor_pipeline",
         "live_risk_guard_pipeline",
         "scheduler_watchdog_pipeline",
     ]
-    assert status["jobs"][2]["schedule"] == "mon-fri 17:20 Asia/Shanghai"
+    assert status["jobs"][3]["schedule"] == "mon-fri 17:20 Asia/Shanghai"
 
 
 def test_local_api_service_exposes_backup_manifest(tmp_path: Path) -> None:

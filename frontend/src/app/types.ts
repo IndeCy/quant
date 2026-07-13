@@ -2,7 +2,7 @@ import type { BackupManifest } from "../entities/backup/model";
 import type { EnvironmentAudit } from "../entities/environment/model";
 import type { FactorDefinition } from "../entities/factor/model";
 import type { RuntimeLog } from "../entities/log/model";
-import type { MarketMetric } from "../entities/market/model";
+import type { MarketBetaSnapshot, MarketMetric } from "../entities/market/model";
 import type { OperationsAcknowledgement } from "../entities/operations/ackModel";
 import type { OperationsDecision } from "../entities/operations/decisionModel";
 import type { OperationsObservation } from "../entities/operations/model";
@@ -54,6 +54,7 @@ export interface DashboardData {
   strategyDetails: Record<string, StrategyDefinition>;
   strategySeriesMap: Record<string, StrategyMetric[]>;
   marketSeries: MarketMetric[];
+  marketBeta: MarketBetaSnapshot;
   readiness: ReadinessReport;
 }
 

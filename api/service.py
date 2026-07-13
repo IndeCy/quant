@@ -8,6 +8,7 @@ from typing import Any
 
 import pandas as pd
 
+from api.paper_series import attach_paper_nav
 from monitoring.repository import MonitoringRepository
 from runtime.backup import build_backup_manifest
 from runtime.config import get_config_flag, get_config_value
@@ -115,7 +116,7 @@ class LocalApiService:
                 backup_manifest=build_backup_manifest(self.paths),
                 notification_configured=bool(resolve_bark_url()),
                 manual_order_ready=_manual_order_tables_ready(self.paths.system_state_path),
-                broker_auto_trading_enabled=_env_flag("QUANT_ENABLE_BROKER_TRADING"),
+                broker_auto_trading_enabled=get_config_flag("QUANT_ENABLE_BROKER_TRADING"),
             )
         )
 
@@ -422,6 +423,7 @@ class LocalApiService:
     def strategy_series(self, strategy_id: str) -> list[dict[str, Any]]:
         """返回策略净值、风险和执行成本曲线。"""
         frame = self.monitoring_repository.load_strategy_history(strategy_id)
+        frame = attach_paper_nav(frame, self.paths.paper_trading_path, strategy_id)
         return _frame_records(frame)
 
     def market_series(self, benchmark_id: str) -> list[dict[str, Any]]:
@@ -482,11 +484,6 @@ def _manual_order_tables_ready(path: Path) -> bool:
     return {str(row[0]) for row in rows} == required
 
 
-def _env_flag(key: str) -> bool:
-    """读取显式开关，只有常见真值才视为开启。"""
-    return get_config_flag(key)
-
-
 def _json_ready(value: Any) -> Any:
     """递归转换 pandas/numpy/Path 类型，保证 HTTP JSON 可序列化。"""
     if isinstance(value, list):
@@ -495,6 +492,8 @@ def _json_ready(value: Any) -> Any:
         return {str(key): _json_ready(item) for key, item in value.items()}
     if isinstance(value, Path):
         return str(value)
+    if isinstance(value, float) and (value != value or value in (float("inf"), float("-inf"))):
+        return None
     if hasattr(value, "item"):
         return value.item()
     return value

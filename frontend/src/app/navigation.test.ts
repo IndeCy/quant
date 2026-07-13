@@ -6,6 +6,7 @@ describe("navigationItems", () => {
   it("keeps the first stage console pages in stable order", () => {
     expect(navigationItems.map((item) => item.path)).toEqual([
       "/",
+      "/market",
       "/strategies",
       "/factors",
       "/runs",
@@ -22,6 +23,7 @@ describe("navigationItems", () => {
   it("uses short readable labels for sidebar", () => {
     expect(navigationItems.map((item) => item.label)).toEqual([
       "总览",
+      "大盘",
       "策略",
       "因子",
       "运行",

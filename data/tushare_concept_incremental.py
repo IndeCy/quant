@@ -6,10 +6,11 @@ from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import Protocol
-import os
 
 import duckdb
 import pandas as pd
+
+from runtime.config import get_config_value
 
 
 @dataclass(frozen=True)
@@ -102,6 +103,8 @@ class ConceptDuckDBStore:
 
     def replace(self, index_rows: list[dict[str, str]], member_rows: list[dict[str, str]]) -> ConceptUpdateResult:
         """覆盖写入本轮主题概念缓存。"""
+        index_rows = _dedupe_rows(index_rows, ["theme_id", "provider", "index_code"])
+        member_rows = _dedupe_rows(member_rows, ["theme_id", "provider", "index_code", "con_code"])
         updated_at = datetime.now().isoformat(timespec="seconds")
         for row in index_rows:
             row["updated_at"] = updated_at
@@ -125,7 +128,7 @@ def update_opportunity_concept_cache(
     client: ConceptClient | None = None,
 ) -> ConceptUpdateResult:
     """按主题关键词抓取同花顺和东方财富概念成分并缓存。"""
-    concept_client = client or TushareConceptClient(os.getenv("TUSHARE_TOKEN", ""))
+    concept_client = client or TushareConceptClient(get_config_value("TUSHARE_TOKEN"))
     ths_index = concept_client.ths_index()
     dc_index = concept_client.dc_index()
     index_rows: list[dict[str, str]] = []
@@ -159,6 +162,15 @@ def _match_indices(frame: pd.DataFrame, provider: str, theme_id: str, keywords: 
     unique: dict[tuple[str, str, str], dict[str, str]] = {}
     for row in rows:
         unique[(row["theme_id"], row["provider"], row["index_code"])] = row
+    return list(unique.values())
+
+
+def _dedupe_rows(rows: list[dict[str, str]], keys: list[str]) -> list[dict[str, str]]:
+    """按业务主键去重，避免日频重复成分放大主题证据。"""
+    unique: dict[tuple[str, ...], dict[str, str]] = {}
+    for row in rows:
+        key = tuple(str(row.get(item) or "") for item in keys)
+        unique[key] = row
     return list(unique.values())
 
 

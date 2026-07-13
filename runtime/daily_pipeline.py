@@ -15,6 +15,7 @@ from runtime.data_quality_gate import run_data_quality_gate
 from runtime.notification_config import NotificationResult, send_bark_notification
 from runtime.paths import RuntimePaths, get_runtime_paths
 from runtime.repository import SystemRepository
+from runtime.market_beta_observer import record_market_beta_snapshot
 from runtime.strategy_batch_runner import run_enabled_strategy_instances
 
 
@@ -105,6 +106,17 @@ def run_production_daily_pipeline(
         repository.record_strategy_run(PIPELINE_STRATEGY_ID, target_date, "FAILED", run_dir, _with_notification(message, notification))
         raise
 
+    beta_result = run_market_beta_observer(runtime_paths, target_date)
+    repository.record_run_step(
+        PIPELINE_STRATEGY_ID,
+        target_date,
+        5,
+        "market_beta_observer",
+        str(beta_result.get("status", "UNKNOWN")),
+        str(beta_result.get("message", "")),
+        run_dir,
+    )
+
     message = _build_operation_summary(runtime_paths, strategy_summary)
     notification = _notify_if_needed(repository, target_date, run_dir, push, "SUCCESS", message)
     repository.record_strategy_run(PIPELINE_STRATEGY_ID, target_date, "SUCCESS", run_dir, _with_notification(message, notification))
@@ -133,6 +145,11 @@ def run_strategy_batch(paths: RuntimePaths, push: bool = False, trade_date: str 
     return run_enabled_strategy_instances(paths=paths, push=push, trade_date=trade_date)
 
 
+def run_market_beta_observer(paths: RuntimePaths, trade_date: str) -> dict[str, object]:
+    """生成统一 beta 快照，供测试替换。"""
+    return record_market_beta_snapshot(paths, trade_date)
+
+
 def _notify_if_needed(
     repository: SystemRepository,
     trade_date: str,
@@ -149,7 +166,7 @@ def _notify_if_needed(
     repository.record_run_step(
         PIPELINE_STRATEGY_ID,
         trade_date,
-        5,
+        6,
         "notification",
         result.status,
         result.message,
@@ -210,6 +227,12 @@ def _format_data_update_lines(message: str) -> list[str]:
         lines.append(f"游资涨跌停缓存：{cache}")
     elif "游资涨跌停缓存：已是最新" in message:
         lines.append("游资涨跌停缓存：已是最新")
+    if "Beta扩展数据已同步" in message:
+        beta = message.split("Beta扩展数据已同步:", 1)[1].split("，", 1)[0].strip()
+        lines.append(f"Beta扩展数据：{beta}")
+    elif "Beta扩展数据未更新" in message:
+        beta = message.split("Beta扩展数据未更新:", 1)[1].split("，", 1)[0].strip()
+        lines.append(f"Beta扩展数据：未更新，{beta}")
     if not lines:
         lines.append(f"摘要：{message}")
     return lines

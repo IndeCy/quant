@@ -17,6 +17,7 @@ export interface StrategyMetric {
   trade_date: string;
   strategy_id: string;
   nav: number;
+  paper_nav?: number | null;
   daily_return: number;
   cumulative_return: number;
   benchmark_id: string;

@@ -5,6 +5,7 @@ import { ChartPanel } from "../../shared/ui/ChartPanel";
 import { FactorCompositionPanel } from "./components/FactorCompositionPanel";
 import { MetricGrid } from "./components/MetricGrid";
 import { MultiStrategyChart } from "./components/MultiStrategyChart";
+import { MarketBetaPanel } from "./components/MarketBetaPanel";
 import { RecentReportsPanel } from "./components/RecentReportsPanel";
 import { RecentRunsPanel } from "./components/RecentRunsPanel";
 import { ReadinessPanel } from "./components/ReadinessPanel";
@@ -20,6 +21,12 @@ export function DashboardPage() {
   const selectedReports =
     data.selectedStrategyId === "ALL" ? data.reports : data.reports.filter((report) => report.strategy_id === selectedStrategy.strategy_id);
   const dates = selectedSeries.map((item) => item.trade_date);
+  const selectedNavSeries = [
+    { name: "策略净值", data: selectedSeries.map((item) => item.nav) },
+    { name: "Paper模拟净值", data: selectedSeries.map((item) => item.paper_nav ?? Number.NaN) },
+    { name: "基准", data: selectedSeries.map((item) => item.benchmark_nav) },
+    { name: "超额收益", data: selectedSeries.map((item) => item.excess_return), yAxisIndex: 1 }
+  ].filter((item) => item.data.some((value) => Number.isFinite(value)));
   const allDates = Array.from(
     new Set(data.strategies.flatMap((strategy) => data.strategySeriesMap[strategy.strategy_id]?.map((item) => item.trade_date) ?? []))
   ).sort();
@@ -40,6 +47,7 @@ export function DashboardPage() {
             />
           </section>
           <aside className="column side">
+            <MarketBetaPanel snapshot={data.marketBeta} marketSeries={data.marketSeries} />
             <ReadinessPanel report={data.readiness} />
             <RecentRunsPanel runs={data.runs} />
             <RecentReportsPanel reports={data.reports} />
@@ -56,11 +64,7 @@ export function DashboardPage() {
           <ChartPanel
             title="策略收益与基准"
             dates={dates}
-            series={[
-              { name: "策略净值", data: selectedSeries.map((item) => item.nav) },
-              { name: "基准", data: selectedSeries.map((item) => item.benchmark_nav) },
-              { name: "超额收益", data: selectedSeries.map((item) => item.excess_return), yAxisIndex: 1 }
-            ]}
+            series={selectedNavSeries}
             dualAxis
           />
           <ChartPanel
@@ -84,6 +88,7 @@ export function DashboardPage() {
           />
         </section>
         <aside className="column side">
+          <MarketBetaPanel snapshot={data.marketBeta} marketSeries={data.marketSeries} />
           <ReadinessPanel report={data.readiness} />
           <StrategyDefinitionPanel strategy={selectedStrategy} />
           <FactorCompositionPanel factors={selectedStrategy.factors ?? []} />

@@ -248,6 +248,18 @@ h2 {
   height: 30px;
 }
 
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.panel-head h2 {
+  margin-bottom: 0;
+}
+
 .chart {
   width: 100%;
   height: 336px;

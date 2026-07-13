@@ -47,6 +47,7 @@ def test_daily_pipeline_runs_data_then_strategy_batch(monkeypatch: pytest.Monkey
         "data_notification",
         "data_quality_gate",
         "strategy_batch",
+        "market_beta_observer",
         "notification",
     ]
     assert "数据更新" in notifications[0]

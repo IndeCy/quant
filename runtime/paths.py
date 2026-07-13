@@ -79,6 +79,10 @@ class RuntimePaths:
         return self.data_dir / "benchmark_increment.duckdb"
 
     @property
+    def beta_increment_path(self) -> Path:
+        return self.data_dir / "beta_increment.duckdb"
+
+    @property
     def quality_overlay_paper_path(self) -> Path:
         return self.data_dir / "quality_overlay_paper.sqlite3"
 
