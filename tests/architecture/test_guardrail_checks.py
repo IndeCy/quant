@@ -3,7 +3,7 @@
 from pathlib import Path
 
 from scripts.check_architecture import check_file_size, check_forbidden_imports
-from scripts.check_generated_artifacts import find_forbidden_paths
+from scripts.check_generated_artifacts import find_forbidden_paths, find_ignored_sources
 
 
 def test_forbidden_api_import_is_rejected(tmp_path: Path) -> None:
@@ -63,3 +63,10 @@ def test_generated_artifact_paths_are_rejected() -> None:
         "reports/dashboard_data.json: 自动生成产物不得提交",
         "runs/20260713/daily_report.md: 自动生成产物不得提交",
     ]
+
+
+def test_source_files_cannot_be_silently_ignored() -> None:
+    """宽泛的 lib 忽略规则不能再次吞掉前端源码。"""
+    ignored = ["frontend/node_modules/lib.js", "frontend/src/shared/lib/formatters.ts", "runtime/__pycache__/x.pyc"]
+
+    assert find_ignored_sources(ignored) == ["frontend/src/shared/lib/formatters.ts"]
