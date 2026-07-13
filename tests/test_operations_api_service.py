@@ -1,6 +1,7 @@
 """运行运维 API 服务测试。"""
 
 from pathlib import Path
+import sys
 
 import pandas as pd
 from fastapi.testclient import TestClient
@@ -71,7 +72,7 @@ def test_local_api_service_exposes_scheduler_status(tmp_path: Path) -> None:
     status = service.scheduler_status()
 
     assert status["job_store_path"].endswith("state/scheduler.sqlite")
-    assert status["start_command"].startswith("/Users/admin/recommend_analysis/.venv/bin/python3")
+    assert status["start_command"].startswith(f"{sys.executable} ")
     assert status["enabled"] is False
     assert status["jobs"] == []
 
