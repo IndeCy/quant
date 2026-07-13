@@ -371,17 +371,17 @@ def test_fastapi_manual_daily_run_uses_unified_pipeline(monkeypatch, tmp_path: P
     service = LocalApiService(_seed_runtime(tmp_path))
     client = TestClient(create_app(service))
     calls = []
-    def fake_pipeline(paths, push: bool, source: str, trade_date: str | None = None):
-        calls.append({"paths": paths, "push": push, "source": source, "trade_date": trade_date})
-        return {"trade_date": trade_date or "20260702", "status": "SUCCESS", "source": source}
+    def fake_pipeline(self, pipeline_id: str, trade_date: str | None, trigger_type: str, *, push: bool, force: bool):
+        calls.append({"paths": self.paths, "push": push, "trigger_type": trigger_type, "trade_date": trade_date, "force": force})
+        return {"trade_date": trade_date or "20260702", "status": "SUCCESS", "trigger_type": trigger_type}
 
-    monkeypatch.setattr("api.service.run_production_daily_pipeline", fake_pipeline)
+    monkeypatch.setattr("api.service.PipelineService.run", fake_pipeline)
 
     response = client.post("/api/pipeline/daily-run", json={"push": True, "trade_date": "20260707"})
 
     assert response.status_code == 200
     assert response.json()["status"] == "SUCCESS"
-    assert calls == [{"paths": service.paths, "push": True, "source": "api", "trade_date": "20260707"}]
+    assert calls == [{"paths": service.paths, "push": True, "trigger_type": "API", "trade_date": "20260707", "force": False}]
     assert "待办资料库" in client.get("/api/research/todos").json()["content"]
     factor_response = client.post(
         "/api/research/factor-ideas",

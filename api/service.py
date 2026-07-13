@@ -12,7 +12,6 @@ from api.paper_series import attach_paper_nav
 from monitoring.repository import MonitoringRepository
 from runtime.backup import build_backup_manifest
 from runtime.config import get_config_flag, get_config_value
-from runtime.daily_pipeline import run_production_daily_pipeline
 from runtime.data_catalog_runner import refresh_data_catalog
 from runtime.data_quality_gate import run_data_quality_gate
 from runtime.logs import list_log_files, read_log_file
@@ -21,6 +20,7 @@ from runtime.operations_decision import build_operations_decision
 from runtime.operations_observation import build_operations_observation
 from runtime.opportunity_catalog import register_builtin_opportunity_themes
 from runtime.paths import RuntimePaths, get_runtime_paths
+from runtime.pipeline_service import PipelineService
 from runtime.readiness import build_readiness_report
 from runtime.repository import SystemRepository
 from runtime.scheduler import configure_daily_pipeline_job, load_scheduler_status
@@ -77,11 +77,12 @@ class LocalApiService:
         """手动触发每日交易流水线，必须复用调度器同一套原子逻辑。"""
         data = payload or {}
         return _json_ready(
-            run_production_daily_pipeline(
-                paths=self.paths,
+            PipelineService(paths=self.paths).run(
+                pipeline_id="daily_trading_pipeline",
                 push=bool(data.get("push", False)),
-                source="api",
+                trigger_type="API",
                 trade_date=str(data.get("trade_date") or "") or None,
+                force=bool(data.get("force", False)),
             )
         )
 
