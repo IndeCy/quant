@@ -177,6 +177,11 @@ def test_batch_runner_syncs_portfolio_artifact_to_local_paper(tmp_path: Path, mo
 
     assert "paper_broker created=1" in message
     assert calls[0]["symbols"] == ["000001.SZ"]
+    account_snapshot = SystemRepository(paths.system_state_path).load_account_snapshot("paper_test")
+    assert account_snapshot is not None
+    assert account_snapshot["trade_date"] == "20260709"
+    assert account_snapshot["target_position_weight"] == pytest.approx(0.5)
+    assert account_snapshot["positions"][0]["symbol"] == "000001.SZ"
 
 
 def _seed_factor_scores(paths: RuntimePaths) -> None:

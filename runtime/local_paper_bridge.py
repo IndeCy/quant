@@ -11,6 +11,8 @@ import pandas as pd
 from data.calendar import TradingCalendar
 from runtime.local_paper_broker import LocalPaperBroker, PaperBrokerTarget, PaperBrokerSyncResult
 from runtime.paths import RuntimePaths
+from runtime.portfolio_account import build_account_snapshot
+from runtime.repository import SystemRepository
 
 
 def next_broker_trading_dates(trade_date: str) -> list[str]:
@@ -37,7 +39,7 @@ def sync_strategy_target_to_local_paper(
     """把任意策略目标权重同步到统一本地模拟盘账户。"""
     broker = LocalPaperBroker(paths.paper_trading_path)
     try:
-        return broker.sync_target(
+        result = broker.sync_target(
             PaperBrokerTarget(
                 strategy_id=strategy_id,
                 strategy_name=strategy_name,
@@ -50,8 +52,57 @@ def sync_strategy_target_to_local_paper(
                 benchmark_name=benchmark_name,
             )
         )
+        _persist_account_snapshot(paths, broker, result, target_weights, market_data)
+        return result
     finally:
         broker.close()
+
+
+def _persist_account_snapshot(
+    paths: RuntimePaths,
+    broker: LocalPaperBroker,
+    result: PaperBrokerSyncResult,
+    target_weights: dict[str, float],
+    market_data: pd.DataFrame,
+) -> None:
+    """把 Paper Broker 事实状态投影为前端统一账户快照。"""
+    account = broker.store.get_account(result.account_id)
+    prices = _close_prices(market_data, result.trade_date)
+    actual_positions: dict[str, dict[str, Any]] = {}
+    for position in broker.store.list_positions(result.account_id):
+        symbol = str(position["symbol"])
+        last_close = prices.get(symbol, float(position.get("avg_cost") or 0.0))
+        quantity = int(position.get("quantity") or 0)
+        actual_positions[symbol] = {
+            "market_value": quantity * last_close,
+            "quantity": quantity,
+            "last_close": last_close,
+        }
+    cash = float(account["cash"])
+    total_value = cash + sum(float(item["market_value"]) for item in actual_positions.values())
+    snapshot = build_account_snapshot(
+        strategy_id=str(account["strategy_code"]),
+        trade_date=result.trade_date,
+        total_value=total_value,
+        cash=cash,
+        target_weights=target_weights,
+        actual_positions=actual_positions,
+    )
+    SystemRepository(paths.system_state_path).upsert_account_snapshot(snapshot)
+
+
+def _close_prices(market_data: pd.DataFrame, trade_date: str) -> dict[str, float]:
+    """提取指定交易日收盘价，缺失时由账户投影使用持仓成本兜底。"""
+    if market_data.empty:
+        return {}
+    frame = market_data.copy()
+    frame["trade_date"] = frame["trade_date"].astype(str).str.replace("-", "", regex=False).str[:8]
+    frame = frame[frame["trade_date"].eq(_compact_date(trade_date))]
+    return {
+        str(row["symbol"]): float(row["close"])
+        for _, row in frame.iterrows()
+        if float(row.get("close") or 0.0) > 0
+    }
 
 
 def load_live_market_for_symbols(paths: RuntimePaths, trade_date: str, symbols: list[str], names: dict[str, str] | None = None) -> pd.DataFrame:

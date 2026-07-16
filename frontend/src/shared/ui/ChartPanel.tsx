@@ -17,9 +17,10 @@ interface ChartPanelProps {
   dates: string[];
   series: SeriesLine[];
   dualAxis?: boolean;
+  scaleYAxis?: boolean;
 }
 
-export function ChartPanel({ title, dates, series, dualAxis = false }: ChartPanelProps) {
+export function ChartPanel({ title, dates, series, dualAxis = false, scaleYAxis = false }: ChartPanelProps) {
   const ref = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -33,11 +34,14 @@ export function ChartPanel({ title, dates, series, dualAxis = false }: ChartPane
       legend: { top: 0, right: 0 },
       grid: { left: 48, right: dualAxis ? 48 : 18, top: 48, bottom: 32 },
       xAxis: { type: "category", data: dates, axisTick: { show: false } },
-      yAxis: dualAxis ? [{ type: "value" }, { type: "value", position: "right" }] : [{ type: "value" }],
+      yAxis: dualAxis
+        ? [{ type: "value", scale: scaleYAxis }, { type: "value", position: "right", scale: scaleYAxis }]
+        : [{ type: "value", scale: scaleYAxis }],
       series: series.map((item) => ({
         name: item.name,
         type: "line",
-        showSymbol: false,
+        showSymbol: dates.length <= 30,
+        symbolSize: 6,
         smooth: false,
         yAxisIndex: item.yAxisIndex ?? 0,
         data: item.data
@@ -49,7 +53,7 @@ export function ChartPanel({ title, dates, series, dualAxis = false }: ChartPane
       window.removeEventListener("resize", resize);
       chart.dispose();
     };
-  }, [dates, dualAxis, series, title]);
+  }, [dates, dualAxis, scaleYAxis, series, title]);
 
   return (
     <section className="panel">

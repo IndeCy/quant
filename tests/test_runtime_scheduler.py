@@ -21,6 +21,7 @@ from runtime.scheduler import (
     load_scheduler_status,
     run_daily_pipeline,
 )
+from runtime.scheduler_liveness import wake_scheduler_after_system_resume
 
 
 def test_build_daily_pipeline_command_uses_existing_script(tmp_path: Path) -> None:
@@ -227,3 +228,22 @@ def test_build_market_open_paper_execution_command_can_enable_push() -> None:
         "scripts/run_market_open_paper_execution.py",
         "--push",
     ]
+
+
+def test_wake_scheduler_after_system_resume_refreshes_scheduler_and_heartbeat(tmp_path: Path) -> None:
+    """电脑唤醒后必须同时唤醒调度线程，不能只更新存活心跳。"""
+
+    class SchedulerStub:
+        def __init__(self) -> None:
+            self.wakeup_count = 0
+
+        def wakeup(self) -> None:
+            self.wakeup_count += 1
+
+    paths = RuntimePaths(tmp_path / "runtime")
+    scheduler = SchedulerStub()
+
+    wake_scheduler_after_system_resume(scheduler, paths)
+
+    assert scheduler.wakeup_count == 1
+    assert paths.scheduler_heartbeat_path.exists()

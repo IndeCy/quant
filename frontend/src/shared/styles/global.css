@@ -265,6 +265,53 @@ h2 {
   height: 336px;
 }
 
+.chart-mode-bar {
+  min-height: 38px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.segmented-control {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 3px;
+  border: 1px solid #dbe3ed;
+  border-radius: 8px;
+  background: #edf1f6;
+}
+
+.segmented-control button {
+  min-width: 90px;
+  height: 30px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: #526175;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.segmented-control button.active {
+  background: #ffffff;
+  color: #172033;
+  box-shadow: 0 1px 3px rgb(15 23 42 / 12%);
+}
+
+.segmented-control button:disabled {
+  color: #a4afbd;
+  cursor: not-allowed;
+}
+
+.chart-mode-meta {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
 dl {
   margin: 0;
 }
@@ -399,5 +446,10 @@ td {
 
   .chart {
     height: 280px;
+  }
+
+  .chart-mode-bar {
+    align-items: flex-start;
+    flex-direction: column;
   }
 }

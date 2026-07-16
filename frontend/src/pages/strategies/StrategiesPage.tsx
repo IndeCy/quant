@@ -11,6 +11,7 @@ import { getStrategy, getStrategyInstanceState, saveStrategyInstance, transition
 import { strategyMetricText } from "../../entities/strategy/display";
 import { buildFactorTopNInstance, createEditableFactors, validateEditableFactors } from "../../entities/strategy/instanceFactory";
 import type { StrategyDefinition, StrategyInstance, StrategyInstanceState } from "../../entities/strategy/model";
+import { defaultAccountStrategyInstance } from "../../entities/strategy/selection";
 import { saveStrategyDraft } from "../../entities/strategyDraft/api";
 import { createDraftFactorsFromAvailableFactors } from "../../entities/strategyDraft/factory";
 import type { StrategyDraft, StrategyDraftPayload } from "../../entities/strategyDraft/model";
@@ -43,7 +44,9 @@ export function StrategiesPage() {
   const [instanceFactors, setInstanceFactors] = useState(createEditableFactors(data.factors));
   const [instanceStates, setInstanceStates] = useState<Record<string, StrategyInstanceState>>({});
   const [instanceMessage, setInstanceMessage] = useState("");
-  const [selectedInstanceId, setSelectedInstanceId] = useState(data.strategyInstances[0]?.strategy_id ?? "");
+  const [selectedInstanceId, setSelectedInstanceId] = useState(
+    defaultAccountStrategyInstance(data.strategyInstances)?.strategy_id ?? ""
+  );
   const [accountSnapshot, setAccountSnapshot] = useState<AccountSnapshot | null>(null);
   const [accountMessage, setAccountMessage] = useState("");
   const [manualOrderBatch, setManualOrderBatch] = useState<ManualOrderBatch | null>(null);
@@ -51,7 +54,7 @@ export function StrategiesPage() {
   const validation = useMemo(() => validateStrategyDraftWeights(draftFactors), [draftFactors]);
   const instanceValidation = useMemo(() => validateEditableFactors(instanceFactors), [instanceFactors]);
   const selectedInstance = useMemo(
-    () => instances.find((instance) => instance.strategy_id === selectedInstanceId) ?? instances[0] ?? null,
+    () => instances.find((instance) => instance.strategy_id === selectedInstanceId) ?? defaultAccountStrategyInstance(instances),
     [instances, selectedInstanceId]
   );
   const selectedIsObservation = selectedInstance?.status === "research_observation";

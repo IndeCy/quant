@@ -11,7 +11,8 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from runtime.paths import get_runtime_paths
-from runtime.scheduler import create_scheduler, install_daily_pipeline_jobs, write_scheduler_heartbeat
+from runtime.scheduler import create_scheduler, install_daily_pipeline_jobs
+from runtime.scheduler_liveness import wake_scheduler_after_system_resume
 
 
 def main() -> None:
@@ -34,13 +35,14 @@ def main() -> None:
         push=args.push,
     )
     scheduler.resume()
-    write_scheduler_heartbeat(paths)
+    wake_scheduler_after_system_resume(scheduler, paths)
     job_ids = ", ".join(job.id for job in jobs)
     print(f"local scheduler started: {job_ids} at {args.hour:02d}:{args.minute:02d}")
     try:
         while True:
             time.sleep(60)
-            write_scheduler_heartbeat(paths)
+            # macOS 从休眠恢复后主动重扫到期任务，不能只证明进程仍存活。
+            wake_scheduler_after_system_resume(scheduler, paths)
     except KeyboardInterrupt:
         scheduler.shutdown()
 
