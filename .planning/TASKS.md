@@ -38,6 +38,8 @@
 | R1-004 | R1.4 | P0 | done | Codex | 显式 Pipeline DAG 与受控并行 | `pytest tests/test_pipeline_dag.py tests/test_daily_pipeline.py -q` |
 | R1-005 | R1.5 | P0 | done | Codex | base+increment 统一行情快照 | `pytest tests/test_market_snapshot.py -q` |
 | R1-006 | R1.6 | P1 | done | Codex | 静态前端、配置化服务和恢复验收 | `pytest tests/test_static_frontend_server.py tests/test_restore_audit.py -q` |
+| R2-001 | R2.1 | P0 | done | Codex | 建立策略 Compute/Persist 协议并迁移现有执行器 | `pytest tests/test_strategy_compute_persist.py -q` |
+| R2-002 | R2.2 | P1 | done | Codex | 开放策略级受控并行和失败隔离 | `pytest tests/test_strategy_batch_runner.py tests/test_strategy_compute_persist.py -q` |
 | Y1Y2-001 | Y1/Y2.1 | P2 | done | Codex | 游资情绪数据层与市场状态机 | `pytest tests/test_tushare_limit_incremental.py tests/test_hot_money_emotion.py tests/test_hot_money_state.py tests/test_hot_money_state_cli.py -q` |
 | Y3-001 | Y3.1 | P2 | done | Codex | 主线板块与龙头识别 | 生成 sector momentum、leader stock 和报告 CLI |
 

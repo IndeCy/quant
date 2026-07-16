@@ -6,7 +6,11 @@ import sqlite3
 from monitoring.repository import MonitoringRepository
 from runtime.paths import RuntimePaths
 from runtime.repository import SystemRepository
-from strategies.factor_topn_runner import run_factor_topn_monthly_instance
+from strategies.factor_topn_runner import (
+    compute_factor_topn_monthly_instance,
+    persist_factor_topn_monthly_instance,
+    run_factor_topn_monthly_instance,
+)
 
 
 def test_factor_topn_runner_selects_weighted_top_names(tmp_path: Path) -> None:
@@ -25,7 +29,13 @@ def test_factor_topn_runner_selects_weighted_top_names(tmp_path: Path) -> None:
         "benchmark": "510300",
     }
 
-    result = run_factor_topn_monthly_instance(instance, paths)
+    computation = compute_factor_topn_monthly_instance(instance, paths)
+
+    assert not paths.system_state_path.exists()
+    assert not paths.monitoring_path.exists()
+    assert not (paths.runs_dir / "20260630").exists()
+
+    result = persist_factor_topn_monthly_instance(instance, paths, computation)
     latest = SystemRepository(paths.system_state_path).latest_run("quality_roa_ocf_v2")
     history = MonitoringRepository(paths.monitoring_path).load_strategy_history("quality_roa_ocf_v2")
 

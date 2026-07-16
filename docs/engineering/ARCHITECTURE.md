@@ -52,3 +52,7 @@ M0 文件包括交易日历、Schema、清洗、复权、财务 as-of、Executio
 
 每日生产依赖固定为：`data_update -> data_quality_gate -> strategy_batch + market_beta_observer`。
 策略和 Beta 位于同一受控波次，但共享 `monitoring.sqlite3` 时由资源锁串行写入；任何策略运行都不得早于数据质量门禁。
+
+策略批次内部固定为两阶段：所有 runnable 策略先通过 `StrategyExecutorRegistry.compute()` 受控并行计算，
+计算阶段只能读取已通过门禁的数据并返回内存结果；随后由批处理主线程按稳定顺序调用 `persist()`，串行写入
+系统状态、监控指标、运行产物、Paper 目标和通知。新增策略必须同时遵守该协议，不得在 compute 入口中落盘。

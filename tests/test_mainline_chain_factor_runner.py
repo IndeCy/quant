@@ -12,7 +12,10 @@ from monitoring.repository import MonitoringRepository
 from runtime.paths import RuntimePaths
 from runtime.repository import SystemRepository
 from runtime.strategy_instance_catalog import register_builtin_strategy_instances
-from strategies.mainline_chain_factor_runner import run_factor_chain_rotation_instance
+from strategies.mainline_chain_factor_runner import (
+    compute_factor_chain_rotation_instance,
+    persist_factor_chain_rotation_instance,
+)
 
 
 def test_mainline_chain_factor_runner_writes_monitoring_and_artifacts(tmp_path: Path) -> None:
@@ -24,7 +27,13 @@ def test_mainline_chain_factor_runner_writes_monitoring_and_artifacts(tmp_path: 
     register_builtin_strategy_instances(repository)
     instance = repository.load_strategy_instance("mainline_chain_factor_v1")
 
-    result = run_factor_chain_rotation_instance(instance, paths)
+    computation = compute_factor_chain_rotation_instance(instance, paths)
+
+    assert repository.latest_run("mainline_chain_factor_v1") is None
+    assert not paths.monitoring_path.exists()
+    assert not (paths.runs_dir / computation.result["trade_date"]).exists()
+
+    result = persist_factor_chain_rotation_instance(instance, paths, computation)
 
     history = MonitoringRepository(paths.monitoring_path).load_strategy_history("mainline_chain_factor_v1")
     state = repository.load_strategy_instance_state("mainline_chain_factor_v1")

@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import contextlib
 from dataclasses import dataclass
-from datetime import date
 import io
 import json
 from pathlib import Path
@@ -13,12 +12,12 @@ from typing import Any
 
 import pandas as pd
 
-from backtest.cache import MarketDataCache
 from backtest.chain_selection import ChainDefinition, ChainStock
 from backtest.data import DataManager
 from backtest.engine import BacktestEngine
 from backtest.execution_model import ExecutionModel
 from backtest.strategy import BaseStrategy
+from data.market_cache_reader import read_cached_daily_bars
 from examples.compare_chain_stock_selection import build_default_chain_definitions
 from monitoring.metrics import build_strategy_monitor_frame
 from monitoring.repository import MonitoringRepository
@@ -42,6 +41,17 @@ class SelectionRecord:
     segment: str
     score: float
     target_weight: float
+
+
+@dataclass(frozen=True)
+class MainlineChainComputation:
+    """主线链动回测的纯计算产物。"""
+
+    result: dict[str, Any]
+    strategy: "FactorChainRotationStrategy"
+    monitoring_frame: pd.DataFrame
+    engine: BacktestEngine
+    latest_prices: dict[str, float]
 
 
 class FactorChainRotationStrategy(BaseStrategy):
@@ -166,7 +176,15 @@ class FactorChainRotationStrategy(BaseStrategy):
 
 
 def run_factor_chain_rotation_instance(instance: dict[str, Any], paths: RuntimePaths) -> dict[str, Any]:
-    """运行主线链动原生因子策略，并写入统一监控与运行产物。"""
+    """兼容入口：在当前线程依次计算并提交主线链动策略。"""
+    computation = compute_factor_chain_rotation_instance(instance, paths)
+    return persist_factor_chain_rotation_instance(instance, paths, computation)
+
+
+def compute_factor_chain_rotation_instance(
+    instance: dict[str, Any], paths: RuntimePaths
+) -> MainlineChainComputation:
+    """只读标准缓存完成回测，不写监控库、状态库和运行目录。"""
     strategy_id = str(instance["strategy_id"])
     strategy_name = str(instance["name"])
     chains = build_default_chain_definitions()
@@ -196,21 +214,8 @@ def run_factor_chain_rotation_instance(instance: dict[str, Any], paths: RuntimeP
         raise RuntimeError(f"mainline_chain_factor_history_too_short: {len(results)} rows")
 
     monitor_frame = _build_monitor_frame(strategy_id, strategy_name, results, benchmark, engine, instance)
-    MonitoringRepository(paths.monitoring_path).upsert_strategy_daily(monitor_frame)
     latest_date = str(monitor_frame.iloc[-1]["trade_date"])
-    run_dir = paths.runs_dir / latest_date
-    run_dir.mkdir(parents=True, exist_ok=True)
-    artifacts = _write_artifacts(run_dir, strategy, monitor_frame, engine, instance)
-    _write_instance_state(
-        paths,
-        strategy_id,
-        latest_date,
-        float(monitor_frame.iloc[-1]["nav"]),
-        strategy.latest_targets,
-        _latest_prices(bars),
-    )
-    _record_success(paths, strategy_id, latest_date, run_dir, artifacts, len(monitor_frame), strategy.latest_targets)
-    return {
+    result = {
         "strategy_id": strategy_id,
         "trade_date": latest_date,
         "selected_count": len(strategy.latest_targets),
@@ -218,8 +223,47 @@ def run_factor_chain_rotation_instance(instance: dict[str, Any], paths: RuntimeP
         "target_weights": {item.symbol: item.target_weight for item in strategy.latest_targets},
         "nav": float(monitor_frame.iloc[-1]["nav"]),
         "rows": len(monitor_frame),
-        "run_dir": str(run_dir),
     }
+    return MainlineChainComputation(result, strategy, monitor_frame, engine, _latest_prices(bars))
+
+
+def persist_factor_chain_rotation_instance(
+    instance: dict[str, Any],
+    paths: RuntimePaths,
+    computation: MainlineChainComputation,
+) -> dict[str, Any]:
+    """串行提交主线链动监控历史、目标持仓和运行产物。"""
+    result = computation.result
+    strategy_id = str(result["strategy_id"])
+    latest_date = str(result["trade_date"])
+    MonitoringRepository(paths.monitoring_path).upsert_strategy_daily(computation.monitoring_frame)
+    run_dir = paths.runs_dir / latest_date
+    run_dir.mkdir(parents=True, exist_ok=True)
+    artifacts = _write_artifacts(
+        run_dir,
+        computation.strategy,
+        computation.monitoring_frame,
+        computation.engine,
+        instance,
+    )
+    _write_instance_state(
+        paths,
+        strategy_id,
+        latest_date,
+        float(result["nav"]),
+        computation.strategy.latest_targets,
+        computation.latest_prices,
+    )
+    _record_success(
+        paths,
+        strategy_id,
+        latest_date,
+        run_dir,
+        artifacts,
+        len(computation.monitoring_frame),
+        computation.strategy.latest_targets,
+    )
+    return {**result, "run_dir": str(run_dir)}
 
 
 def _load_chain_bars(
@@ -234,17 +278,13 @@ def _load_chain_bars(
     adjust = str(config.get("adjust_policy", "qfq"))
     symbols = _chain_symbols(chains)
     result: dict[str, pd.DataFrame] = {}
-    cache = MarketDataCache(cache_path)
-    try:
-        for symbol in symbols:
-            frame = cache.read_bars(provider, symbol, frequency, adjust, date(2000, 1, 1), date.today())
-            if not frame.empty:
-                result[symbol] = frame
-        benchmark = cache.read_bars(provider, BENCHMARK_SYMBOL, frequency, "none", date(2000, 1, 1), date.today())
-        if not benchmark.empty:
-            result[BENCHMARK_ALIAS] = benchmark
-    finally:
-        cache.close()
+    for symbol in symbols:
+        frame = read_cached_daily_bars(cache_path, provider, symbol, frequency, adjust)
+        if not frame.empty:
+            result[symbol] = frame
+    benchmark = read_cached_daily_bars(cache_path, provider, BENCHMARK_SYMBOL, frequency, "none")
+    if not benchmark.empty:
+        result[BENCHMARK_ALIAS] = benchmark
     missing = sorted(set(symbols) - set(result))
     if missing:
         raise RuntimeError(f"mainline_chain_cache_missing_symbols: {','.join(missing)}")

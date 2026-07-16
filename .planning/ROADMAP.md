@@ -258,6 +258,20 @@
 - 状态：done
 - 目标：静态前端常驻服务、配置化路径和数据库恢复验收。
 
+## Milestone R2：策略计算与提交分离
+
+### Phase R2.1：Compute/Persist Runtime Protocol
+
+- 优先级：P0
+- 状态：done
+- 目标：建立策略纯计算结果与串行提交协议，禁止计算线程写共享运行状态。
+
+### Phase R2.2：Controlled Strategy Parallelism
+
+- 优先级：P1
+- 状态：done
+- 目标：在统一协议上开放策略级受控并行，并保证失败隔离和稳定提交顺序。
+
 ## Milestone Y1/Y2：游资情绪数据层与市场状态机
 
 ### Phase Y1/Y2.1：Hot Money Emotion State Engine

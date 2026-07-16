@@ -5,7 +5,11 @@ from pathlib import Path
 from monitoring.repository import MonitoringRepository
 from runtime.paths import RuntimePaths
 from runtime.repository import SystemRepository
-from strategies.opportunity_observer_runner import run_opportunity_observer_instance
+from strategies.opportunity_observer_runner import (
+    compute_opportunity_observer_instance,
+    persist_opportunity_observer_instance,
+    run_opportunity_observer_instance,
+)
 
 
 def _paths(tmp_path: Path) -> RuntimePaths:
@@ -49,16 +53,20 @@ def test_opportunity_observer_selects_top5_equal_weight_and_excludes_mature(tmp_
         _seed_stock(repository, symbol, level, score, 10.0 + score / 100.0)
     monkeypatch.setattr("strategies.opportunity_observer_runner._load_prices", lambda paths, trade_date, symbols: {})
 
-    result = run_opportunity_observer_instance(
-        {
-            "strategy_id": "innovative_drug_globalization_observer_v0",
-            "name": "创新药出海观察策略 V0",
-            "benchmark": "510300",
-            "construction": {"top_n": 5, "weighting": "equal_weight"},
-            "config": {"theme_id": "innovative_drug_globalization", "exclude_mature": True},
-        },
-        paths,
-    )
+    instance = {
+        "strategy_id": "innovative_drug_globalization_observer_v0",
+        "name": "创新药出海观察策略 V0",
+        "benchmark": "510300",
+        "construction": {"top_n": 5, "weighting": "equal_weight"},
+        "config": {"theme_id": "innovative_drug_globalization", "exclude_mature": True},
+    }
+    computation = compute_opportunity_observer_instance(instance, paths)
+
+    assert repository.latest_run("innovative_drug_globalization_observer_v0") is None
+    assert repository.load_strategy_instance_state("innovative_drug_globalization_observer_v0")["trade_date"] is None
+    assert not paths.monitoring_path.exists()
+
+    result = persist_opportunity_observer_instance(instance, paths, computation)
 
     state = repository.load_strategy_instance_state("innovative_drug_globalization_observer_v0")
     assert result["selected_count"] == 5

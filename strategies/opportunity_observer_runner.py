@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import datetime
 import json
 from pathlib import Path
@@ -17,32 +18,126 @@ from runtime.paths import RuntimePaths
 from runtime.repository import SystemRepository
 
 
+@dataclass(frozen=True)
+class OpportunityObserverComputation:
+    """机会观察策略的纯计算产物。"""
+
+    result: dict[str, Any]
+    selected: list[dict[str, Any]]
+    excluded: list[dict[str, Any]]
+    target_weights: dict[str, float]
+    current_prices: dict[str, float]
+    monitoring_frame: pd.DataFrame
+
+
 def run_opportunity_observer_instance(
     instance: dict[str, Any],
     paths: RuntimePaths,
     trade_date: str | None = None,
 ) -> dict[str, Any]:
-    """运行观察策略，生成观察组合和净值曲线，不生成交易建议。"""
-    repository = SystemRepository(paths.system_state_path)
+    """兼容入口：在当前线程依次计算并提交观察策略。"""
+    computation = compute_opportunity_observer_instance(instance, paths, trade_date=trade_date)
+    return persist_opportunity_observer_instance(instance, paths, computation)
+
+
+def compute_opportunity_observer_instance(
+    instance: dict[str, Any],
+    paths: RuntimePaths,
+    trade_date: str | None = None,
+) -> OpportunityObserverComputation:
+    """只读投研池、价格和旧持仓，生成观察组合和待提交监控帧。"""
     strategy_id = str(instance["strategy_id"])
     target_date = trade_date or _today()
-    run_dir = paths.runs_dir / target_date
-    run_dir.mkdir(parents=True, exist_ok=True)
     theme_id = str((instance.get("config") or {}).get("theme_id") or "").strip()
     if not theme_id:
         raise ValueError("opportunity observer requires config.theme_id")
 
-    theme = repository.load_opportunity_theme(theme_id)
+    theme = _load_opportunity_theme_readonly(paths.system_state_path, theme_id)
     selected, excluded = _select_holdings(theme, instance)
     target_weights = {item["symbol"]: float(item["weight"]) for item in selected}
     current_prices = _current_prices(paths, target_date, theme, list(target_weights))
-    nav = _update_observation_state(paths, strategy_id, target_date, target_weights, current_prices)
-    _write_monitoring_snapshot(paths, instance, target_date, nav, bool(selected))
-    artifacts = _write_artifacts(run_dir, strategy_id, target_date, selected, excluded, nav)
-    repository.record_strategy_run(strategy_id, target_date, "SUCCESS", run_dir, f"observation selected {len(selected)} symbols")
+    nav = _preview_observation_state(paths.system_state_path, strategy_id, current_prices)
+    monitoring_frame = _build_monitoring_snapshot(paths, instance, target_date, nav, bool(selected))
+    result = {"strategy_id": strategy_id, "trade_date": target_date, "selected_count": len(selected), "nav": nav}
+    return OpportunityObserverComputation(
+        result,
+        selected,
+        excluded,
+        target_weights,
+        current_prices,
+        monitoring_frame,
+    )
+
+
+def persist_opportunity_observer_instance(
+    instance: dict[str, Any],
+    paths: RuntimePaths,
+    computation: OpportunityObserverComputation,
+) -> dict[str, Any]:
+    """串行提交观察状态、监控曲线和研究产物。"""
+    result = computation.result
+    strategy_id = str(result["strategy_id"])
+    target_date = str(result["trade_date"])
+    run_dir = paths.runs_dir / target_date
+    run_dir.mkdir(parents=True, exist_ok=True)
+    _save_observation_state(
+        paths,
+        strategy_id,
+        target_date,
+        computation.target_weights,
+        computation.current_prices,
+        float(result["nav"]),
+    )
+    MonitoringRepository(paths.monitoring_path).upsert_strategy_daily(computation.monitoring_frame)
+    artifacts = _write_artifacts(
+        run_dir,
+        strategy_id,
+        target_date,
+        computation.selected,
+        computation.excluded,
+        float(result["nav"]),
+    )
+    repository = SystemRepository(paths.system_state_path)
+    repository.record_strategy_run(
+        strategy_id,
+        target_date,
+        "SUCCESS",
+        run_dir,
+        f"observation selected {len(computation.selected)} symbols",
+    )
     for report_type, path in artifacts.items():
         repository.upsert_report(report_type, strategy_id, target_date, report_type, path, tags=["observation", "research"])
-    return {"strategy_id": strategy_id, "trade_date": target_date, "selected_count": len(selected), "nav": nav}
+    return dict(result)
+
+
+def _load_opportunity_theme_readonly(path: Path, theme_id: str) -> dict[str, Any]:
+    """用只读连接加载主题，避免计算线程触发系统仓库 Schema 初始化。"""
+    if not path.exists():
+        raise KeyError(theme_id)
+    with sqlite3.connect(f"file:{path.resolve()}?mode=ro", uri=True) as con:
+        con.row_factory = sqlite3.Row
+        theme = con.execute("SELECT * FROM opportunity_themes WHERE theme_id = ?", [theme_id]).fetchone()
+        if theme is None:
+            raise KeyError(theme_id)
+        stocks = con.execute(
+            "SELECT * FROM opportunity_stocks WHERE theme_id = ? ORDER BY watch_level, symbol",
+            [theme_id],
+        ).fetchall()
+    result = _decode_row(theme)
+    result["stocks"] = [_decode_row(row) for row in stocks]
+    result["monitor_runs"] = []
+    return result
+
+
+def _decode_row(row: sqlite3.Row) -> dict[str, Any]:
+    result = dict(row)
+    if "evidence_json" in result:
+        result["evidence"] = json.loads(result.pop("evidence_json") or "{}")
+    if "metrics_json" in result:
+        result["metrics"] = json.loads(result.pop("metrics_json") or "{}")
+    if "tags_json" in result:
+        result["tags"] = json.loads(result.pop("tags_json") or "[]")
+    return result
 
 
 def _today() -> str:
@@ -118,19 +213,55 @@ def _update_observation_state(
     target_weights: dict[str, float],
     current_prices: dict[str, float],
 ) -> float:
-    """用上一期观察持仓估算今日净值，并保存新的观察目标持仓。"""
+    """兼容入口：预估并立即保存观察状态。"""
+    nav = _preview_observation_state(paths.system_state_path, strategy_id, current_prices)
+    _save_observation_state(paths, strategy_id, trade_date, target_weights, current_prices, nav)
+    return nav
+
+
+def _preview_observation_state(
+    path: Path,
+    strategy_id: str,
+    current_prices: dict[str, float],
+) -> float:
+    """只读上一期持仓并预估观察净值。"""
+    if not path.exists():
+        return 1.0
+    with sqlite3.connect(f"file:{path.resolve()}?mode=ro", uri=True) as con:
+        state_table = con.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='strategy_instance_state'"
+        ).fetchone()
+        holdings_table = con.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='strategy_instance_holdings'"
+        ).fetchone()
+        state = None
+        old_holdings = []
+        if state_table:
+            state = con.execute(
+                "SELECT nav FROM strategy_instance_state WHERE strategy_id = ?",
+                [strategy_id],
+            ).fetchone()
+        if holdings_table:
+            old_holdings = con.execute(
+                "SELECT symbol, weight, last_close FROM strategy_instance_holdings WHERE strategy_id = ?",
+                [strategy_id],
+            ).fetchall()
+    previous_nav = float(state[0]) if state else 1.0
+    holdings = [(str(row[0]), float(row[1]), float(row[2])) for row in old_holdings]
+    return _estimate_next_nav(previous_nav, holdings, current_prices)
+
+
+def _save_observation_state(
+    paths: RuntimePaths,
+    strategy_id: str,
+    trade_date: str,
+    target_weights: dict[str, float],
+    current_prices: dict[str, float],
+    nav: float,
+) -> None:
+    """只在串行提交阶段保存观察目标和净值。"""
     with sqlite3.connect(paths.system_state_path) as con:
         _init_state_schema(con)
-        state = con.execute(
-            "SELECT nav FROM strategy_instance_state WHERE strategy_id = ?",
-            [strategy_id],
-        ).fetchone()
-        previous_nav = float(state[0]) if state else 1.0
-        old_holdings = con.execute(
-            "SELECT symbol, weight, last_close FROM strategy_instance_holdings WHERE strategy_id = ?",
-            [strategy_id],
-        ).fetchall()
-        nav = _estimate_next_nav(previous_nav, old_holdings, current_prices)
         con.execute(
             """
             INSERT INTO strategy_instance_state(strategy_id, trade_date, nav)
@@ -150,7 +281,6 @@ def _update_observation_state(
             """,
             [(strategy_id, symbol, weight, current_prices.get(symbol, 0.0)) for symbol, weight in target_weights.items()],
         )
-    return float(nav)
 
 
 def _estimate_next_nav(previous_nav: float, old_holdings: list[tuple[str, float, float]], current_prices: dict[str, float]) -> float:
@@ -170,18 +300,23 @@ def _estimate_next_nav(previous_nav: float, old_holdings: list[tuple[str, float,
     return float(previous_nav * (1.0 + portfolio_return))
 
 
-def _write_monitoring_snapshot(paths: RuntimePaths, instance: dict[str, Any], trade_date: str, nav: float, invested: bool) -> None:
-    """把观察净值写入统一策略监控表，供前端曲线复用。"""
+def _build_monitoring_snapshot(
+    paths: RuntimePaths,
+    instance: dict[str, Any],
+    trade_date: str,
+    nav: float,
+    invested: bool,
+) -> pd.DataFrame:
+    """只读已有历史并构造待提交观察监控帧。"""
     date = pd.to_datetime(trade_date, format="%Y%m%d")
-    monitoring = MonitoringRepository(paths.monitoring_path)
-    history = monitoring.load_strategy_history(str(instance["strategy_id"]))
+    history = _load_monitoring_history(paths.monitoring_path, str(instance["strategy_id"]))
     if history.empty:
         values = pd.Series([nav], index=[date])
     else:
         existing = pd.Series(history["nav"].astype(float).values, index=pd.to_datetime(history["trade_date"], format="%Y%m%d"))
         values = pd.concat([existing[existing.index != date], pd.Series([nav], index=[date])]).sort_index()
     exposure = pd.Series(1.0 if invested else 0.0, index=values.index)
-    frame = build_strategy_monitor_frame(
+    return build_strategy_monitor_frame(
         strategy_id=str(instance["strategy_id"]),
         strategy_name=str(instance["name"]),
         daily_values=values,
@@ -189,7 +324,29 @@ def _write_monitoring_snapshot(paths: RuntimePaths, instance: dict[str, Any], tr
         exposure=exposure,
         benchmark_id=str(instance.get("benchmark") or "510300"),
     )
-    monitoring.upsert_strategy_daily(frame)
+
+
+def _load_monitoring_history(path: Path, strategy_id: str) -> pd.DataFrame:
+    if not path.exists():
+        return pd.DataFrame()
+    with sqlite3.connect(f"file:{path.resolve()}?mode=ro", uri=True) as con:
+        table = con.execute(
+            "SELECT 1 FROM sqlite_master WHERE type='table' AND name='strategy_nav_daily'"
+        ).fetchone()
+        if table is None:
+            return pd.DataFrame()
+        return pd.read_sql_query(
+            "SELECT * FROM strategy_nav_daily WHERE strategy_id = ? ORDER BY trade_date",
+            con,
+            params=[strategy_id],
+        )
+
+
+def _write_monitoring_snapshot(paths: RuntimePaths, instance: dict[str, Any], trade_date: str, nav: float, invested: bool) -> None:
+    """兼容旧调用：构造后立即提交观察监控帧。"""
+    MonitoringRepository(paths.monitoring_path).upsert_strategy_daily(
+        _build_monitoring_snapshot(paths, instance, trade_date, nav, invested)
+    )
 
 
 def _write_artifacts(

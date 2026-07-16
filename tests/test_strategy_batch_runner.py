@@ -2,7 +2,9 @@
 
 from pathlib import Path
 import sqlite3
+from types import SimpleNamespace
 
+import pandas as pd
 import pytest
 
 from runtime.paths import RuntimePaths
@@ -15,6 +17,7 @@ from runtime.strategy_batch_runner import (
     run_enabled_strategy_instances,
 )
 from runtime.strategy_executor_registry import StrategyExecutionContext
+from strategies.opportunity_observer_runner import OpportunityObserverComputation
 
 
 def test_batch_runner_runs_enabled_factor_topn_instances(tmp_path: Path) -> None:
@@ -103,8 +106,24 @@ def test_strategy_batch_dispatches_opportunity_observer(tmp_path: Path, monkeypa
         }
     )
     monkeypatch.setattr(
-        "runtime.strategy_batch_runner.run_opportunity_observer_instance",
-        lambda instance, paths, trade_date=None: {"selected_count": 3, "nav": 1.0},
+        "runtime.strategy_batch_runner.compute_opportunity_observer_instance",
+        lambda instance, paths, trade_date=None: OpportunityObserverComputation(
+            result={
+                "strategy_id": instance["strategy_id"],
+                "trade_date": trade_date,
+                "selected_count": 3,
+                "nav": 1.0,
+            },
+            selected=[],
+            excluded=[],
+            target_weights={},
+            current_prices={},
+            monitoring_frame=pd.DataFrame(),
+        ),
+    )
+    monkeypatch.setattr(
+        "runtime.strategy_batch_runner.persist_opportunity_observer_instance",
+        lambda instance, paths, computation: computation.result,
     )
 
     result = run_enabled_strategy_instances(paths)
@@ -116,18 +135,22 @@ def test_strategy_batch_dispatches_opportunity_observer(tmp_path: Path, monkeypa
 def test_quality_adapter_returns_standard_target_portfolio(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
     """冻结 Quality 应在当前进程返回目标组合，不再依赖子进程 CSV 回读。"""
     paths = RuntimePaths(tmp_path / "runtime")
+    persisted: list[str] = []
     monkeypatch.setattr(
-        "runtime.strategy_batch_runner.run_quality_overlay_instance",
-        lambda instance, paths, trade_date: {
-            "trade_date": trade_date,
-            "selected_count": 2,
-            "target_weights": {"000001.SZ": 0.5, "000002.SZ": 0.5},
-            "nav": 1.2,
-        },
+        "runtime.strategy_batch_runner.compute_quality_overlay_instance",
+        lambda instance, paths, trade_date: SimpleNamespace(
+            result={
+                "strategy_id": instance["strategy_id"],
+                "trade_date": trade_date,
+                "selected_count": 2,
+                "target_weights": {"000001.SZ": 0.5, "000002.SZ": 0.5},
+                "nav": 1.2,
+            }
+        ),
     )
     registry = build_default_strategy_executor_registry()
 
-    result = registry.execute(
+    computation = registry.compute(
         {
             "strategy_id": "quality_overlay",
             "template_id": "factor_topn_monthly",
@@ -136,8 +159,10 @@ def test_quality_adapter_returns_standard_target_portfolio(tmp_path: Path, monke
         StrategyExecutionContext(paths=paths, trade_date="20260715"),
     )
 
+    result = computation.result
     assert result.target_portfolio is not None
     assert result.target_portfolio.weights == {"000001.SZ": 0.5, "000002.SZ": 0.5}
+    assert persisted == []
 
 
 @pytest.mark.parametrize(

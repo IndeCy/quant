@@ -2,11 +2,11 @@
 
 ## Active Milestone
 
-Enterprise Quant Platform / Milestone R1：运行架构收敛
+Enterprise Quant Platform / Milestone R2：策略计算与提交分离
 
 ## Active Phase
 
-Phase R1.6：Mac mini Runtime Baseline
+Phase R2.2：Controlled Strategy Parallelism
 
 ## Current Status
 
@@ -138,15 +138,21 @@ completed
 - 每日流水线改为显式 DAG：数据更新和质量门禁串行，策略批次与 Beta 观察受控并行。
 - 新增 base+increment 行情快照，绑定 as-of、qfq/raw 口径和数据文件版本。
 - 前端生产候选运行改为静态构建 + Python 常驻服务，增加 Mac mini 恢复完整性验收。
+- Milestone R2：Strategy Compute/Persist Separation。
+- 策略执行器注册表支持独立 `compute()` / `persist()`，兼容 `execute()` 仍可单策略完整运行。
+- 因子 TopN、主线链动、机会观察和 Quality 适配器均已迁移为纯计算与串行提交两阶段。
+- 每日策略批次使用受限线程池并行计算，按 `strategy_id` 稳定顺序串行提交 SQLite、Paper 和通知。
+- 单策略计算或提交失败会独立登记，不阻止其他策略完成提交。
+- 完整围栏通过：后端 `553 passed`、前端 `61 passed`、TypeScript/Vite 生产构建通过。
 
 ## Next Action
 
-进入 Milestone R2：把策略“计算”和“持久化/通知”彻底分离，再开放单策略级并行，避免 SQLite 写入竞争。
+规划 Milestone R3：Strategy Commit Journal & Recovery，为跨状态库提交增加幂等提交日志和中断恢复能力。
 
 ## Resume Prompt
 
 ```text
-继续企业级量化平台项目，从 .planning/STATE.md 恢复，规划 Milestone R2：Strategy Compute/Persist Separation。
+继续企业级量化平台项目，从 .planning/STATE.md 恢复，规划 Milestone R3：Strategy Commit Journal & Recovery。
 ```
 
 ## Verification Commands
