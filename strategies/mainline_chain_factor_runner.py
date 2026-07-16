@@ -215,6 +215,7 @@ def run_factor_chain_rotation_instance(instance: dict[str, Any], paths: RuntimeP
         "trade_date": latest_date,
         "selected_count": len(strategy.latest_targets),
         "selected_symbols": [item.symbol for item in strategy.latest_targets],
+        "target_weights": {item.symbol: item.target_weight for item in strategy.latest_targets},
         "nav": float(monitor_frame.iloc[-1]["nav"]),
         "rows": len(monitor_frame),
         "run_dir": str(run_dir),

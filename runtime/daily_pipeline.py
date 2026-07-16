@@ -14,6 +14,7 @@ from monitoring.repository import MonitoringRepository
 from runtime.data_quality_gate import run_data_quality_gate
 from runtime.notification_config import NotificationResult, send_bark_notification
 from runtime.paths import RuntimePaths, get_runtime_paths
+from runtime.pipeline_dag import PipelineDagExecutor, PipelineNode, PipelineNodeResult
 from runtime.repository import SystemRepository
 from runtime.market_beta_observer import record_market_beta_snapshot
 from runtime.strategy_batch_runner import run_enabled_strategy_instances
@@ -28,7 +29,7 @@ def run_production_daily_pipeline(
     source: str = "manual",
     trade_date: str | None = None,
 ) -> dict[str, object]:
-    """执行每日原子流水线：数据更新成功后才运行策略批处理。"""
+    """执行每日原子流水线：数据可信后并行运行策略与 Beta 观察。"""
     runtime_paths = paths or get_runtime_paths()
     runtime_paths.ensure_directories()
     repository = SystemRepository(runtime_paths.system_state_path)
@@ -37,85 +38,118 @@ def run_production_daily_pipeline(
     run_dir.mkdir(parents=True, exist_ok=True)
 
     repository.record_strategy_run(PIPELINE_STRATEGY_ID, target_date, "RUNNING", run_dir, f"source={source}")
-    try:
-        data_message = run_data_update(target_date)
-        repository.record_run_step(
-            PIPELINE_STRATEGY_ID,
-            target_date,
-            1,
-            "data_update",
-            "SUCCESS",
-            data_message,
-            run_dir,
-        )
-        _notify_data_update(repository, target_date, run_dir, push, "SUCCESS", data_message)
-    except Exception as exc:
-        message = f"数据更新失败，策略未执行: {exc}"
-        repository.record_run_step(PIPELINE_STRATEGY_ID, target_date, 1, "data_update", "FAILED", str(exc), run_dir)
-        _notify_data_update(repository, target_date, run_dir, push, "FAILED", str(exc))
-        notification = _notify_if_needed(repository, target_date, run_dir, push, "FAILED", message)
-        repository.record_strategy_run(PIPELINE_STRATEGY_ID, target_date, "FAILED", run_dir, _with_notification(message, notification))
-        raise
+    dag_results = PipelineDagExecutor(max_workers=2).execute(
+        [
+            PipelineNode("data_update", (), lambda: run_data_update(target_date)),
+            PipelineNode("data_quality_gate", ("data_update",), lambda: _run_checked_quality_gate(runtime_paths)),
+            PipelineNode(
+                "strategy_batch",
+                ("data_quality_gate",),
+                lambda: _run_checked_strategy_batch(runtime_paths, target_date),
+                resources=("monitoring_sqlite",),
+            ),
+            PipelineNode(
+                "market_beta_observer",
+                ("data_quality_gate",),
+                lambda: run_market_beta_observer(runtime_paths, target_date),
+                resources=("monitoring_sqlite",),
+            ),
+        ]
+    )
 
-    try:
-        quality_result = run_data_quality_gate(runtime_paths)
-        if quality_result["status"] != "PASS":
-            raise RuntimeError(_summarize_quality_gate(quality_result))
-        repository.record_run_step(
-            PIPELINE_STRATEGY_ID,
+    data_node = dag_results["data_update"]
+    data_message = str(data_node.value) if data_node.status == "SUCCESS" else data_node.message
+    repository.record_run_step(
+        PIPELINE_STRATEGY_ID,
+        target_date,
+        1,
+        "data_update",
+        data_node.status,
+        _with_duration(data_message, data_node),
+        run_dir,
+    )
+    _notify_data_update(repository, target_date, run_dir, push, data_node.status, data_message)
+    if data_node.status != "SUCCESS":
+        _fail_pipeline(
+            repository,
             target_date,
-            3,
-            "data_quality_gate",
-            "SUCCESS",
-            _summarize_quality_gate(quality_result),
             run_dir,
+            push,
+            f"数据更新失败，策略未执行: {data_node.message}",
+            data_node,
         )
-    except Exception as exc:
-        message = f"数据质量门禁失败，策略未执行: {exc}"
-        repository.record_run_step(
-            PIPELINE_STRATEGY_ID,
-            target_date,
-            3,
-            "data_quality_gate",
-            "FAILED",
-            str(exc),
-            run_dir,
-        )
-        notification = _notify_if_needed(repository, target_date, run_dir, push, "FAILED", message)
-        repository.record_strategy_run(PIPELINE_STRATEGY_ID, target_date, "FAILED", run_dir, _with_notification(message, notification))
-        raise
 
-    try:
-        strategy_summary = run_strategy_batch(runtime_paths, push=False, trade_date=target_date)
-        strategy_status = "SUCCESS" if int(strategy_summary.get("failed_count", 0)) == 0 else "FAILED"
-        strategy_message = _summarize_strategy_batch(strategy_summary)
-        repository.record_run_step(
-            PIPELINE_STRATEGY_ID,
+    quality_node = dag_results["data_quality_gate"]
+    quality_message = (
+        _summarize_quality_gate(_as_dict(quality_node.value))
+        if quality_node.status == "SUCCESS"
+        else quality_node.message
+    )
+    repository.record_run_step(
+        PIPELINE_STRATEGY_ID,
+        target_date,
+        3,
+        "data_quality_gate",
+        quality_node.status,
+        _with_duration(quality_message, quality_node),
+        run_dir,
+    )
+    if quality_node.status != "SUCCESS":
+        _fail_pipeline(
+            repository,
             target_date,
-            4,
-            "strategy_batch",
-            strategy_status,
-            strategy_message,
             run_dir,
+            push,
+            f"数据质量门禁失败，策略未执行: {quality_node.message}",
+            quality_node,
         )
-        if strategy_status != "SUCCESS":
-            raise RuntimeError(strategy_message)
-    except Exception as exc:
-        message = f"策略批处理失败: {exc}"
-        notification = _notify_if_needed(repository, target_date, run_dir, push, "FAILED", message)
-        repository.record_strategy_run(PIPELINE_STRATEGY_ID, target_date, "FAILED", run_dir, _with_notification(message, notification))
-        raise
 
-    beta_result = run_market_beta_observer(runtime_paths, target_date)
+    strategy_node = dag_results["strategy_batch"]
+    strategy_summary = _as_dict(strategy_node.value)
+    strategy_message = (
+        _summarize_strategy_batch(strategy_summary)
+        if strategy_node.status == "SUCCESS"
+        else strategy_node.message
+    )
+    repository.record_run_step(
+        PIPELINE_STRATEGY_ID,
+        target_date,
+        4,
+        "strategy_batch",
+        strategy_node.status,
+        _with_duration(strategy_message, strategy_node),
+        run_dir,
+    )
+
+    beta_node = dag_results["market_beta_observer"]
+    beta_result = _as_dict(beta_node.value)
     repository.record_run_step(
         PIPELINE_STRATEGY_ID,
         target_date,
         5,
         "market_beta_observer",
-        str(beta_result.get("status", "UNKNOWN")),
-        str(beta_result.get("message", "")),
+        str(beta_result.get("status", beta_node.status)) if beta_node.status == "SUCCESS" else beta_node.status,
+        _with_duration(str(beta_result.get("message", beta_node.message)), beta_node),
         run_dir,
     )
+    if strategy_node.status != "SUCCESS":
+        _fail_pipeline(
+            repository,
+            target_date,
+            run_dir,
+            push,
+            f"策略批处理失败: {strategy_node.message}",
+            strategy_node,
+        )
+    if beta_node.status != "SUCCESS":
+        _fail_pipeline(
+            repository,
+            target_date,
+            run_dir,
+            push,
+            f"Beta 观察失败: {beta_node.message}",
+            beta_node,
+        )
 
     message = _build_operation_summary(runtime_paths, strategy_summary)
     notification = _notify_if_needed(repository, target_date, run_dir, push, "SUCCESS", message)
@@ -128,6 +162,54 @@ def run_production_daily_pipeline(
         "strategy_batch": strategy_summary,
         "notification": notification.__dict__,
     }
+
+
+def _run_checked_quality_gate(paths: RuntimePaths) -> dict[str, object]:
+    """执行质量门禁并把业务 FAIL 统一转换为节点失败。"""
+    result = run_data_quality_gate(paths)
+    if result.get("status") != "PASS":
+        raise RuntimeError(_summarize_quality_gate(result))
+    return result
+
+
+def _run_checked_strategy_batch(paths: RuntimePaths, trade_date: str) -> dict[str, object]:
+    """执行策略批次，任一策略失败时由 DAG 记录失败节点。"""
+    summary = run_strategy_batch(paths, push=False, trade_date=trade_date)
+    if int(summary.get("failed_count", 0)) > 0:
+        raise RuntimeError(_summarize_strategy_batch(summary))
+    return summary
+
+
+def _fail_pipeline(
+    repository: SystemRepository,
+    trade_date: str,
+    run_dir: object,
+    push: bool,
+    message: str,
+    node: PipelineNodeResult,
+) -> None:
+    """统一记录流水线失败、发送通知，并重新抛出原始异常。"""
+    notification = _notify_if_needed(repository, trade_date, run_dir, push, "FAILED", message)
+    repository.record_strategy_run(
+        PIPELINE_STRATEGY_ID,
+        trade_date,
+        "FAILED",
+        run_dir,
+        _with_notification(message, notification),
+    )
+    if node.error is not None:
+        raise node.error
+    raise RuntimeError(message)
+
+
+def _with_duration(message: str, node: PipelineNodeResult) -> str:
+    """为运行步骤补充节点耗时，便于定位调度性能问题。"""
+    return f"{message}; duration={node.duration_seconds:.3f}s"
+
+
+def _as_dict(value: object | None) -> dict[str, object]:
+    """收窄 DAG 动态返回值类型，异常类型由节点状态负责。"""
+    return value if isinstance(value, dict) else {}
 
 
 def run_data_update(trade_date: str | None = None) -> str:

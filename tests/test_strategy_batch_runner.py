@@ -7,7 +7,14 @@ import pytest
 
 from runtime.paths import RuntimePaths
 from runtime.repository import SystemRepository
-from runtime.strategy_batch_runner import _sync_local_paper_from_artifacts, _with_push_args, _with_run_args, run_enabled_strategy_instances
+from runtime.strategy_batch_runner import (
+    _sync_local_paper_from_artifacts,
+    _with_push_args,
+    _with_run_args,
+    build_default_strategy_executor_registry,
+    run_enabled_strategy_instances,
+)
+from runtime.strategy_executor_registry import StrategyExecutionContext
 
 
 def test_batch_runner_runs_enabled_factor_topn_instances(tmp_path: Path) -> None:
@@ -41,6 +48,9 @@ def test_batch_runner_runs_enabled_factor_topn_instances(tmp_path: Path) -> None
     assert latest is not None
     assert latest["status"] == "SUCCESS"
     assert "selected 2 symbols" in latest["message"]
+    account_snapshot = repository.load_account_snapshot("paper_test")
+    assert account_snapshot is not None
+    assert account_snapshot["target_position_weight"] == pytest.approx(1.0)
 
 
 def test_batch_runner_skips_enabled_research_instances(tmp_path: Path) -> None:
@@ -101,6 +111,33 @@ def test_strategy_batch_dispatches_opportunity_observer(tmp_path: Path, monkeypa
 
     assert result["success_count"] == 1
     assert result["results"][0]["message"] == "observation selected 3 symbols, nav 1.000000"
+
+
+def test_quality_adapter_returns_standard_target_portfolio(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    """冻结 Quality 应在当前进程返回目标组合，不再依赖子进程 CSV 回读。"""
+    paths = RuntimePaths(tmp_path / "runtime")
+    monkeypatch.setattr(
+        "runtime.strategy_batch_runner.run_quality_overlay_instance",
+        lambda instance, paths, trade_date: {
+            "trade_date": trade_date,
+            "selected_count": 2,
+            "target_weights": {"000001.SZ": 0.5, "000002.SZ": 0.5},
+            "nav": 1.2,
+        },
+    )
+    registry = build_default_strategy_executor_registry()
+
+    result = registry.execute(
+        {
+            "strategy_id": "quality_overlay",
+            "template_id": "factor_topn_monthly",
+            "config": {"adapter": "quality_overlay_compat"},
+        },
+        StrategyExecutionContext(paths=paths, trade_date="20260715"),
+    )
+
+    assert result.target_portfolio is not None
+    assert result.target_portfolio.weights == {"000001.SZ": 0.5, "000002.SZ": 0.5}
 
 
 @pytest.mark.parametrize(

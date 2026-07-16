@@ -2,11 +2,11 @@
 
 ## Active Milestone
 
-Hot Money Behavior Engine / Milestone Y3：主线板块与龙头识别
+Enterprise Quant Platform / Milestone R1：运行架构收敛
 
 ## Active Phase
 
-Phase Y3.1：Sector Momentum and Leader Stock Engine
+Phase R1.6：Mac mini Runtime Baseline
 
 ## Current Status
 
@@ -131,15 +131,22 @@ completed
 - 新增 `runtime/hot_money_sector.py`，基于涨停缓存和板块映射输出主线板块排名、强度分、唯一性分和主线标记。
 - 新增 `runtime/hot_money_leader.py`，基于主线板块识别唯一龙头、次级龙头和过滤对象，并输出连板、成交占比和过滤理由。
 - 新增 `scripts/run_hot_money_leaders.py`，从本地缓存生成主线与龙头研究报告，不执行交易、不接入调仓。
+- Milestone R1：Architecture Convergence。
+- 新增 `TargetPortfolio` 与执行器注册表，策略批处理不再按策略 ID 硬编码分发。
+- Quality 与主线链动使用原生执行协议返回目标权重，生产路径不再依赖子进程和 CSV 回读。
+- Paper Broker 成交账本统一投影到账户快照，开盘成交后立即刷新前端持仓和漂移。
+- 每日流水线改为显式 DAG：数据更新和质量门禁串行，策略批次与 Beta 观察受控并行。
+- 新增 base+increment 行情快照，绑定 as-of、qfq/raw 口径和数据文件版本。
+- 前端生产候选运行改为静态构建 + Python 常驻服务，增加 Mac mini 恢复完整性验收。
 
 ## Next Action
 
-进入 Phase Y4.1：Strategy Router and Risk-Aware Hot Money Research Backtest。先生成状态到策略路由，不接真实交易。
+进入 Milestone R2：把策略“计算”和“持久化/通知”彻底分离，再开放单策略级并行，避免 SQLite 写入竞争。
 
 ## Resume Prompt
 
 ```text
-继续游资行为引擎项目，从 .planning/STATE.md 恢复，执行 Phase Y3.1：Sector Momentum and Leader Stock Engine。
+继续企业级量化平台项目，从 .planning/STATE.md 恢复，规划 Milestone R2：Strategy Compute/Persist Separation。
 ```
 
 ## Verification Commands
@@ -172,6 +179,7 @@ test -f docs/development_workflow.md
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_operations_quality_report.py tests/test_operations_quality_report_api.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_environment_audit.py tests/test_environment_audit_api.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_runtime_config.py -q
+/Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_strategy_execution_contract.py tests/test_pipeline_dag.py tests/test_market_snapshot.py tests/test_restore_audit.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 -m pytest tests/test_tushare_limit_incremental.py tests/test_hot_money_emotion.py tests/test_hot_money_state.py tests/test_hot_money_state_cli.py -q
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_git_baseline_report.py --output-dir docs/release
 /Users/admin/recommend_analysis/.venv/bin/python3 scripts/generate_safe_commit_review.py --output-dir docs/release

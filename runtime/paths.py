@@ -83,6 +83,21 @@ class RuntimePaths:
         return self.data_dir / "beta_increment.duckdb"
 
     @property
+    def base_market_path(self) -> Path:
+        """定位只读历史行情基线，支持 Mac mini 通过配置无复制挂载。"""
+        configured = get_config_value("QUANT_BASE_MARKET_DB", prefer_environ=True)
+        if configured:
+            return Path(configured).expanduser().resolve()
+        filename = "daily_adj_19901219_20260615.duckdb"
+        candidates = [
+            self.root / filename,
+            self.data_dir / filename,
+            _project_root() / filename,
+            _project_root().parent / "database" / filename,
+        ]
+        return next((candidate for candidate in candidates if candidate.exists()), candidates[0])
+
+    @property
     def quality_overlay_paper_path(self) -> Path:
         return self.data_dir / "quality_overlay_paper.sqlite3"
 

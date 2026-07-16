@@ -311,16 +311,7 @@ def _load_limit_emotion(paths: RuntimePaths, trade_date: str, breadth: pd.DataFr
 
 def _resolve_base_daily_db(paths: RuntimePaths) -> Path | None:
     """定位历史基线库，兼容 QUANT_HOME 与项目根目录分离的部署方式。"""
-    filename = "daily_adj_19901219_20260615.duckdb"
-    candidates = [
-        paths.root / filename,
-        paths.data_dir / filename,
-        Path(__file__).resolve().parents[1] / filename,
-    ]
-    for candidate in candidates:
-        if candidate.exists():
-            return candidate
-    return None
+    return paths.base_market_path if paths.base_market_path.exists() else None
 
 
 def load_beta_inputs(paths: RuntimePaths, trade_date: str) -> dict[str, float]:

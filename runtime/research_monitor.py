@@ -138,38 +138,25 @@ def _load_bars(paths: RuntimePaths, symbol: str) -> pd.DataFrame:
 
 def _load_bars_from_live_view(paths: RuntimePaths, symbol: str) -> pd.DataFrame:
     """SQLite 缓存历史不足时，从 DuckDB 基线+增量视图读取完整前复权行情。"""
-    base_path = paths.root / "daily_adj_19901219_20260615.duckdb"
+    base_path = paths.base_market_path
     if not base_path.exists() or not paths.live_market_increment_path.exists():
         return pd.DataFrame()
     try:
-        from data.live_market_view import open_live_market_connection
+        from data.market_snapshot import create_market_snapshot
 
-        con = open_live_market_connection(base_path, paths.live_market_increment_path, lookback_start="20000101")
-        try:
-            frame = con.execute(
-                """
-                SELECT
-                    a.trade_date,
-                    a.open_qfq AS open,
-                    a.high_qfq AS high,
-                    a.low_qfq AS low,
-                    a.close_qfq AS close,
-                    d.vol AS volume,
-                    d.amount AS amount
-                FROM daily_adj_cache a
-                JOIN daily d ON a.ts_code = d.ts_code AND a.trade_date = d.trade_date
-                WHERE a.ts_code = ?
-                ORDER BY a.trade_date
-                """,
-                [symbol],
-            ).fetchdf()
-        finally:
-            con.close()
+        snapshot = create_market_snapshot(
+            base_path,
+            paths.live_market_increment_path,
+            date.today().strftime("%Y%m%d"),
+            lookback_start="20000101",
+            adjust_policy="qfq",
+        )
+        frame = snapshot.load_daily_bars(symbol).reset_index()
     except Exception:
         return pd.DataFrame()
     if frame.empty:
         return pd.DataFrame()
-    frame["trade_date"] = pd.to_datetime(frame["trade_date"], format="%Y%m%d")
+    frame["trade_date"] = pd.to_datetime(frame["trade_date"])
     return frame.set_index("trade_date")[["open", "high", "low", "close", "volume", "amount"]]
 
 

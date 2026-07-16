@@ -217,8 +217,46 @@
 ### Phase E22.1：Runtime Config Migration Check
 
 - 优先级：P4
-- 状态：pending
+- 状态：done
 - 目标：把 `.env.properties` 纳入迁移检查清单但继续排除 Git，确保迁移 Mac mini 时不会遗漏本地私密配置。
+
+## Milestone R1：运行架构收敛
+
+### Phase R1.1：Strategy Runtime Contract
+
+- 优先级：P0
+- 状态：done
+- 目标：统一策略目标组合契约、执行器注册和扩展边界。
+
+### Phase R1.2：Paper Ledger Projection
+
+- 优先级：P0
+- 状态：done
+- 目标：成交账本作为事实来源，统一投影账户、持仓和漂移。
+
+### Phase R1.3：Native Strategy Runtime
+
+- 优先级：P0
+- 状态：done
+- 目标：Quality 与主线链动通过同一原生协议运行，不再依赖子进程和 CSV 回读。
+
+### Phase R1.4：Pipeline DAG
+
+- 优先级：P0
+- 状态：done
+- 目标：显式声明数据、质量、策略和 Beta 依赖，支持受控并行与失败阻断。
+
+### Phase R1.5：Market Data Snapshot
+
+- 优先级：P0
+- 状态：done
+- 目标：统一 base+increment、as-of 和复权口径，生成可追溯行情快照。
+
+### Phase R1.6：Mac mini Runtime Baseline
+
+- 优先级：P1
+- 状态：done
+- 目标：静态前端常驻服务、配置化路径和数据库恢复验收。
 
 ## Milestone Y1/Y2：游资情绪数据层与市场状态机
 

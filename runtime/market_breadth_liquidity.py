@@ -58,7 +58,12 @@ def load_recent_daily_bars(base_path: Path, increment_path: Path, end_date: str,
         return pd.DataFrame()
     from data.live_market_view import open_live_market_connection
 
-    con = open_live_market_connection(base_path, increment_path, lookback_start="20000101")
+    con = open_live_market_connection(
+        base_path,
+        increment_path,
+        lookback_start="20000101",
+        as_of_date=end_date,
+    )
     try:
         dates = con.execute(
             """

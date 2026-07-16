@@ -9,10 +9,21 @@ def open_live_market_connection(
     base_path: str | Path,
     increment_path: str | Path,
     lookback_start: str = "20140701",
+    as_of_date: str | None = None,
 ):
-    """创建内存连接，并提供策略研究兼容的表名。"""
+    """创建内存连接，并提供策略研究兼容的表名。
+
+    as_of_date 默认不限制，以保持旧研究脚本行为；生产快照必须显式传入，
+    从源视图层阻止读取运行日之后的行情和复权因子。
+    """
     import duckdb
 
+    start_date = _normalize_date(lookback_start, "lookback_start")
+    end_date = _normalize_date(as_of_date, "as_of_date") if as_of_date else None
+    if end_date is not None and start_date > end_date:
+        raise ValueError("lookback_start 不能晚于 as_of_date")
+    base_end = f" AND b.trade_date <= '{end_date}'" if end_date else ""
+    increment_end = f" AND trade_date <= '{end_date}'" if end_date else ""
     base = _quote_path(Path(base_path))
     increment = _quote_path(Path(increment_path))
     con = duckdb.connect(":memory:")
@@ -22,26 +33,26 @@ def open_live_market_connection(
         f"""
         CREATE VIEW daily AS
         SELECT b.* FROM base_db.daily b
-        WHERE b.trade_date >= '{lookback_start}'
+        WHERE b.trade_date >= '{start_date}'{base_end}
           AND NOT EXISTS (
               SELECT 1 FROM live_db.daily i
               WHERE i.ts_code = b.ts_code AND i.trade_date = b.trade_date
           )
         UNION ALL
-        SELECT * FROM live_db.daily WHERE trade_date >= '{lookback_start}'
+        SELECT * FROM live_db.daily WHERE trade_date >= '{start_date}'{increment_end}
         """
     )
     con.execute(
         f"""
         CREATE VIEW adj_factor AS
         SELECT b.* FROM base_db.adj_factor b
-        WHERE b.trade_date >= '{lookback_start}'
+        WHERE b.trade_date >= '{start_date}'{base_end}
           AND NOT EXISTS (
               SELECT 1 FROM live_db.adj_factor i
               WHERE i.ts_code = b.ts_code AND i.trade_date = b.trade_date
           )
         UNION ALL
-        SELECT * FROM live_db.adj_factor WHERE trade_date >= '{lookback_start}'
+        SELECT * FROM live_db.adj_factor WHERE trade_date >= '{start_date}'{increment_end}
         """
     )
     # 复权因子并非每个行情日都有记录，使用有效区间向后延续最近因子。
@@ -113,3 +124,11 @@ def _quote_path(path: Path) -> str:
     if not path.exists():
         raise FileNotFoundError(f"DuckDB文件不存在: {path}")
     return str(path.resolve()).replace("'", "''")
+
+
+def _normalize_date(value: str, field_name: str) -> str:
+    """只接受 YYYYMMDD，避免动态视图 SQL 接收任意文本。"""
+    normalized = str(value).replace("-", "")
+    if len(normalized) != 8 or not normalized.isdigit():
+        raise ValueError(f"{field_name} 必须是 YYYYMMDD")
+    return normalized

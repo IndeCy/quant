@@ -47,3 +47,14 @@ def test_runtime_paths_can_create_standard_directories(tmp_path: Path) -> None:
     assert paths.reports_dir.is_dir()
     assert paths.logs_dir.is_dir()
     assert paths.config_dir.is_dir()
+
+
+def test_runtime_paths_support_external_base_market_database(monkeypatch, tmp_path: Path) -> None:
+    """历史大库可通过单一配置挂载，迁移机器时不要求放进代码目录。"""
+    base_path = tmp_path / "market.duckdb"
+    base_path.touch()
+    monkeypatch.setenv("QUANT_BASE_MARKET_DB", str(base_path))
+
+    paths = RuntimePaths(tmp_path / "runtime")
+
+    assert paths.base_market_path == base_path.resolve()

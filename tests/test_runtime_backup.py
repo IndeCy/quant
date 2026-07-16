@@ -22,3 +22,5 @@ def test_build_backup_manifest_lists_migratable_runtime_paths(tmp_path: Path) ->
     assert manifest["items"][0]["file_count"] >= 1
     assert manifest["backup_command"].startswith("tar -czf quant_runtime_backup_")
     assert "-C" in manifest["backup_command"]
+    assert [item["name"] for item in manifest["external_items"]] == ["local_config", "base_market"]
+    assert "verify_runtime_restore.py" in manifest["restore_check_command"]

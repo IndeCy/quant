@@ -31,7 +31,13 @@
 | E19-001 | E19.1 | P4 | done | Codex | 运维质量趋势报告 | `operations_quality_review` 登记到报告索引 |
 | E20-001 | E20.1 | P4 | done | Codex | 运行环境一致性审计 | `/api/environment/audit` 暴露 API 进程缺少 `TUSHARE_TOKEN` |
 | E21-001 | E21.1 | P4 | done | Codex | 本地私密配置统一 | `.env.properties` 已创建且 `/api/environment/audit` 为 PASS |
-| E22-001 | E22.1 | P4 | pending | Codex | 运行配置迁移与备份校验 | `.env.properties` 纳入迁移检查但不提交 Git |
+| E22-001 | E22.1 | P4 | done | Codex | 运行配置迁移与备份校验 | `.env.properties` 纳入迁移检查但不提交 Git |
+| R1-001 | R1.1 | P0 | done | Codex | 统一策略目标组合契约与执行器注册 | `pytest tests/test_strategy_execution_contract.py -q` |
+| R1-002 | R1.2 | P0 | done | Codex | 统一 Paper 账本到账户快照投影 | `pytest tests/test_market_open_paper_execution.py -q` |
+| R1-003 | R1.3 | P0 | done | Codex | Quality/Mainline 原生协议接入 | `pytest tests/test_strategy_batch_runner.py -q` |
+| R1-004 | R1.4 | P0 | done | Codex | 显式 Pipeline DAG 与受控并行 | `pytest tests/test_pipeline_dag.py tests/test_daily_pipeline.py -q` |
+| R1-005 | R1.5 | P0 | done | Codex | base+increment 统一行情快照 | `pytest tests/test_market_snapshot.py -q` |
+| R1-006 | R1.6 | P1 | done | Codex | 静态前端、配置化服务和恢复验收 | `pytest tests/test_static_frontend_server.py tests/test_restore_audit.py -q` |
 | Y1Y2-001 | Y1/Y2.1 | P2 | done | Codex | 游资情绪数据层与市场状态机 | `pytest tests/test_tushare_limit_incremental.py tests/test_hot_money_emotion.py tests/test_hot_money_state.py tests/test_hot_money_state_cli.py -q` |
 | Y3-001 | Y3.1 | P2 | done | Codex | 主线板块与龙头识别 | 生成 sector momentum、leader stock 和报告 CLI |
 

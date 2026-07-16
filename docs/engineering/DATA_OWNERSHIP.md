@@ -5,6 +5,7 @@
 | 数据类型 | 存储 | 用途 |
 |---|---|---|
 | 日线、复权、财务、市场扩展数据 | DuckDB | 研究和生产计算输入 |
+| 生产行情快照 | base DuckDB + increment DuckDB + as-of + adjust_policy | 单次运行可复现输入 |
 | 策略、因子、运行、订单、持仓索引 | SQLite | 运行系统事实状态 |
 | 大型中间研究结果 | DuckDB/Parquet | 可重复计算的数据资产 |
 | `runs/YYYYMMDD/` | 文件 | 面向人的每日导出产物 |
@@ -23,6 +24,9 @@ DuckDB 的标准查询结果，不直接扫描文件目录。
 4. 需要保留的历史 `runs/`、研究报告和备份。
 
 可删除并重建：前端依赖、Python 缓存、测试缓存、日志、心跳和 HTML 看板。
+
+历史基线大库可通过 `QUANT_BASE_MARKET_DB` 单独挂载；增量库仍位于 `QUANT_HOME/data`。
+`.env.properties` 不进入 Git，也不进入普通运行目录压缩包，备份清单必须把它列为外部敏感文件。
 
 ## Schema 规则
 

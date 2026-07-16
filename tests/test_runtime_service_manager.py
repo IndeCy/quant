@@ -10,12 +10,13 @@ from runtime.service_manager import build_launchd_plist, build_service_commands,
 def test_build_service_commands_describes_local_processes(tmp_path: Path) -> None:
     """服务管理信息应覆盖 API、前端和调度器三个本地进程。"""
     paths = RuntimePaths(tmp_path / "runtime")
-    commands = build_service_commands(paths, python_executable="python-test", node_executable="node-test")
+    commands = build_service_commands(paths, python_executable="python-test")
 
     names = [item["name"] for item in commands]
     assert names == ["api", "frontend", "scheduler"]
     assert commands[0]["command"][:3] == ["python-test", "-m", "api.local_server"]
-    assert commands[1]["cwd"].endswith("frontend")
+    assert commands[1]["command"][:3] == ["python-test", "-m", "runtime.static_frontend_server"]
+    assert commands[1]["command"][-2:] == ["--port", "5173"]
     assert commands[2]["command"][1] == "scripts/run_local_scheduler.py"
     assert "--push" in commands[2]["command"]
 

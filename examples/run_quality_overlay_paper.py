@@ -141,9 +141,12 @@ def validate_incremental_quality() -> None:
             raise RuntimeError(f"ETF增量复权因子缺失: {missing[0]} 缺失{missing[1]}条")
 
 
-def build_snapshot(update_warnings: list[str]) -> tuple[QualityPaperSnapshot, pd.DataFrame, object, pd.Series, pd.Series]:
-    """复现冻结策略至最后完整交易日，并生成理论目标权重。"""
-    con = open_live_market_connection(DB_PATH, INCREMENT_PATH)
+def build_snapshot(
+    update_warnings: list[str],
+    as_of_date: str | None = None,
+) -> tuple[QualityPaperSnapshot, pd.DataFrame, object, pd.Series, pd.Series]:
+    """复现冻结策略至 as-of 最后完整交易日，并生成理论目标权重。"""
+    con = open_live_market_connection(DB_PATH, INCREMENT_PATH, as_of_date=as_of_date)
     try:
         create_feature_table(con)
         signal_dates = load_signal_dates(con)
@@ -475,7 +478,7 @@ def main() -> None:
             if _has_blocking_update_warning(warnings):
                 raise RuntimeError("; ".join(warnings))
         validate_incremental_quality()
-        snapshot, holdings, run, benchmark_curve, shanghai_curve = build_snapshot(warnings)
+        snapshot, holdings, run, benchmark_curve, shanghai_curve = build_snapshot(warnings, as_of_date=run_date)
         update_monitoring_dashboard(run, benchmark_curve, shanghai_curve)
         write_production_artifacts(snapshot, holdings, run, benchmark_curve, warnings)
         QualityPaperStore(PAPER_PATH).save(snapshot)

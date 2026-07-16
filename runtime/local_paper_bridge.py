@@ -9,10 +9,10 @@ import duckdb
 import pandas as pd
 
 from data.calendar import TradingCalendar
+from data.market_snapshot import create_market_snapshot
+from runtime.account_projection_service import project_paper_account_snapshot
 from runtime.local_paper_broker import LocalPaperBroker, PaperBrokerTarget, PaperBrokerSyncResult
 from runtime.paths import RuntimePaths
-from runtime.portfolio_account import build_account_snapshot
-from runtime.repository import SystemRepository
 
 
 def next_broker_trading_dates(trade_date: str) -> list[str]:
@@ -52,64 +52,28 @@ def sync_strategy_target_to_local_paper(
                 benchmark_name=benchmark_name,
             )
         )
-        _persist_account_snapshot(paths, broker, result, target_weights, market_data)
+        project_paper_account_snapshot(
+            paths,
+            broker,
+            result.account_id,
+            result.trade_date,
+            market_data,
+            target_weights,
+        )
         return result
     finally:
         broker.close()
 
 
-def _persist_account_snapshot(
-    paths: RuntimePaths,
-    broker: LocalPaperBroker,
-    result: PaperBrokerSyncResult,
-    target_weights: dict[str, float],
-    market_data: pd.DataFrame,
-) -> None:
-    """把 Paper Broker 事实状态投影为前端统一账户快照。"""
-    account = broker.store.get_account(result.account_id)
-    prices = _close_prices(market_data, result.trade_date)
-    actual_positions: dict[str, dict[str, Any]] = {}
-    for position in broker.store.list_positions(result.account_id):
-        symbol = str(position["symbol"])
-        last_close = prices.get(symbol, float(position.get("avg_cost") or 0.0))
-        quantity = int(position.get("quantity") or 0)
-        actual_positions[symbol] = {
-            "market_value": quantity * last_close,
-            "quantity": quantity,
-            "last_close": last_close,
-        }
-    cash = float(account["cash"])
-    total_value = cash + sum(float(item["market_value"]) for item in actual_positions.values())
-    snapshot = build_account_snapshot(
-        strategy_id=str(account["strategy_code"]),
-        trade_date=result.trade_date,
-        total_value=total_value,
-        cash=cash,
-        target_weights=target_weights,
-        actual_positions=actual_positions,
-    )
-    SystemRepository(paths.system_state_path).upsert_account_snapshot(snapshot)
-
-
-def _close_prices(market_data: pd.DataFrame, trade_date: str) -> dict[str, float]:
-    """提取指定交易日收盘价，缺失时由账户投影使用持仓成本兜底。"""
-    if market_data.empty:
-        return {}
-    frame = market_data.copy()
-    frame["trade_date"] = frame["trade_date"].astype(str).str.replace("-", "", regex=False).str[:8]
-    frame = frame[frame["trade_date"].eq(_compact_date(trade_date))]
-    return {
-        str(row["symbol"]): float(row["close"])
-        for _, row in frame.iterrows()
-        if float(row.get("close") or 0.0) > 0
-    }
-
-
 def load_live_market_for_symbols(paths: RuntimePaths, trade_date: str, symbols: list[str], names: dict[str, str] | None = None) -> pd.DataFrame:
-    """从统一 Tushare 增量库读取 Broker 撮合需要的日线行情。"""
+    """从统一 base+increment 快照读取 Broker 撮合所需原始行情。"""
     if not symbols or not paths.live_market_increment_path.exists():
         return pd.DataFrame(columns=_market_columns())
     symbol_list = sorted(set(symbols))
+    if paths.base_market_path.exists():
+        frame = _load_market_from_snapshot(paths, trade_date, symbol_list)
+        return _finalize_market_frame(frame, names or {})
+    # 兼容尚未挂载历史基线的测试或迁移中环境；生产就绪检查会提示缺失。
     placeholders = ",".join(["?"] * len(symbol_list))
     with duckdb.connect(str(paths.live_market_increment_path), read_only=True) as con:
         frame = con.execute(
@@ -122,6 +86,41 @@ def load_live_market_for_symbols(paths: RuntimePaths, trade_date: str, symbols: 
             [_compact_date(trade_date), *symbol_list],
         ).fetchdf()
     return _finalize_market_frame(frame, names or {})
+
+
+def _load_market_from_snapshot(paths: RuntimePaths, trade_date: str, symbols: list[str]) -> pd.DataFrame:
+    """一次连接批量读取快照日行情，执行价格必须保持不复权。"""
+    compact_date = _compact_date(trade_date)
+    snapshot = create_market_snapshot(
+        paths.base_market_path,
+        paths.live_market_increment_path,
+        compact_date,
+        lookback_start=compact_date,
+        adjust_policy="none",
+    )
+    placeholders = ",".join(["?"] * len(symbols))
+    con = snapshot.connect()
+    try:
+        return con.execute(
+            f"""
+            SELECT
+                ts_code AS symbol,
+                trade_date,
+                open,
+                high,
+                low,
+                close,
+                vol AS volume,
+                amount,
+                COALESCE(vol, 0) <= 0 AS is_suspended
+            FROM daily
+            WHERE trade_date = ? AND ts_code IN ({placeholders})
+            ORDER BY ts_code
+            """,
+            [compact_date, *symbols],
+        ).fetchdf()
+    finally:
+        con.close()
 
 
 def market_data_from_bars(bars: dict[str, pd.DataFrame], trade_date: str, names: dict[str, str] | None = None) -> pd.DataFrame:
@@ -149,6 +148,9 @@ def market_data_from_bars(bars: dict[str, pd.DataFrame], trade_date: str, names:
                 "close": float(row.get("close", 0.0)),
                 "volume": float(row.get("volume", row.get("vol", 0.0))),
                 "amount": float(row.get("amount", 0.0)),
+                "is_suspended": bool(row.get("is_suspended", False)),
+                "limit_up": bool(row.get("limit_up", False)),
+                "limit_down": bool(row.get("limit_down", False)),
             }
         )
     return _finalize_market_frame(pd.DataFrame(rows), names or {})
@@ -159,9 +161,10 @@ def _finalize_market_frame(frame: pd.DataFrame, names: dict[str, str]) -> pd.Dat
         return pd.DataFrame(columns=_market_columns())
     result = frame.copy()
     result["name"] = result["symbol"].map(names).fillna(result.get("name", result["symbol"]))
-    result["is_suspended"] = False
-    result["limit_up"] = False
-    result["limit_down"] = False
+    for column in ["is_suspended", "limit_up", "limit_down"]:
+        if column not in result.columns:
+            result[column] = False
+        result[column] = result[column].fillna(False).astype(bool)
     return result.reindex(columns=_market_columns())
 
 

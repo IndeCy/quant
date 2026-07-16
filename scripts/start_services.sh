@@ -1,16 +1,31 @@
 #!/usr/bin/env bash
-# 启动本地量化系统：API、调度器、前端。
+# 启动本地量化系统：API、调度器、静态前端。
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-PYTHON_BIN="/Users/admin/recommend_analysis/.venv/bin/python3"
-NODE_BIN="/opt/homebrew/opt/node@22/bin/node"
-VITE_BIN="$PROJECT_ROOT/frontend/node_modules/vite/bin/vite.js"
+CONFIG_FILE="$PROJECT_ROOT/.env.properties"
 API_PLIST="$HOME/Library/LaunchAgents/com.quant.api.plist"
 SCHEDULER_PLIST="$HOME/Library/LaunchAgents/com.quant.scheduler.plist"
 FRONTEND_PLIST="$HOME/Library/LaunchAgents/com.quant.frontend.plist"
 FRONTEND_PORT="5173"
-FRONTEND_LOG="$PROJECT_ROOT/logs/frontend.log"
+
+read_property() {
+  local key="$1"
+  [[ -f "$CONFIG_FILE" ]] || return 0
+  awk -F= -v key="$key" '$1 == key {sub(/^[^=]*=/, ""); print; exit}' "$CONFIG_FILE"
+}
+
+resolve_command() {
+  local configured="$1"
+  local fallback="$2"
+  if [[ -n "$configured" && -x "$configured" ]]; then
+    printf '%s\n' "$configured"
+    return
+  fi
+  command -v "$fallback"
+}
+
+PYTHON_BIN="$(resolve_command "$(read_property PYTHON_EXECUTABLE)" python3)"
 
 mkdir -p "$PROJECT_ROOT/logs" "$PROJECT_ROOT/state"
 
@@ -38,67 +53,24 @@ start_frontend() {
     echo "frontend 已运行: http://127.0.0.1:$FRONTEND_PORT/"
     return
   fi
-  if [[ ! -x "$NODE_BIN" ]]; then
-    echo "缺少 Node: $NODE_BIN" >&2
-    exit 1
+  if [[ ! -f "$PROJECT_ROOT/frontend/dist/index.html" ]]; then
+    local npm_bin
+    npm_bin="$(resolve_command "$(read_property NPM_EXECUTABLE)" npm)"
+    echo "首次启动，构建静态前端..."
+    (cd "$PROJECT_ROOT/frontend" && "$npm_bin" run build:pre)
   fi
-  if [[ ! -f "$VITE_BIN" ]]; then
-    echo "缺少 Vite，请先在 frontend 目录安装依赖: $VITE_BIN" >&2
-    exit 1
-  fi
-  write_frontend_plist
   bootstrap_service "com.quant.frontend" "$FRONTEND_PLIST"
   sleep 2
   if lsof -nP -iTCP:"$FRONTEND_PORT" -sTCP:LISTEN >/dev/null 2>&1; then
     echo "frontend 已启动: http://127.0.0.1:$FRONTEND_PORT/"
   else
-    echo "frontend 启动失败，查看日志: $FRONTEND_LOG" >&2
+    echo "frontend 启动失败，请查看运行目录 logs/frontend.log" >&2
     exit 1
   fi
 }
 
-write_frontend_plist() {
-  cat >"$FRONTEND_PLIST" <<EOF
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
- "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-  <key>Label</key>
-  <string>com.quant.frontend</string>
-  <key>ProgramArguments</key>
-  <array>
-    <string>$NODE_BIN</string>
-    <string>$VITE_BIN</string>
-    <string>--host</string>
-    <string>127.0.0.1</string>
-  </array>
-  <key>WorkingDirectory</key>
-  <string>$PROJECT_ROOT/frontend</string>
-  <key>EnvironmentVariables</key>
-  <dict>
-    <key>QUANT_HOME</key>
-    <string>$PROJECT_ROOT</string>
-    <key>PATH</key>
-    <string>/opt/homebrew/opt/node@22/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin</string>
-  </dict>
-  <key>RunAtLoad</key>
-  <true/>
-  <key>KeepAlive</key>
-  <true/>
-  <key>StandardOutPath</key>
-  <string>$FRONTEND_LOG</string>
-  <key>StandardErrorPath</key>
-  <string>$FRONTEND_LOG</string>
-</dict>
-</plist>
-EOF
-}
-
-if [[ ! -x "$PYTHON_BIN" ]]; then
-  echo "缺少 Python 环境: $PYTHON_BIN" >&2
-  exit 1
-fi
+mkdir -p "$HOME/Library/LaunchAgents"
+"$PYTHON_BIN" "$PROJECT_ROOT/scripts/generate_launchd_plists.py" --output-dir "$HOME/Library/LaunchAgents"
 
 bootstrap_service "com.quant.api" "$API_PLIST"
 bootstrap_service "com.quant.scheduler" "$SCHEDULER_PLIST"

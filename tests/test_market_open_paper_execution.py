@@ -9,6 +9,8 @@ import pandas as pd
 from backtest.paper_trading import PaperTradingStore
 from runtime.market_open_paper_execution import run_market_open_paper_execution
 from runtime.paths import RuntimePaths
+from runtime.portfolio_account import build_account_snapshot
+from runtime.repository import SystemRepository
 
 
 def test_market_open_execution_fills_pending_orders_with_realtime_quotes(tmp_path: Path, monkeypatch) -> None:
@@ -37,6 +39,16 @@ def test_market_open_execution_fills_pending_orders_with_realtime_quotes(tmp_pat
         )
     finally:
         store.close()
+    SystemRepository(paths.system_state_path).upsert_account_snapshot(
+        build_account_snapshot(
+            strategy_id="quality_overlay",
+            trade_date="20260709",
+            total_value=100_000.0,
+            cash=100_000.0,
+            target_weights={"000001.SZ": 0.1},
+            actual_positions={},
+        )
+    )
 
     monkeypatch.setattr(
         "runtime.market_open_paper_execution.fetch_realtime_market_data",
@@ -73,3 +85,8 @@ def test_market_open_execution_fills_pending_orders_with_realtime_quotes(tmp_pat
     assert orders[0]["status"] == "FILLED"
     assert orders[0]["fill_date"] == "2026-07-10"
     assert positions[0]["symbol"] == "000001.SZ"
+    account_snapshot = SystemRepository(paths.system_state_path).load_account_snapshot("quality_overlay")
+    assert account_snapshot is not None
+    assert account_snapshot["trade_date"] == "20260710"
+    assert account_snapshot["positions"][0]["quantity"] == 1000
+    assert account_snapshot["positions"][0]["target_weight"] == 0.1

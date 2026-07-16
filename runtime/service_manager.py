@@ -20,9 +20,8 @@ def project_root() -> Path:
 def build_service_commands(
     paths: RuntimePaths | None = None,
     python_executable: str = sys.executable,
-    node_executable: str = "npm",
 ) -> list[dict[str, Any]]:
-    """生成本地三类常驻进程的启动命令。"""
+    """生成本地三类常驻进程的启动命令，运行时不依赖 Vite。"""
     runtime_paths = paths or get_runtime_paths()
     root = project_root()
     return [
@@ -36,8 +35,16 @@ def build_service_commands(
         {
             "name": "frontend",
             "label": "com.quant.frontend",
-            "cwd": str(root / "frontend"),
-            "command": [node_executable, "run", "dev", "--", "--port", "5173"],
+            "cwd": str(root),
+            "command": [
+                python_executable,
+                "-m",
+                "runtime.static_frontend_server",
+                "--directory",
+                str(root / "frontend" / "dist"),
+                "--port",
+                "5173",
+            ],
             "log_path": str(runtime_paths.logs_dir / "frontend.log"),
         },
         {

@@ -30,7 +30,10 @@ def run_factor_topn_monthly_instance(instance: dict[str, Any], paths: RuntimePat
     run_dir = paths.runs_dir / trade_date
     run_dir.mkdir(parents=True, exist_ok=True)
     plan_path = run_dir / f"{strategy_id}_rebalance_plan.csv"
-    pd.DataFrame({"symbol": list(weights), "target_weight": list(weights.values())}).to_csv(plan_path, index=False)
+    snapshot_path = run_dir / f"{strategy_id}_portfolio_snapshot.csv"
+    target_frame = pd.DataFrame({"symbol": list(weights), "target_weight": list(weights.values())})
+    target_frame.to_csv(plan_path, index=False)
+    target_frame.to_csv(snapshot_path, index=False)
 
     repository = SystemRepository(paths.system_state_path)
     repository.record_strategy_run(
@@ -48,12 +51,21 @@ def run_factor_topn_monthly_instance(instance: dict[str, Any], paths: RuntimePat
         plan_path,
         tags=["strategy_instance", "rebalance"],
     )
+    repository.upsert_report(
+        "portfolio_snapshot",
+        strategy_id,
+        trade_date,
+        "目标组合快照",
+        snapshot_path,
+        tags=["strategy_instance", "portfolio"],
+    )
     _write_monitoring_snapshot(paths, instance, trade_date, float(nav_result["nav"]))
     return {
         "strategy_id": strategy_id,
         "trade_date": trade_date,
         "selected_count": len(symbols),
         "symbols": symbols,
+        "target_weights": weights,
         "nav": float(nav_result["nav"]),
     }
 

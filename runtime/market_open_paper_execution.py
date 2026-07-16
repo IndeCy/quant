@@ -9,6 +9,7 @@ from typing import Any
 import pandas as pd
 
 from backtest.fetcher import get_realtime_quote
+from runtime.account_projection_service import project_paper_account_snapshot
 from runtime.local_paper_broker import LocalPaperBroker
 from runtime.notification_config import send_bark_notification
 from runtime.paths import RuntimePaths, get_runtime_paths
@@ -38,23 +39,27 @@ def run_market_open_paper_execution(
     runtime_paths = paths or get_runtime_paths()
     runtime_paths.ensure_directories()
     target_date = _compact_date(trade_date or datetime.now().strftime("%Y%m%d"))
-    symbols = _pending_symbols(runtime_paths, target_date)
+    pending_symbols = _pending_symbols(runtime_paths, target_date)
+    account_ids = _due_account_ids(runtime_paths, target_date)
     run_dir = runtime_paths.runs_dir / target_date
     run_dir.mkdir(parents=True, exist_ok=True)
-    if not symbols:
+    if not pending_symbols:
         result = MarketOpenExecutionResult(target_date, "NO_ACTION", 0, 0, 0)
         _record_run(runtime_paths, run_dir, result, "无到期开盘委托")
         return result
 
-    market_data = fetch_realtime_market_data(symbols, target_date)
+    valuation_symbols = _account_symbols(runtime_paths, account_ids)
+    market_data = fetch_realtime_market_data(valuation_symbols, target_date)
     broker = LocalPaperBroker(runtime_paths.paper_trading_path)
     try:
         executed, rejected = broker.execute_due_orders(target_date, market_data)
+        for account_id in account_ids:
+            project_paper_account_snapshot(runtime_paths, broker, account_id, target_date, market_data)
     finally:
         broker.close()
     pending_after = len(_pending_symbols(runtime_paths, target_date))
     status = "SUCCESS" if rejected == 0 else "WARNING"
-    result = MarketOpenExecutionResult(target_date, status, len(symbols), executed, rejected)
+    result = MarketOpenExecutionResult(target_date, status, len(pending_symbols), executed, rejected)
     message = _format_message(result, pending_after)
     _record_run(runtime_paths, run_dir, result, message)
     if push:
@@ -106,6 +111,45 @@ def _pending_symbols(paths: RuntimePaths, trade_date: str) -> list[str]:
             ORDER BY symbol
             """,
             [_iso_date(trade_date)],
+        ).fetchall()
+    return [str(row[0]) for row in rows]
+
+
+def _due_account_ids(paths: RuntimePaths, trade_date: str) -> list[int]:
+    """返回今日存在到期委托的账户，成交后只刷新这些账户投影。"""
+    if not paths.paper_trading_path.exists():
+        return []
+    import sqlite3
+
+    with sqlite3.connect(paths.paper_trading_path) as con:
+        rows = con.execute(
+            """
+            SELECT DISTINCT account_id FROM paper_order
+            WHERE status = 'PENDING' AND order_date <= ?
+            ORDER BY account_id
+            """,
+            [_iso_date(trade_date)],
+        ).fetchall()
+    return [int(row[0]) for row in rows]
+
+
+def _account_symbols(paths: RuntimePaths, account_ids: list[int]) -> list[str]:
+    """读取受影响账户的持仓与待成交标的，保证投影估值覆盖完整。"""
+    if not account_ids or not paths.paper_trading_path.exists():
+        return []
+    import sqlite3
+
+    placeholders = ",".join("?" for _ in account_ids)
+    with sqlite3.connect(paths.paper_trading_path) as con:
+        rows = con.execute(
+            f"""
+            SELECT symbol FROM paper_position WHERE account_id IN ({placeholders})
+            UNION
+            SELECT symbol FROM paper_order
+            WHERE account_id IN ({placeholders}) AND status = 'PENDING'
+            ORDER BY symbol
+            """,
+            [*account_ids, *account_ids],
         ).fetchall()
     return [str(row[0]) for row in rows]
 
