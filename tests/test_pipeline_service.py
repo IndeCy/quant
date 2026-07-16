@@ -8,13 +8,17 @@ import pytest
 from runtime.paths import RuntimePaths
 from runtime.pipeline_service import PipelineAlreadyRunningError, PipelineService
 from runtime.pipeline_run_repository import PipelineRunRepository
+from runtime.strategy_commit_journal import StrategyCommitJournalRepository
 
 
 def test_pipeline_service_records_versions_and_artifacts(tmp_path: Path) -> None:
     """统一入口必须记录可追溯元数据和每日产物。"""
     paths = RuntimePaths(tmp_path)
 
+    captured: dict[str, object] = {}
+
     def executor(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
         run_dir = paths.runs_dir / str(kwargs["trade_date"])
         run_dir.mkdir(parents=True, exist_ok=True)
         (run_dir / "daily_report.md").write_text("ok", encoding="utf-8")
@@ -25,6 +29,10 @@ def test_pipeline_service_records_versions_and_artifacts(tmp_path: Path) -> None
 
     assert result["status"] == "SUCCESS"
     assert result["run_id"]
+    assert captured["run_id"] == result["run_id"]
+    assert captured["code_version"] == result["code_version"]
+    assert captured["data_version"] == result["data_version"]
+    assert captured["force_commit"] is False
     run = PipelineRunRepository(paths.system_state_path).latest("daily_trading_pipeline", "20260713")
     assert run is not None
     assert run["status"] == "SUCCESS"
@@ -80,3 +88,23 @@ def test_pipeline_lock_prevents_parallel_execution(tmp_path: Path) -> None:
     with service.lock_manager.acquire("daily_trading_pipeline", "20260713"):
         with pytest.raises(PipelineAlreadyRunningError):
             service.run("daily_trading_pipeline", "20260713", "MANUAL", force=True)
+
+
+def test_pipeline_service_recovers_incomplete_commit_without_force_reset(tmp_path: Path) -> None:
+    """恢复入口必须重跑标准 Pipeline，但保留策略提交检查点。"""
+    paths = RuntimePaths(tmp_path)
+    journal = StrategyCommitJournalRepository(paths.system_state_path)
+    lease = journal.begin("alpha", "20260717", "old-run", "code-a", "data-a")
+    journal.checkpoint(lease.commit_id, "ADAPTER_PERSISTED")
+    journal.fail(lease.commit_id, "paper unavailable")
+    captured: dict[str, object] = {}
+
+    def executor(**kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return {"status": "SUCCESS", "trade_date": kwargs["trade_date"]}
+
+    result = PipelineService(paths=paths, executor=executor).recover_incomplete("20260717")
+
+    assert result["status"] == "SUCCESS"
+    assert captured["trade_date"] == "20260717"
+    assert captured["force_commit"] is False

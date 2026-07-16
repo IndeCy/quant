@@ -13,6 +13,7 @@ from monitoring.repository import MonitoringRepository
 from runtime.notification_config import send_bark_notification
 from runtime.paths import RuntimePaths, get_runtime_paths
 from runtime.repository import SystemRepository
+from runtime.strategy_commit_journal import StrategyCommitJournalRepository
 
 
 WATCHDOG_ID = "scheduler_watchdog"
@@ -51,6 +52,13 @@ def run_scheduler_watchdog(
 
 def _collect_issues(paths: RuntimePaths, repository: SystemRepository, trade_date: str) -> list[str]:
     issues: list[str] = []
+    incomplete_commits = StrategyCommitJournalRepository(paths.system_state_path).list_incomplete()
+    for commit in incomplete_commits:
+        issues.append(
+            "策略提交未完成: "
+            f"{commit['strategy_id']} {commit['trade_date']} "
+            f"{commit['status']}@{commit['last_step']}"
+        )
     pipeline = repository.get_run("daily_trading_pipeline", trade_date)
     if not pipeline or pipeline.get("status") != "SUCCESS":
         issues.append("daily_trading_pipeline 未成功运行")

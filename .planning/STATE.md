@@ -2,11 +2,11 @@
 
 ## Active Milestone
 
-Enterprise Quant Platform / Milestone R2：策略计算与提交分离
+Enterprise Quant Platform / Milestone R3：策略提交日志与恢复
 
 ## Active Phase
 
-Phase R2.2：Controlled Strategy Parallelism
+Phase R3.2：Idempotent Commit Recovery
 
 ## Current Status
 
@@ -144,15 +144,22 @@ completed
 - 每日策略批次使用受限线程池并行计算，按 `strategy_id` 稳定顺序串行提交 SQLite、Paper 和通知。
 - 单策略计算或提交失败会独立登记，不阻止其他策略完成提交。
 - 完整围栏通过：后端 `553 passed`、前端 `61 passed`、TypeScript/Vite 生产构建通过。
+- Milestone R3：Strategy Commit Journal & Recovery。
+- 新增 v3 migration 和 `strategy_commit_journal`，记录策略交易日、Pipeline run_id、代码/数据版本、检查点和尝试次数。
+- 提交检查点固定为 adapter、Paper、运行记录和通知；失败后新 run_id 可接管并跳过已完成步骤。
+- 已完成提交默认幂等跳过，force 明确从头重放；代码或数据版本变化时禁止续接旧检查点。
+- 通知采用 at-most-once 恢复语义，进入派发检查点后不因终态写入中断而重复推送。
+- `PipelineService.recover_incomplete()` 提供唯一恢复入口，watchdog 会把未完成提交作为异常上报。
+- 完整围栏通过：后端 `561 passed`、前端 `61 passed`、TypeScript/Vite 生产构建通过。
 
 ## Next Action
 
-规划 Milestone R3：Strategy Commit Journal & Recovery，为跨状态库提交增加幂等提交日志和中断恢复能力。
+规划 Milestone R4：Run Lineage & Reproducibility，把策略结果、行情快照、报告和 Pipeline run_id 建立统一血缘。
 
 ## Resume Prompt
 
 ```text
-继续企业级量化平台项目，从 .planning/STATE.md 恢复，规划 Milestone R3：Strategy Commit Journal & Recovery。
+继续企业级量化平台项目，从 .planning/STATE.md 恢复，规划 Milestone R4：Run Lineage & Reproducibility。
 ```
 
 ## Verification Commands

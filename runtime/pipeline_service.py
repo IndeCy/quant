@@ -14,6 +14,7 @@ from runtime.artifact_registry import ArtifactRegistry
 from runtime.paths import RuntimePaths, get_runtime_paths
 from runtime.pipeline_context import PipelineContext, TriggerType
 from runtime.pipeline_run_repository import PipelineRunRepository
+from runtime.strategy_commit_journal import StrategyCommitJournalRepository
 
 
 PipelineExecutor = Callable[..., dict[str, object]]
@@ -100,6 +101,7 @@ class PipelineService:
         *,
         push: bool = False,
         force: bool = False,
+        resume_commits: bool = False,
     ) -> dict[str, object]:
         """执行标准日流水线；成功结果默认幂等，force 用于明确补跑。"""
         target_date = trade_date or datetime.now().strftime("%Y%m%d")
@@ -109,7 +111,7 @@ class PipelineService:
             raise ValueError(f"unsupported pipeline_id: {pipeline_id}")
         with self.lock_manager.acquire(pipeline_id, target_date):
             previous = self.repository.latest_success(pipeline_id, target_date)
-            if previous is not None and not force:
+            if previous is not None and not force and not resume_commits:
                 return {
                     "run_id": previous["run_id"],
                     "pipeline_id": pipeline_id,
@@ -131,6 +133,10 @@ class PipelineService:
                     push=push,
                     source={"SCHEDULED": "scheduler", "MANUAL": "manual", "API": "api"}[trigger_type],
                     trade_date=target_date,
+                    run_id=context.run_id,
+                    code_version=context.code_version,
+                    data_version=context.data_version,
+                    force_commit=force and not resume_commits,
                 )
                 status = str(result.get("status", "SUCCESS"))
                 self.artifacts.register_directory(context.run_id, self.paths.runs_dir / target_date)
@@ -140,3 +146,23 @@ class PipelineService:
                 self.artifacts.register_directory(context.run_id, self.paths.runs_dir / target_date)
                 self.repository.finish(context.run_id, "FAILED", str(exc))
                 raise
+
+    def recover_incomplete(self, trade_date: str, *, push: bool = False) -> dict[str, object]:
+        """按交易日重跑标准 Pipeline，并从策略最后成功检查点续接。"""
+        journal = StrategyCommitJournalRepository(self.paths.system_state_path)
+        pending = [row for row in journal.list_incomplete() if str(row["trade_date"]) == trade_date]
+        if not pending:
+            return {
+                "pipeline_id": "daily_trading_pipeline",
+                "trade_date": trade_date,
+                "status": "SKIPPED",
+                "message": "该交易日没有未完成策略提交",
+            }
+        return self.run(
+            "daily_trading_pipeline",
+            trade_date,
+            "MANUAL",
+            push=push,
+            force=True,
+            resume_commits=True,
+        )

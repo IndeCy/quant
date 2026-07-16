@@ -4,12 +4,12 @@ from __future__ import annotations
 
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass
-from dataclasses import replace
 from datetime import datetime
 import sqlite3
 from pathlib import Path
 from time import monotonic
 from typing import Any
+from uuid import uuid4
 
 import pandas as pd
 
@@ -19,6 +19,8 @@ from runtime.paths import RuntimePaths, get_runtime_paths
 from runtime.local_paper_bridge import load_live_market_for_symbols, sync_strategy_target_to_local_paper
 from runtime.notification_config import resolve_bark_url
 from runtime.repository import SystemRepository
+from runtime.strategy_commit_coordinator import StrategyCommitCoordinator
+from runtime.strategy_commit_journal import StrategyCommitJournalRepository
 from runtime.strategy_executor_registry import (
     StrategyComputation,
     StrategyExecutionContext,
@@ -51,6 +53,10 @@ def run_enabled_strategy_instances(
     push: bool = False,
     trade_date: str | None = None,
     max_workers: int = 4,
+    run_id: str = "",
+    code_version: str = "",
+    data_version: str = "",
+    force_commit: bool = False,
 ) -> dict[str, object]:
     """并行计算所有启用策略，再串行提交共享运行状态。"""
     runtime_paths = paths or get_runtime_paths()
@@ -69,6 +75,10 @@ def run_enabled_strategy_instances(
         push=push,
         bark_url=bark_url,
         max_workers=max_workers,
+        run_id=run_id,
+        code_version=code_version,
+        data_version=data_version,
+        force_commit=force_commit,
     )
 
 
@@ -93,10 +103,15 @@ def execute_strategy_instances(
     push: bool = False,
     bark_url: str = "",
     max_workers: int = 4,
+    run_id: str = "",
+    code_version: str = "",
+    data_version: str = "",
+    force_commit: bool = False,
 ) -> dict[str, object]:
     """执行两阶段策略批次：计算并行，持久化/通知串行。"""
     if max_workers < 1:
         raise ValueError("strategy batch max_workers must be greater than 0")
+    batch_run_id = run_id or uuid4().hex
     computed: list[_ComputedInstance] = []
     if instances:
         worker_count = min(max_workers, len(instances))
@@ -110,21 +125,33 @@ def execute_strategy_instances(
                     trade_date,
                     push,
                     bark_url,
+                    batch_run_id,
+                    code_version,
+                    data_version,
+                    force_commit,
                 )
                 for instance in instances
             ]
             # Future 已全部提交；按实例顺序取值，确保后续提交顺序可复现。
             computed = [future.result() for future in futures]
 
-    results = [
-        _commit_instance(item, paths, repository, executors, push=push, bark_url=bark_url)
-        for item in computed
-    ]
+    coordinator = StrategyCommitCoordinator(
+        paths,
+        repository,
+        StrategyCommitJournalRepository(paths.system_state_path),
+        executors,
+        _sync_target_portfolio,
+        lambda instance, message: _send_native_notification(instance, message, push, bark_url),
+    )
+    results = [_commit_instance(item, paths, repository, coordinator) for item in computed]
     return {
+        "run_id": batch_run_id,
         "trade_date": trade_date,
         "enabled_count": len(instances),
         "success_count": sum(1 for item in results if item["status"] == "SUCCESS"),
         "failed_count": sum(1 for item in results if item["status"] == "FAILED"),
+        "recovered_count": sum(1 for item in results if item.get("recovered") is True),
+        "idempotent_count": sum(1 for item in results if item.get("idempotent") is True),
         "results": results,
     }
 
@@ -136,9 +163,22 @@ def _compute_instance(
     trade_date: str,
     push: bool,
     bark_url: str,
+    run_id: str,
+    code_version: str,
+    data_version: str,
+    force_commit: bool,
 ) -> _ComputedInstance:
     """在线程池中只计算，不写运行记录、Broker 或通知。"""
-    context = StrategyExecutionContext(paths=paths, trade_date=trade_date, push=push, bark_url=bark_url)
+    context = StrategyExecutionContext(
+        paths=paths,
+        trade_date=trade_date,
+        push=push,
+        bark_url=bark_url,
+        run_id=run_id,
+        code_version=code_version,
+        data_version=data_version,
+        force_commit=force_commit,
+    )
     started = monotonic()
     try:
         computation = executors.compute(instance, context)
@@ -151,10 +191,7 @@ def _commit_instance(
     computed: _ComputedInstance,
     paths: RuntimePaths,
     repository: SystemRepository,
-    executors: StrategyExecutorRegistry,
-    *,
-    push: bool,
-    bark_url: str,
+    coordinator: StrategyCommitCoordinator,
 ) -> dict[str, object]:
     """在调用线程串行提交一个策略结果，并统一处理失败和通知。"""
     instance = computed.instance
@@ -168,7 +205,12 @@ def _commit_instance(
             paths.runs_dir / computed.context.trade_date,
             message,
         )
-        _send_native_notification(instance, f"FAILED: {message}", push, bark_url)
+        _send_native_notification(
+            instance,
+            f"FAILED: {message}",
+            computed.context.push,
+            computed.context.bark_url,
+        )
         return {
             "strategy_id": strategy_id,
             "status": "FAILED",
@@ -177,42 +219,12 @@ def _commit_instance(
             "compute_duration_seconds": computed.duration_seconds,
         }
 
-    started = monotonic()
-    try:
-        result = executors.persist(instance, computed.context, computed.computation)
-        if result.target_portfolio is not None:
-            paper_message = _sync_target_portfolio(instance, paths, result.target_portfolio)
-            result = replace(result, message=f"{result.message}; {paper_message}")
-        repository.record_strategy_run(
-            strategy_id,
-            result.trade_date,
-            result.status,
-            paths.runs_dir / result.trade_date,
-            result.message,
-        )
-        notification_message = result.message
-        if result.observation_only:
-            notification_message = f"{notification_message}\n观察策略，不构成调仓建议"
-        _send_native_notification(instance, notification_message, push, bark_url)
-        return {
-            **result.to_summary(),
-            "phase": "PERSIST",
-            "compute_duration_seconds": computed.duration_seconds,
-            "persist_duration_seconds": monotonic() - started,
-        }
-    except Exception as exc:
-        message = str(exc)
-        trade_date = computed.computation.result.trade_date
-        repository.record_strategy_run(strategy_id, trade_date, "FAILED", paths.runs_dir / trade_date, message)
-        _send_native_notification(instance, f"FAILED: {message}", push, bark_url)
-        return {
-            "strategy_id": strategy_id,
-            "status": "FAILED",
-            "message": message,
-            "phase": "PERSIST",
-            "compute_duration_seconds": computed.duration_seconds,
-            "persist_duration_seconds": monotonic() - started,
-        }
+    return coordinator.commit(
+        instance,
+        computed.context,
+        computed.computation,
+        computed.duration_seconds,
+    )
 
 
 def _run_instance(

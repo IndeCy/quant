@@ -17,6 +17,10 @@ class StrategyExecutionContext:
     trade_date: str
     push: bool = False
     bark_url: str = ""
+    run_id: str = ""
+    code_version: str = ""
+    data_version: str = ""
+    force_commit: bool = False
 
 
 @dataclass(frozen=True)

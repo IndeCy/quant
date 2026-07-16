@@ -272,6 +272,20 @@
 - 状态：done
 - 目标：在统一协议上开放策略级受控并行，并保证失败隔离和稳定提交顺序。
 
+## Milestone R3：策略提交日志与恢复
+
+### Phase R3.1：Strategy Commit Journal
+
+- 优先级：P0
+- 状态：done
+- 目标：用版本化 migration 建立策略提交日志和固定检查点协议。
+
+### Phase R3.2：Idempotent Commit Recovery
+
+- 优先级：P0
+- 状态：done
+- 目标：标准 Pipeline 支持跨 run_id 恢复、幂等跳过和 force 重放。
+
 ## Milestone Y1/Y2：游资情绪数据层与市场状态机
 
 ### Phase Y1/Y2.1：Hot Money Emotion State Engine

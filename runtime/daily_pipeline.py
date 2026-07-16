@@ -28,6 +28,10 @@ def run_production_daily_pipeline(
     push: bool = False,
     source: str = "manual",
     trade_date: str | None = None,
+    run_id: str = "",
+    code_version: str = "",
+    data_version: str = "",
+    force_commit: bool = False,
 ) -> dict[str, object]:
     """执行每日原子流水线：数据可信后并行运行策略与 Beta 观察。"""
     runtime_paths = paths or get_runtime_paths()
@@ -45,7 +49,14 @@ def run_production_daily_pipeline(
             PipelineNode(
                 "strategy_batch",
                 ("data_quality_gate",),
-                lambda: _run_checked_strategy_batch(runtime_paths, target_date),
+                lambda: _run_checked_strategy_batch(
+                    runtime_paths,
+                    target_date,
+                    run_id=run_id,
+                    code_version=code_version,
+                    data_version=data_version,
+                    force_commit=force_commit,
+                ),
                 resources=("monitoring_sqlite",),
             ),
             PipelineNode(
@@ -156,6 +167,7 @@ def run_production_daily_pipeline(
     repository.record_strategy_run(PIPELINE_STRATEGY_ID, target_date, "SUCCESS", run_dir, _with_notification(message, notification))
     return {
         "trade_date": target_date,
+        "run_id": run_id,
         "status": "SUCCESS",
         "source": source,
         "data_update": data_message,
@@ -172,9 +184,28 @@ def _run_checked_quality_gate(paths: RuntimePaths) -> dict[str, object]:
     return result
 
 
-def _run_checked_strategy_batch(paths: RuntimePaths, trade_date: str) -> dict[str, object]:
+def _run_checked_strategy_batch(
+    paths: RuntimePaths,
+    trade_date: str,
+    *,
+    run_id: str = "",
+    code_version: str = "",
+    data_version: str = "",
+    force_commit: bool = False,
+) -> dict[str, object]:
     """执行策略批次，任一策略失败时由 DAG 记录失败节点。"""
-    summary = run_strategy_batch(paths, push=False, trade_date=trade_date)
+    if run_id or code_version or data_version or force_commit:
+        summary = run_strategy_batch(
+            paths,
+            push=False,
+            trade_date=trade_date,
+            run_id=run_id,
+            code_version=code_version,
+            data_version=data_version,
+            force_commit=force_commit,
+        )
+    else:
+        summary = run_strategy_batch(paths, push=False, trade_date=trade_date)
     if int(summary.get("failed_count", 0)) > 0:
         raise RuntimeError(_summarize_strategy_batch(summary))
     return summary
@@ -222,9 +253,26 @@ def run_data_update(trade_date: str | None = None) -> str:
     return output.getvalue().strip().splitlines()[-1] if output.getvalue().strip() else "data update completed"
 
 
-def run_strategy_batch(paths: RuntimePaths, push: bool = False, trade_date: str | None = None) -> dict[str, object]:
+def run_strategy_batch(
+    paths: RuntimePaths,
+    push: bool = False,
+    trade_date: str | None = None,
+    *,
+    run_id: str = "",
+    code_version: str = "",
+    data_version: str = "",
+    force_commit: bool = False,
+) -> dict[str, object]:
     """运行所有启用策略实例，通知由本流水线统一发送。"""
-    return run_enabled_strategy_instances(paths=paths, push=push, trade_date=trade_date)
+    return run_enabled_strategy_instances(
+        paths=paths,
+        push=push,
+        trade_date=trade_date,
+        run_id=run_id,
+        code_version=code_version,
+        data_version=data_version,
+        force_commit=force_commit,
+    )
 
 
 def run_market_beta_observer(paths: RuntimePaths, trade_date: str) -> dict[str, object]:

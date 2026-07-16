@@ -40,6 +40,8 @@
 | R1-006 | R1.6 | P1 | done | Codex | 静态前端、配置化服务和恢复验收 | `pytest tests/test_static_frontend_server.py tests/test_restore_audit.py -q` |
 | R2-001 | R2.1 | P0 | done | Codex | 建立策略 Compute/Persist 协议并迁移现有执行器 | `pytest tests/test_strategy_compute_persist.py -q` |
 | R2-002 | R2.2 | P1 | done | Codex | 开放策略级受控并行和失败隔离 | `pytest tests/test_strategy_batch_runner.py tests/test_strategy_compute_persist.py -q` |
+| R3-001 | R3.1 | P0 | done | Codex | 新增策略提交日志 migration 与仓库协议 | `pytest tests/test_strategy_commit_journal.py tests/test_schema_version.py -q` |
+| R3-002 | R3.2 | P0 | done | Codex | 接入幂等提交、跨 run_id 恢复和 force 重放 | `pytest tests/test_strategy_commit_journal.py tests/test_pipeline_service.py -q` |
 | Y1Y2-001 | Y1/Y2.1 | P2 | done | Codex | 游资情绪数据层与市场状态机 | `pytest tests/test_tushare_limit_incremental.py tests/test_hot_money_emotion.py tests/test_hot_money_state.py tests/test_hot_money_state_cli.py -q` |
 | Y3-001 | Y3.1 | P2 | done | Codex | 主线板块与龙头识别 | 生成 sector momentum、leader stock 和报告 CLI |
 

@@ -56,3 +56,8 @@ M0 文件包括交易日历、Schema、清洗、复权、财务 as-of、Executio
 策略批次内部固定为两阶段：所有 runnable 策略先通过 `StrategyExecutorRegistry.compute()` 受控并行计算，
 计算阶段只能读取已通过门禁的数据并返回内存结果；随后由批处理主线程按稳定顺序调用 `persist()`，串行写入
 系统状态、监控指标、运行产物、Paper 目标和通知。新增策略必须同时遵守该协议，不得在 compute 入口中落盘。
+
+串行提交必须经过 `StrategyCommitCoordinator` 和 `strategy_commit_journal`。固定检查点为 adapter 持久化、
+Paper 同步、运行记录、通知派发和完成；恢复时只允许向前推进。已完成提交默认幂等跳过，force 才能重置；
+代码或数据版本变化时必须从头提交，不能跨版本续接。人工恢复必须调用 `PipelineService.recover_incomplete()`，
+不得直接调用策略 persister 或 Paper Broker。

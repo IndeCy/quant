@@ -293,6 +293,45 @@ def test_daily_pipeline_backfill_uses_requested_trade_date(
     assert run["run_dir"].endswith("runs/20260707")
 
 
+def test_daily_pipeline_passes_commit_identity_to_strategy_batch(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """标准 Pipeline 的 run_id 和版本信息必须贯穿到策略提交上下文。"""
+    paths = RuntimePaths(tmp_path / "runtime")
+    captured: dict[str, object] = {}
+    monkeypatch.setattr("runtime.daily_pipeline.run_data_update", lambda trade_date=None: "data ok")
+    monkeypatch.setattr("runtime.daily_pipeline.run_data_quality_gate", lambda paths: _quality_pass())
+
+    def capture_strategy_batch(paths: RuntimePaths, **kwargs: object) -> dict[str, object]:
+        captured.update(kwargs)
+        return _strategy_summary(str(kwargs["trade_date"]))
+
+    monkeypatch.setattr("runtime.daily_pipeline.run_strategy_batch", capture_strategy_batch)
+    monkeypatch.setattr(
+        "runtime.daily_pipeline.run_market_beta_observer",
+        lambda paths, trade_date: {"status": "SUCCESS", "message": "ok"},
+    )
+
+    run_production_daily_pipeline(
+        paths=paths,
+        trade_date="20260717",
+        run_id="pipeline-run-1",
+        code_version="code-a",
+        data_version="data-a",
+        force_commit=True,
+    )
+
+    assert captured == {
+        "push": False,
+        "trade_date": "20260717",
+        "run_id": "pipeline-run-1",
+        "code_version": "code-a",
+        "data_version": "data-a",
+        "force_commit": True,
+    }
+
+
 def _strategy_summary(trade_date: str | None = None) -> dict[str, object]:
     return {
         "trade_date": trade_date or "20260702",

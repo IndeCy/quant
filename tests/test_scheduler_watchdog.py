@@ -10,6 +10,7 @@ from monitoring.repository import MonitoringRepository
 from runtime.paths import RuntimePaths
 from runtime.repository import SystemRepository
 from runtime.scheduler_watchdog import run_scheduler_watchdog
+from runtime.strategy_commit_journal import StrategyCommitJournalRepository
 from runtime.strategy_instance_catalog import register_builtin_strategy_instances
 
 
@@ -80,6 +81,21 @@ def test_scheduler_watchdog_accepts_requested_trade_date(
 
     assert result.trade_date == "20260707"
     assert result.status == "SUCCESS"
+
+
+def test_scheduler_watchdog_reports_incomplete_strategy_commit(tmp_path: Path) -> None:
+    """跨库存储提交未完成时，稳定性巡检必须明确报出检查点。"""
+    paths = RuntimePaths(tmp_path / "runtime")
+    _seed_success_state(paths, "20260717")
+    journal = StrategyCommitJournalRepository(paths.system_state_path)
+    lease = journal.begin("quality_overlay", "20260717", "run-1", "code-a", "data-a")
+    journal.checkpoint(lease.commit_id, "ADAPTER_PERSISTED")
+    journal.fail(lease.commit_id, "paper unavailable")
+
+    result = run_scheduler_watchdog(paths, trade_date="20260717")
+
+    assert result.status == "FAILED"
+    assert "策略提交未完成: quality_overlay 20260717 FAILED@ADAPTER_PERSISTED" in result.issues
 
 
 def _seed_success_state(paths: RuntimePaths, trade_date: str) -> None:

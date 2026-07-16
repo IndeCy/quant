@@ -7,6 +7,7 @@
 | 日线、复权、财务、市场扩展数据 | DuckDB | 研究和生产计算输入 |
 | 生产行情快照 | base DuckDB + increment DuckDB + as-of + adjust_policy | 单次运行可复现输入 |
 | 策略、因子、运行、订单、持仓索引 | SQLite | 运行系统事实状态 |
+| 策略提交检查点 | `state/quant_system.sqlite` | 跨状态库提交恢复与幂等审计 |
 | 大型中间研究结果 | DuckDB/Parquet | 可重复计算的数据资产 |
 | `runs/YYYYMMDD/` | 文件 | 面向人的每日导出产物 |
 | `reports/` | 文件 | 研究结论和可再生展示 |
