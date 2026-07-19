@@ -5,6 +5,8 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from monitoring.metrics import build_strategy_monitor_frame
+from monitoring.repository import MonitoringRepository
 from runtime.pre_market_check import run_pre_market_check
 from runtime.paths import RuntimePaths
 
@@ -33,21 +35,7 @@ def test_pre_market_check_notifies_when_previous_risk_action_exists(
 ) -> None:
     """昨日风险单应在次日开盘前转成执行复核清单。"""
     paths = RuntimePaths(tmp_path / "runtime")
-    risk_dir = paths.runs_dir / "20260702"
-    risk_dir.mkdir(parents=True, exist_ok=True)
-    pd.DataFrame(
-        [
-            {
-                "trade_date": "20260702",
-                "strategy_id": "mainline_chain_factor_v1",
-                "strategy_name": "主线链动因子 V1",
-                "severity": "CRITICAL",
-                "action_status": "NEED_CONFIRM",
-                "suggested_action": "T+1开盘前复核，人工确认是否风险减仓",
-                "reasons": "当日收益 -10.74% <= -8%",
-            }
-        ]
-    ).to_csv(risk_dir / "risk_actions.csv", index=False)
+    _seed_strategy_metrics(paths, "20260702", daily_return=-0.1074, drawdown=-0.22, volatility_20=0.68)
     notifications: list[dict[str, str]] = []
 
     def capture(title: str, body: str):
@@ -61,6 +49,42 @@ def test_pre_market_check_notifies_when_previous_risk_action_exists(
     assert result.status == "NEED_CONFIRM"
     assert result.item_count == 1
     assert checklist.iloc[0]["check_status"] == "PENDING_MANUAL_CONFIRM"
+    assert checklist.iloc[0]["recommended_target_exposure"] == pytest.approx(0.30)
     assert notifications[0]["title"] == "开盘前风险复核"
     assert "昨日风险单：1 条" in notifications[0]["body"]
     assert "主线链动因子 V1" in notifications[0]["body"]
+
+
+def test_pre_market_check_uses_previous_trading_day_on_monday(tmp_path: Path) -> None:
+    """周一盘前必须读取周五监控事实，不能把周日当作上一风险日。"""
+    paths = RuntimePaths(tmp_path / "runtime")
+    _seed_strategy_metrics(paths, "20260717", daily_return=-0.09, drawdown=-0.21, volatility_20=0.55)
+
+    result = run_pre_market_check(paths, trade_date="20260720", push=False)
+
+    assert result.previous_trade_date == "20260717"
+    assert result.status == "NEED_CONFIRM"
+    assert result.item_count == 1
+
+
+def _seed_strategy_metrics(
+    paths: RuntimePaths,
+    trade_date: str,
+    daily_return: float,
+    drawdown: float,
+    volatility_20: float,
+) -> None:
+    paths.ensure_directories()
+    end = pd.Timestamp(trade_date)
+    dates = pd.DatetimeIndex([end - pd.Timedelta(days=1), end])
+    frame = build_strategy_monitor_frame(
+        strategy_id="mainline_chain_factor_v1",
+        strategy_name="主线链动因子 V1",
+        daily_values=pd.Series([100.0, 100.0 * (1 + daily_return)], index=dates),
+        benchmark_values=pd.Series([1.0, 1.0], index=dates),
+        exposure=pd.Series([1.0, 0.95], index=dates),
+    )
+    frame.loc[frame.index[-1], "daily_return"] = daily_return
+    frame.loc[frame.index[-1], "drawdown"] = drawdown
+    frame.loc[frame.index[-1], "volatility_20"] = volatility_20
+    MonitoringRepository(paths.monitoring_path).upsert_strategy_daily(frame)

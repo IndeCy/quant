@@ -43,6 +43,60 @@
   cursor: pointer;
 }
 
+.risk-confirmation-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.risk-confirmation-row {
+  display: grid;
+  grid-template-columns: minmax(160px, 0.8fr) minmax(220px, 1.4fr) minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border-top: 1px solid #eef2f7;
+  padding: 12px 0;
+}
+
+.risk-confirmation-row strong,
+.risk-confirmation-row small {
+  display: block;
+}
+
+.risk-confirmation-row small,
+.risk-confirmation-row p {
+  margin: 0;
+  color: #64748b;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.risk-confirmation-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.risk-confirmation-actions button {
+  min-height: 34px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  color: #334155;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.risk-confirmation-actions .danger-action {
+  border-color: #fecaca;
+  color: #b91c1c;
+}
+
+.risk-confirmation-actions .reduce-action {
+  border-color: #fbbf24;
+  background: #fffbeb;
+  color: #92400e;
+}
+
 .review-action-list {
   display: grid;
   gap: 10px;
@@ -78,7 +132,12 @@
 
 @media (max-width: 1180px) {
   .ack-row,
-  .review-action-row {
+  .review-action-row,
+  .risk-confirmation-row {
     grid-template-columns: 1fr;
+  }
+
+  .risk-confirmation-actions {
+    flex-wrap: wrap;
   }
 }

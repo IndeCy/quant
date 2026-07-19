@@ -7,7 +7,6 @@ import sqlite3
 from typing import Any
 
 import pandas as pd
-
 from api.paper_series import attach_paper_nav
 from monitoring.repository import MonitoringRepository
 from runtime.backup import build_backup_manifest
@@ -22,6 +21,7 @@ from runtime.opportunity_catalog import register_builtin_opportunity_themes
 from runtime.paths import RuntimePaths, get_runtime_paths
 from runtime.pipeline_service import PipelineService
 from runtime.readiness import build_readiness_report
+from runtime.risk_confirmation import build_risk_confirmation_state
 from runtime.repository import SystemRepository
 from runtime.scheduler import configure_daily_pipeline_job, load_scheduler_status
 from runtime.service_manager import build_service_manifest, build_service_status
@@ -104,7 +104,7 @@ class LocalApiService:
 
     def operations_decision(self) -> dict[str, Any]:
         """返回今天是否需要人工处理的运行决策。"""
-        return _json_ready(build_operations_decision(self.paths.root, self.readiness()))
+        return _json_ready(build_operations_decision(self.paths.root, self.readiness(), build_risk_confirmation_state(self.paths)))
 
     def readiness(self) -> dict[str, Any]:
         """返回生产候选系统运行就绪度。"""

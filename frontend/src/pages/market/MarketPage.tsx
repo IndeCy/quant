@@ -1,11 +1,14 @@
+import { useEffect, useState } from "react";
 import { useOutletContext } from "react-router-dom";
 
 import type { DashboardContext } from "../../app/types";
-import type { MarketBetaSnapshot, MarketMetric } from "../../entities/market/model";
+import { getMarketStyleOverview } from "../../entities/market/api";
+import type { MarketBetaSnapshot, MarketMetric, MarketStyleOverview } from "../../entities/market/model";
 import { formatNumber, formatPercent } from "../../shared/lib/formatters";
 import { ChartPanel } from "../../shared/ui/ChartPanel";
 import { PageHeader } from "../../shared/ui/PageHeader";
 import { MarketBetaPanel } from "../dashboard/components/MarketBetaPanel";
+import { MarketStyleSection } from "./components/MarketStyleSection";
 
 const BETA_LABELS: Record<MarketBetaSnapshot["beta_state"], string> = {
   BETA_ON: "允许承担风险",
@@ -23,6 +26,8 @@ const BETA_TONES: Record<MarketBetaSnapshot["beta_state"], string> = {
 
 export function MarketPage() {
   const data = useOutletContext<DashboardContext>();
+  const [styleOverview, setStyleOverview] = useState<MarketStyleOverview | null>(null);
+  const [styleError, setStyleError] = useState("");
   const latestMarket = data.marketSeries[data.marketSeries.length - 1];
   const trendSeries = data.marketSeries.slice(-240);
   const observedSeries = data.marketSeries.filter(hasMarketObservation).slice(-120);
@@ -30,6 +35,23 @@ export function MarketPage() {
   const recentRows = marketObservationSeries.slice(-20).reverse();
   const trendDates = trendSeries.map((item) => item.trade_date);
   const observationDates = marketObservationSeries.map((item) => item.trade_date);
+
+  useEffect(() => {
+    let active = true;
+    getMarketStyleOverview(240)
+      .then((overview) => {
+        if (active) {
+          setStyleOverview(overview);
+          setStyleError("");
+        }
+      })
+      .catch((reason: unknown) => {
+        if (active) setStyleError(reason instanceof Error ? reason.message : String(reason));
+      });
+    return () => {
+      active = false;
+    };
+  }, [data.marketBeta.trade_date]);
 
   return (
     <>
@@ -43,6 +65,14 @@ export function MarketPage() {
         <MarketMetricCard label="上涨占比" value={formatPercent(upRatio(latestMarket), 1)} helper="强>=65%，弱<50%" />
         <MarketMetricCard label="成交额热度" value={`${formatNumber(latestMarket?.amount_ratio_20, 2)}x`} helper="放量>=1.15x，缩量<0.85x" />
       </section>
+      {styleOverview?.styles.length ? (
+        <MarketStyleSection overview={styleOverview} />
+      ) : (
+        <section className="panel market-style-empty">
+          <h2>大小盘风格</h2>
+          <p>{styleError || styleOverview?.message || "正在加载风格指数"}</p>
+        </section>
+      )}
       <div className="content-grid">
         <section className="column wide">
           <ChartPanel
@@ -53,14 +83,15 @@ export function MarketPage() {
               { name: "MA60", data: trendSeries.map((item) => item.ma60) },
               { name: "MA120", data: trendSeries.map((item) => item.ma120) }
             ]}
+            scaleYAxis
           />
           <ChartPanel
             title="市场宽度（有效观测日）"
             dates={observationDates}
             series={[
-              { name: "上涨占比", data: marketObservationSeries.map(upRatio) },
-              { name: "MA20宽度", data: marketObservationSeries.map((item) => item.ma20_above_ratio ?? 0) },
-              { name: "MA60宽度", data: marketObservationSeries.map((item) => item.ma60_above_ratio ?? 0) }
+              { name: "上涨占比", data: marketObservationSeries.map(upRatio), valueType: "percent" },
+              { name: "MA20宽度", data: marketObservationSeries.map((item) => item.ma20_above_ratio ?? 0), valueType: "percent" },
+              { name: "MA60宽度", data: marketObservationSeries.map((item) => item.ma60_above_ratio ?? 0), valueType: "percent" }
             ]}
           />
           <ChartPanel
@@ -68,8 +99,8 @@ export function MarketPage() {
             dates={observationDates}
             series={[
               { name: "成交额热度", data: marketObservationSeries.map((item) => item.amount_ratio_20 ?? 0) },
-              { name: "涨停数", data: marketObservationSeries.map((item) => item.limit_up_count ?? 0), yAxisIndex: 1 },
-              { name: "跌停数", data: marketObservationSeries.map((item) => item.limit_down_count ?? 0), yAxisIndex: 1 }
+              { name: "涨停数", data: marketObservationSeries.map((item) => item.limit_up_count ?? 0), yAxisIndex: 1, valueType: "integer" },
+              { name: "跌停数", data: marketObservationSeries.map((item) => item.limit_down_count ?? 0), yAxisIndex: 1, valueType: "integer" }
             ]}
             dualAxis
           />
@@ -77,8 +108,8 @@ export function MarketPage() {
             title="20日新高新低（有效观测日）"
             dates={observationDates}
             series={[
-              { name: "新高数", data: marketObservationSeries.map((item) => item.new_high_20_count ?? 0) },
-              { name: "新低数", data: marketObservationSeries.map((item) => item.new_low_20_count ?? 0) }
+              { name: "新高数", data: marketObservationSeries.map((item) => item.new_high_20_count ?? 0), valueType: "integer" },
+              { name: "新低数", data: marketObservationSeries.map((item) => item.new_low_20_count ?? 0), valueType: "integer" }
             ]}
           />
         </section>

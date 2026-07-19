@@ -16,9 +16,9 @@ export function RiskPage() {
         title={`${selectedStrategy.name} 风险层指标`}
         dates={selectedSeries.map((item) => item.trade_date)}
         series={[
-          { name: "当前回撤", data: selectedSeries.map((item) => item.drawdown) },
-          { name: "20日波动率", data: selectedSeries.map((item) => item.volatility_20) },
-          { name: "仓位", data: selectedSeries.map((item) => item.exposure), yAxisIndex: 1 }
+          { name: "当前回撤", data: selectedSeries.map((item) => item.drawdown), valueType: "percent" },
+          { name: "20日波动率", data: selectedSeries.map((item) => item.volatility_20), valueType: "percent" },
+          { name: "仓位", data: selectedSeries.map((item) => item.exposure), yAxisIndex: 1, valueType: "percent" }
         ]}
         dualAxis
       />

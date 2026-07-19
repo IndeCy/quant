@@ -43,7 +43,7 @@ def run_live_risk_guard(
     target_date = trade_date or datetime.now().strftime("%Y%m%d")
     run_dir = runtime_paths.runs_dir / target_date
     run_dir.mkdir(parents=True, exist_ok=True)
-    actions = _build_risk_actions(runtime_paths, target_date)
+    actions = build_risk_actions(runtime_paths, target_date)
     status = _overall_status(actions)
     actions_path = run_dir / "risk_actions.csv"
     report_path = run_dir / "risk_guard_report.md"
@@ -64,13 +64,17 @@ def run_live_risk_guard(
     )
 
 
-def _build_risk_actions(paths: RuntimePaths, trade_date: str) -> pd.DataFrame:
+def build_risk_actions(paths: RuntimePaths, trade_date: str) -> pd.DataFrame:
+    """从监控事实构建风险动作，供盘后报告和次日门禁复用。"""
     monitoring = MonitoringRepository(paths.monitoring_path)
     rows: list[dict[str, Any]] = []
     for strategy in _latest_strategy_metrics(monitoring, trade_date):
         severity, reasons = _classify_strategy_risk(strategy)
         if severity == "NORMAL":
             continue
+        max_exposure = 0.30 if severity == "CRITICAL" else 0.70
+        current_exposure = float(strategy["exposure"])
+        recommended_target = min(current_exposure, max_exposure)
         rows.append(
             {
                 "trade_date": trade_date,
@@ -78,11 +82,13 @@ def _build_risk_actions(paths: RuntimePaths, trade_date: str) -> pd.DataFrame:
                 "strategy_name": strategy["strategy_name"],
                 "severity": severity,
                 "action_status": "NEED_CONFIRM",
-                "suggested_action": "T+1开盘前复核，人工确认是否风险减仓",
+                "suggested_action": f"T+1开盘前确认，建议风险仓位不高于{recommended_target:.0%}",
                 "daily_return": float(strategy["daily_return"]),
                 "drawdown": float(strategy["drawdown"]),
                 "volatility_20": float(strategy["volatility_20"]),
-                "exposure": float(strategy["exposure"]),
+                "exposure": current_exposure,
+                "recommended_max_exposure": max_exposure,
+                "recommended_target_exposure": recommended_target,
                 "reasons": "；".join(reasons),
             }
         )
@@ -99,6 +105,8 @@ def _build_risk_actions(paths: RuntimePaths, trade_date: str) -> pd.DataFrame:
             "drawdown",
             "volatility_20",
             "exposure",
+            "recommended_max_exposure",
+            "recommended_target_exposure",
             "reasons",
         ],
     )

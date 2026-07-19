@@ -49,6 +49,9 @@ def record_operations_ack(db_path: Path, payload: Mapping[str, object]) -> dict[
                 :decision, :message, :resolution, :operator, :status
             )
             ON CONFLICT(ack_id) DO UPDATE SET
+                severity=excluded.severity,
+                decision=excluded.decision,
+                message=excluded.message,
                 resolution=excluded.resolution,
                 operator=excluded.operator,
                 status=excluded.status,

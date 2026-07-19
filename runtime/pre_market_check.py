@@ -6,14 +6,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from datetime import datetime, timedelta
-from pathlib import Path
-
 import pandas as pd
 
 from runtime.notification_config import send_bark_notification
 from runtime.paths import RuntimePaths, get_runtime_paths
 from runtime.repository import SystemRepository
+from runtime.risk_confirmation import build_risk_confirmation_state
 
 
 PRE_MARKET_ID = "pre_market_check"
@@ -40,13 +38,13 @@ def run_pre_market_check(
     """运行开盘前风险复核，有待确认项时发送 Bark。"""
     runtime_paths = paths or get_runtime_paths()
     runtime_paths.ensure_directories()
-    target_date = trade_date or datetime.now().strftime("%Y%m%d")
-    prev_date = previous_trade_date or _previous_calendar_day(target_date)
+    state = build_risk_confirmation_state(runtime_paths, trade_date, previous_trade_date)
+    target_date = str(state["trade_date"])
+    prev_date = str(state["previous_trade_date"])
     run_dir = runtime_paths.runs_dir / target_date
     run_dir.mkdir(parents=True, exist_ok=True)
-    actions = _load_previous_actions(runtime_paths.runs_dir / prev_date / "risk_actions.csv")
-    checklist = _build_checklist(target_date, prev_date, actions)
-    status = "NEED_CONFIRM" if not checklist.empty else "NO_ACTION"
+    checklist = _build_checklist(state)
+    status = str(state["status"])
     checklist_path = run_dir / "execution_checklist.csv"
     report_path = run_dir / "pre_market_check.md"
     checklist.to_csv(checklist_path, index=False)
@@ -56,9 +54,9 @@ def run_pre_market_check(
         target_date,
         status,
         run_dir,
-        f"items={len(checklist)} previous_trade_date={prev_date}",
+        f"items={len(checklist)} pending={state['pending_count']} previous_trade_date={prev_date}",
     )
-    if not checklist.empty and push:
+    if int(state["pending_count"]) > 0 and push:
         send_bark_notification("开盘前风险复核", _format_notification(target_date, prev_date, checklist))
     return PreMarketCheckResult(
         trade_date=target_date,
@@ -70,29 +68,24 @@ def run_pre_market_check(
     )
 
 
-def _load_previous_actions(path: Path) -> pd.DataFrame:
-    if not path.exists():
-        return pd.DataFrame()
-    frame = pd.read_csv(path)
-    if frame.empty:
-        return pd.DataFrame()
-    return frame[frame.get("action_status", "").eq("NEED_CONFIRM")].copy()
-
-
-def _build_checklist(trade_date: str, previous_trade_date: str, actions: pd.DataFrame) -> pd.DataFrame:
+def _build_checklist(state: dict[str, object]) -> pd.DataFrame:
     rows: list[dict[str, object]] = []
-    for _, row in actions.iterrows():
+    tasks = state.get("tasks", [])
+    for task in tasks if isinstance(tasks, list) else []:
         rows.append(
             {
-                "trade_date": trade_date,
-                "previous_trade_date": previous_trade_date,
-                "strategy_id": row.get("strategy_id", ""),
-                "strategy_name": row.get("strategy_name", ""),
-                "severity": row.get("severity", ""),
-                "check_status": "PENDING_MANUAL_CONFIRM",
-                "tradability_check": "待人工确认停牌/跌停/集合竞价",
-                "suggested_action": row.get("suggested_action", "人工确认风险减仓"),
-                "reasons": row.get("reasons", ""),
+                "trade_date": state["trade_date"],
+                "previous_trade_date": state["previous_trade_date"],
+                "strategy_id": task.get("strategy_id", ""),
+                "strategy_name": task.get("strategy_name", ""),
+                "severity": task.get("severity", ""),
+                "check_status": task.get("status", ""),
+                "decision": task.get("decision", ""),
+                "current_exposure": task.get("current_exposure", 0.0),
+                "recommended_target_exposure": task.get("recommended_target_exposure", 0.0),
+                "tradability_check": task.get("tradability_check", ""),
+                "suggested_action": task.get("suggested_action", ""),
+                "reasons": task.get("reasons", ""),
             }
         )
     return pd.DataFrame(
@@ -104,6 +97,9 @@ def _build_checklist(trade_date: str, previous_trade_date: str, actions: pd.Data
             "strategy_name",
             "severity",
             "check_status",
+            "decision",
+            "current_exposure",
+            "recommended_target_exposure",
             "tradability_check",
             "suggested_action",
             "reasons",
@@ -129,6 +125,9 @@ def _format_report(trade_date: str, previous_trade_date: str, status: str, check
                 f"## {row['strategy_name']}",
                 "",
                 f"- 严重级别：{row['severity']}",
+                f"- 确认状态：{row['check_status']}",
+                f"- 当前仓位：{float(row['current_exposure']):.2%}",
+                f"- 建议风险仓位上限：{float(row['recommended_target_exposure']):.2%}",
                 f"- 可交易性检查：{row['tradability_check']}",
                 f"- 建议：{row['suggested_action']}",
                 f"- 原因：{row['reasons']}",
@@ -144,14 +143,12 @@ def _format_notification(trade_date: str, previous_trade_date: str, checklist: p
         lines.extend(
             [
                 f"{row['strategy_name']}：{row['severity']}",
+                f"- 当前仓位：{float(row['current_exposure']):.2%}",
+                f"- 建议上限：{float(row['recommended_target_exposure']):.2%}",
                 f"- 可交易性：{row['tradability_check']}",
                 f"- 建议：{row['suggested_action']}",
+                "- 操作：请在调度页选择‘执行风险减仓’、‘允许原计划撮合’或‘暂停今日撮合’",
                 "",
             ]
         )
     return "\n".join(lines).strip()
-
-
-def _previous_calendar_day(trade_date: str) -> str:
-    date_value = datetime.strptime(trade_date, "%Y%m%d") - timedelta(days=1)
-    return date_value.strftime("%Y%m%d")

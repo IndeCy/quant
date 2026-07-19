@@ -44,6 +44,16 @@ class PaperBrokerSyncResult:
     pending_orders: int
 
 
+@dataclass(frozen=True)
+class RiskReductionPlanResult:
+    """风险减仓覆盖原委托后的订单计划结果。"""
+
+    account_id: int
+    target_exposure: float
+    cancelled_orders: int
+    created_orders: int
+
+
 class LocalPaperBroker:
     """把策略目标权重转成统一模拟盘委托、成交和持仓。"""
 
@@ -73,10 +83,79 @@ class LocalPaperBroker:
         pending = len(self.store.list_orders(account_id, status="PENDING"))
         return PaperBrokerSyncResult(account_id, trade_date, next_trade_date or "", created, executed, rejected, pending)
 
-    def execute_due_orders(self, trade_date: str, market_data: pd.DataFrame) -> tuple[int, int]:
-        """撮合所有账户在指定交易日到期的待成交委托。"""
+    def execute_due_orders(
+        self,
+        trade_date: str,
+        market_data: pd.DataFrame,
+        account_ids: list[int] | None = None,
+    ) -> tuple[int, int]:
+        """撮合指定账户的到期委托；不传账户时保持撮合全部账户。"""
         market = _normalize_market_data(market_data)
-        return self._execute_due_orders(None, _iso_date(trade_date), market)
+        if account_ids is None:
+            return self._execute_due_orders(None, _iso_date(trade_date), market)
+        executed = 0
+        rejected = 0
+        for account_id in sorted(set(account_ids)):
+            account_executed, account_rejected = self._execute_due_orders(account_id, _iso_date(trade_date), market)
+            executed += account_executed
+            rejected += account_rejected
+        return executed, rejected
+
+    def prepare_risk_reduction(
+        self,
+        account_id: int,
+        trade_date: str,
+        signal_date: str,
+        target_exposure: float,
+        market_data: pd.DataFrame,
+    ) -> RiskReductionPlanResult:
+        """取消当日原策略单，并按当前持仓等比例生成风险减仓卖单。"""
+        if not 0 <= float(target_exposure) <= 1:
+            raise ValueError("target_exposure must be between 0 and 1")
+        trade_iso = _iso_date(trade_date)
+        market = _normalize_market_data(market_data)
+        cursor = self.store.conn.execute(
+            """
+            UPDATE paper_order
+            SET status = 'CANCELLED', reject_reason = 'RISK_REDUCTION_OVERRIDE',
+                modify_time = CURRENT_TIMESTAMP
+            WHERE account_id = ? AND status = 'PENDING' AND order_date <= ?
+            """,
+            (account_id, trade_iso),
+        )
+        cancelled = max(int(cursor.rowcount), 0)
+        positions = self.store.list_positions(account_id)
+        account = self.store.get_account(account_id)
+        valued_positions: list[tuple[dict[str, Any], float]] = []
+        for position in positions:
+            symbol = str(position["symbol"])
+            market_row = _market_row(market, trade_iso, symbol)
+            price = _valuation_price(market_row, float(position["avg_cost"]))
+            valued_positions.append((position, price))
+        position_value = sum(int(position["quantity"]) * price for position, price in valued_positions)
+        total_value = float(account["cash"]) + position_value
+        target_position_value = min(position_value, total_value * float(target_exposure))
+        scale = target_position_value / position_value if position_value > 0 else 0.0
+        created = 0
+        for position, price in valued_positions:
+            current_quantity = int(position["quantity"])
+            target_quantity = _round_lot(int(current_quantity * scale))
+            sell_quantity = _round_lot(current_quantity - target_quantity)
+            if sell_quantity <= 0:
+                continue
+            self.store.record_pending_order(
+                account_id=account_id,
+                order_date=trade_iso,
+                symbol=str(position["symbol"]),
+                symbol_name=str(position["symbol_name"]),
+                side="SELL",
+                price=price,
+                quantity=sell_quantity,
+                note=f"risk_reduction signal={_iso_date(signal_date)}",
+            )
+            created += 1
+        self.store.conn.commit()
+        return RiskReductionPlanResult(account_id, float(target_exposure), cancelled, created)
 
     def _get_or_create_account(self, target: PaperBrokerTarget, start_date: str) -> int:
         row = self.store.conn.execute(
@@ -101,7 +180,7 @@ class LocalPaperBroker:
             f"""
             SELECT * FROM paper_order
             WHERE {account_filter} status = 'PENDING' AND order_date <= ?
-            ORDER BY id
+            ORDER BY account_id, CASE WHEN side = 'SELL' THEN 0 ELSE 1 END, id
             """,
             params,
         ).fetchall()
@@ -134,6 +213,17 @@ class LocalPaperBroker:
                 rejected += 1
                 continue
             amount = quantity * float(filled.fill_price)
+            settlement_reason = self._settlement_reject_reason(
+                int(order["account_id"]),
+                str(order["symbol"]),
+                str(order["side"]),
+                quantity,
+                amount,
+            )
+            if settlement_reason:
+                self._mark_rejected(int(order["id"]), trade_iso, settlement_reason)
+                rejected += 1
+                continue
             self._apply_fill(int(order["account_id"]), str(order["symbol"]), str(order["symbol_name"]), str(order["side"]), quantity, amount)
             self.store.conn.execute(
                 """
@@ -235,6 +325,26 @@ class LocalPaperBroker:
         else:
             self.store._apply_sell(account_id, symbol, quantity, amount)  # noqa: SLF001 - 复用现有持仓出账逻辑。
 
+    def _settlement_reject_reason(
+        self,
+        account_id: int,
+        symbol: str,
+        side: str,
+        quantity: int,
+        amount: float,
+    ) -> str:
+        """在持仓入账前检查资金和可卖数量，业务拒单不得中断整个批次。"""
+        if side == "BUY":
+            account = self.store.get_account(account_id)
+            return "INSUFFICIENT_CASH" if float(account["cash"]) + 1e-9 < amount else ""
+        position = self.store.conn.execute(
+            "SELECT quantity FROM paper_position WHERE account_id = ? AND symbol = ?",
+            (account_id, symbol),
+        ).fetchone()
+        if position is None or int(position["quantity"]) < quantity:
+            return "INSUFFICIENT_POSITION"
+        return ""
+
     def _mark_rejected(self, order_id: int, trade_iso: str, reason: str) -> None:
         self.store.conn.execute(
             """
@@ -284,6 +394,16 @@ def _market_row(data: pd.DataFrame, trade_iso: str, symbol: str) -> pd.Series | 
 def _prices_for_date(data: pd.DataFrame, trade_iso: str) -> dict[str, float]:
     rows = data[data["trade_date"] == trade_iso]
     return {str(row["symbol"]): float(row["close"]) for _, row in rows.iterrows() if math.isfinite(float(row["close"]))}
+
+
+def _valuation_price(market_row: pd.Series | None, fallback: float) -> float:
+    """风险计划优先使用开盘价估值，行情缺失时回退持仓成本等待成交层拒单。"""
+    if market_row is not None:
+        for column in ["open", "close"]:
+            value = float(market_row.get(column, 0.0) or 0.0)
+            if math.isfinite(value) and value > 0:
+                return value
+    return max(float(fallback), 0.0)
 
 
 def _compact_date(value: str) -> str:

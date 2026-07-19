@@ -15,7 +15,7 @@ export function StrategyPerformanceChart({ rows }: StrategyPerformanceChartProps
   const historySeries = [
     { name: "策略净值", data: rows.map((item) => item.nav) },
     { name: "基准", data: rows.map((item) => item.benchmark_nav) },
-    { name: "超额收益", data: rows.map((item) => item.excess_return), yAxisIndex: 1 }
+    { name: "超额收益", data: rows.map((item) => item.excess_return), yAxisIndex: 1, valueType: "percent" as const }
   ];
   const paperSeries = [
     { name: "Paper实际", data: paperWindow.paperNav },

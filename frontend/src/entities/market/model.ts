@@ -39,3 +39,54 @@ export interface MarketBetaSnapshot {
   risk_level: string;
   reasons: string[];
 }
+
+export type MarketStyleTrendState = "UP" | "DOWN" | "REBOUND" | "WEAK" | "INSUFFICIENT";
+export type RelativeStyleState = "MICRO_STRONG" | "LARGE_STRONG" | "BALANCED" | "UNKNOWN";
+
+export interface MarketStyleBar {
+  trade_date: string;
+  open: number;
+  high: number;
+  low: number;
+  close: number;
+  pct_chg: number | null;
+  ma5: number | null;
+  ma10: number | null;
+  ma20: number | null;
+  ma60: number | null;
+}
+
+export interface MarketStyleSummary {
+  trade_date: string;
+  close: number;
+  return_20: number | null;
+  return_60: number | null;
+  distance_ma20: number | null;
+  distance_ma60: number | null;
+  trend_state: MarketStyleTrendState;
+}
+
+export interface MarketStyleSeries {
+  style_id: "micro_cap" | "large_cap";
+  name: string;
+  symbol: string;
+  proxy_name: string;
+  bars: MarketStyleBar[];
+  summary: MarketStyleSummary;
+}
+
+export interface MarketRelativeStrength {
+  state: RelativeStyleState;
+  spread_20: number | null;
+  reference_threshold: number;
+  series: Array<{ trade_date: string; relative_nav: number }>;
+}
+
+export interface MarketStyleOverview {
+  data_status: "READY" | "PARTIAL" | "MISSING";
+  as_of: string;
+  adjust_policy: "index_raw";
+  message?: string;
+  styles: MarketStyleSeries[];
+  relative_strength: MarketRelativeStrength;
+}

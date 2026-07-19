@@ -9,6 +9,7 @@ import type { OperationsObservation } from "../entities/operations/model";
 import type { OperationsReview } from "../entities/operations/reviewModel";
 import type { ReadinessReport } from "../entities/readiness/model";
 import type { ReportIndex } from "../entities/report/model";
+import type { RiskConfirmationState } from "../entities/riskConfirmation/model";
 import type {
   FactorIdea,
   HotMoneyLeaderView,
@@ -56,6 +57,7 @@ export interface DashboardData {
   marketSeries: MarketMetric[];
   marketBeta: MarketBetaSnapshot;
   readiness: ReadinessReport;
+  riskConfirmations: RiskConfirmationState;
 }
 
 export interface DashboardContext extends DashboardData {

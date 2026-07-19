@@ -8,8 +8,11 @@ import { decisionTitle, decisionTone } from "../../entities/operations/decisionS
 import { observationStatusTone } from "../../entities/operations/status";
 import { generateOperationsQualityReport } from "../../entities/operations/qualityReportApi";
 import { reviewStatusTitle, reviewStatusTone } from "../../entities/operations/reviewStatus";
+import { confirmStrategyRisk } from "../../entities/riskConfirmation/api";
+import type { RiskConfirmationDecision } from "../../entities/riskConfirmation/model";
 import { schedulerNextRunLabel, schedulerStateLabel } from "../../entities/scheduler/status";
 import { formatCommand } from "../../entities/service/format";
+import { formatPercent } from "../../shared/lib/formatters";
 import { PageHeader } from "../../shared/ui/PageHeader";
 
 export function SchedulerPage() {
@@ -18,7 +21,9 @@ export function SchedulerPage() {
   const decision = data.operationsDecision;
   const observation = data.operationsObservation;
   const review = data.operationsReview;
+  const riskConfirmations = data.riskConfirmations;
   const [ackMessage, setAckMessage] = useState("");
+  const [riskMessage, setRiskMessage] = useState("");
   const [reportMessage, setReportMessage] = useState("");
   const observationSections = [
     ["日报产物", observation.run_artifacts],
@@ -48,9 +53,50 @@ export function SchedulerPage() {
     await data.refreshData();
   }
 
+  async function handleRiskConfirmation(strategyId: string, decision: Exclude<RiskConfirmationDecision, "">) {
+    await confirmStrategyRisk(strategyId, riskConfirmations.trade_date, decision);
+    setRiskMessage(
+      decision === "REDUCE" ? "已选择执行风险减仓" : decision === "PROCEED" ? "已允许按原计划撮合" : "已暂停今日撮合"
+    );
+    await data.refreshData();
+  }
+
   return (
     <>
       <PageHeader title="调度" description="查看本地 APScheduler 每日任务、执行命令和下一次运行时间。" />
+      <section className="panel detail-panel">
+        <div className="detail-heading">
+          <div>
+            <h2>盘前风险确认</h2>
+            <p>{riskConfirmations.trade_date} 撮合门禁，风险来源交易日 {riskConfirmations.previous_trade_date || "暂无"}。</p>
+          </div>
+          <span className={`status ${riskConfirmations.status === "READY" || riskConfirmations.status === "NO_ACTION" ? "success" : riskConfirmations.status === "PAUSED" || riskConfirmations.status === "REDUCTION_READY" ? "warning" : "danger"}`}>
+            {riskConfirmations.status}
+          </span>
+        </div>
+        {riskConfirmations.tasks.length > 0 ? (
+          <div className="risk-confirmation-list">
+            {riskConfirmations.tasks.map((task) => (
+              <div className="risk-confirmation-row" key={`${task.trade_date}-${task.strategy_id}`}>
+                <span>
+                  <strong>{task.strategy_name}</strong>
+                  <small>{task.severity} / {task.status}</small>
+                </span>
+                <p>{task.reasons}</p>
+                <p>当前 {formatPercent(task.current_exposure)}，建议风险仓位不高于 {formatPercent(task.recommended_target_exposure)}</p>
+                <div className="risk-confirmation-actions">
+                  <button type="button" className="reduce-action" onClick={() => handleRiskConfirmation(task.strategy_id, "REDUCE")}>执行风险减仓至{formatPercent(task.recommended_target_exposure, 0)}</button>
+                  <button type="button" onClick={() => handleRiskConfirmation(task.strategy_id, "PROCEED")}>允许原计划撮合</button>
+                  <button type="button" className="danger-action" onClick={() => handleRiskConfirmation(task.strategy_id, "PAUSE")}>暂停今日撮合</button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="muted-text">上一交易日没有触发风险门禁，Paper 撮合按计划执行。</p>
+        )}
+        {riskMessage ? <p className="success-message">{riskMessage}</p> : null}
+      </section>
       <section className="panel detail-panel">
         <div className="detail-heading">
           <div>
@@ -87,9 +133,13 @@ export function SchedulerPage() {
                 </span>
                 <em className={`status ${decisionTone(action.severity)}`}>{action.severity}</em>
                 <p>{action.message}</p>
-                <button type="button" onClick={() => handleAcknowledge(action)}>
-                  记录已确认
-                </button>
+                {action.category === "risk_confirmation" ? (
+                  <small>请在上方选择风险减仓、原计划撮合或暂停</small>
+                ) : (
+                  <button type="button" onClick={() => handleAcknowledge(action)}>
+                    记录已确认
+                  </button>
+                )}
               </div>
             ))}
           </div>

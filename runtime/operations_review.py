@@ -16,9 +16,10 @@ def build_operations_review(
     repo_root: Path,
     db_path: Path,
     readiness: Mapping[str, object] | None = None,
+    risk_confirmation: Mapping[str, object] | None = None,
 ) -> dict[str, object]:
     """生成运行决策和人工确认之间的闭环指标。"""
-    decision = build_operations_decision(repo_root, readiness)
+    decision = build_operations_decision(repo_root, readiness, risk_confirmation)
     actions = [item for item in decision.get("actions", []) if isinstance(item, dict)]
     acknowledgements = list_operations_ack(db_path, limit=100)
     ack_keys = {_action_key(item) for item in acknowledgements}

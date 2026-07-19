@@ -12,12 +12,18 @@ from typing import Mapping
 from runtime.operations_observation import build_operations_observation
 
 
-def build_operations_decision(repo_root: Path, readiness: Mapping[str, object] | None = None) -> dict[str, object]:
+def build_operations_decision(
+    repo_root: Path,
+    readiness: Mapping[str, object] | None = None,
+    risk_confirmation: Mapping[str, object] | None = None,
+) -> dict[str, object]:
     """把运行观察和就绪度审计转换成可行动的人工处理决策。"""
     observation = build_operations_observation(repo_root)
     actions = _observation_actions(observation)
     if readiness:
         actions.extend(_readiness_actions(readiness))
+    if risk_confirmation:
+        actions.extend(_risk_confirmation_actions(risk_confirmation))
     severity = _overall_severity(actions)
     decision = "ACTION_REQUIRED" if actions else "NO_ACTION"
     return {
@@ -73,6 +79,28 @@ def _readiness_actions(readiness: Mapping[str, object]) -> list[dict[str, str]]:
                 "severity": "CRITICAL",
                 "message": str(check.get("message") or f"{name} 未通过"),
                 "suggested_action": _suggest_readiness_action(name),
+            }
+        )
+    return result
+
+
+def _risk_confirmation_actions(state: Mapping[str, object]) -> list[dict[str, str]]:
+    """把未完成的盘前风险确认纳入统一人工处置视图。"""
+    result: list[dict[str, str]] = []
+    tasks = state.get("tasks", [])
+    if not isinstance(tasks, list):
+        return result
+    for task in tasks:
+        if not isinstance(task, Mapping) or task.get("status") != "PENDING_MANUAL_CONFIRM":
+            continue
+        result.append(
+            {
+                "source": "pre_market_check",
+                "category": "risk_confirmation",
+                "name": str(task.get("strategy_id") or "unknown"),
+                "severity": str(task.get("severity") or "WARNING"),
+                "message": str(task.get("reasons") or "盘前风险待确认"),
+                "suggested_action": str(task.get("suggested_action") or "确认风险减仓、原计划撮合或暂停"),
             }
         )
     return result

@@ -9,12 +9,14 @@ from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 
 from api.market_beta import latest_market_beta, market_beta_series
+from api.market_style import market_style_overview as build_market_style_overview
 from api.service import LocalApiService
 from runtime.environment_audit import build_environment_audit
 from runtime.operations_ack import list_operations_ack, record_operations_ack
 from runtime.operations_quality_report import build_operations_quality_report
 from runtime.hot_money_research_view import build_hot_money_research_view
 from runtime.operations_review import build_operations_review
+from runtime.risk_confirmation import build_risk_confirmation_state, record_risk_confirmation
 
 
 def create_app(service: LocalApiService | None = None) -> FastAPI:
@@ -99,6 +101,25 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
 
+    @app.get("/api/risk-confirmations")
+    def risk_confirmations(trade_date: str = "") -> dict[str, Any]:
+        """返回下一交易日或指定交易日的盘前风险确认任务。"""
+        return build_risk_confirmation_state(api_service.paths, trade_date or None)
+
+    @app.post("/api/risk-confirmations/{strategy_id}")
+    def confirm_strategy_risk(strategy_id: str, payload: dict[str, Any]) -> dict[str, Any]:
+        """确认风险减仓、允许原计划撮合或暂停当日撮合。"""
+        try:
+            return record_risk_confirmation(
+                api_service.paths,
+                strategy_id,
+                str(payload.get("trade_date") or ""),
+                str(payload.get("decision") or ""),
+                str(payload.get("resolution") or ""),
+            )
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
     @app.get("/api/operations/review")
     def operations_review() -> dict[str, Any]:
         """返回运维告警和人工确认的闭环复盘指标。"""
@@ -106,6 +127,7 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
             api_service.paths.root,
             api_service.paths.system_state_path,
             api_service.readiness(),
+            build_risk_confirmation_state(api_service.paths),
         )
 
     @app.post("/api/operations/quality-report")
@@ -438,6 +460,11 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
     def market_beta_history(limit: int = Query(default=120, ge=1, le=1000)) -> list[dict[str, Any]]:
         """返回 beta 观测历史。"""
         return market_beta_series(api_service.paths, limit=limit)
+
+    @app.get("/api/market/style-overview")
+    def market_style_overview(limit: int = Query(default=240, ge=60, le=1000)) -> dict[str, Any]:
+        """返回微盘与大盘风格代理的 K 线观测。"""
+        return build_market_style_overview(api_service.paths, limit=limit)
 
     return app
 

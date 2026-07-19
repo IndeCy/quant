@@ -106,3 +106,90 @@ def test_next_broker_trading_dates_uses_calendar_for_future_order_date() -> None
     dates = next_broker_trading_dates("20260710")
 
     assert dates == ["20260710", "20260713"]
+
+
+def test_due_orders_sell_before_buy_to_release_rebalance_cash(tmp_path: Path) -> None:
+    """同日换仓即使买单先创建，也必须先卖出旧持仓释放现金。"""
+    broker = LocalPaperBroker(tmp_path / "paper.sqlite3")
+    account_id = broker.store.create_account(
+        strategy_name="主线链动因子 V1",
+        strategy_code="mainline_chain_factor_v1",
+        initial_cash=110_000.0,
+        benchmark_symbol="000001.SH",
+        benchmark_name="上证指数",
+        start_date="2026-07-08",
+    )
+    old_order_id = broker.store.record_pending_order(
+        account_id, "2026-07-08", "OLD.SZ", "旧持仓", "BUY", 10.0, 9_000, "seed"
+    )
+    broker.store.fill_order(old_order_id, "2026-07-08", 10.0)
+    broker.store.record_pending_order(
+        account_id, "2026-07-09", "NEW.SZ", "新持仓", "BUY", 20.0, 5_000, "signal=2026-07-08"
+    )
+    broker.store.record_pending_order(
+        account_id, "2026-07-09", "OLD.SZ", "旧持仓", "SELL", 10.0, 9_000, "signal=2026-07-08"
+    )
+    market = pd.DataFrame(
+        [
+            _execution_bar("OLD.SZ", 10.0),
+            _execution_bar("NEW.SZ", 20.0),
+        ]
+    )
+
+    executed, rejected = broker.execute_due_orders("20260709", market)
+    orders = broker.store.list_orders(account_id)
+    positions = broker.store.list_positions(account_id)
+
+    assert executed == 2
+    assert rejected == 0
+    assert all(order["status"] == "FILLED" for order in orders)
+    assert [(item["symbol"], item["quantity"]) for item in positions] == [("NEW.SZ", 5_000)]
+
+
+def test_insufficient_cash_rejects_one_order_without_aborting_batch(tmp_path: Path) -> None:
+    """一笔买单资金不足时应拒单，后续可成交委托仍需继续。"""
+    broker = LocalPaperBroker(tmp_path / "paper.sqlite3")
+    account_id = broker.store.create_account(
+        strategy_name="测试策略",
+        strategy_code="cash_guard_test",
+        initial_cash=100_000.0,
+        benchmark_symbol="510300.SH",
+        benchmark_name="沪深300ETF",
+        start_date="2026-07-08",
+    )
+    broker.store.record_pending_order(
+        account_id, "2026-07-09", "TOO_BIG.SZ", "超额买单", "BUY", 10.0, 20_000, "signal=2026-07-08"
+    )
+    broker.store.record_pending_order(
+        account_id, "2026-07-09", "VALID.SZ", "正常买单", "BUY", 10.0, 1_000, "signal=2026-07-08"
+    )
+    market = pd.DataFrame(
+        [
+            _execution_bar("TOO_BIG.SZ", 10.0),
+            _execution_bar("VALID.SZ", 10.0),
+        ]
+    )
+
+    executed, rejected = broker.execute_due_orders("20260709", market)
+    orders = {order["symbol"]: order for order in broker.store.list_orders(account_id)}
+
+    assert executed == 1
+    assert rejected == 1
+    assert orders["TOO_BIG.SZ"]["status"] == "REJECTED"
+    assert orders["TOO_BIG.SZ"]["reject_reason"] == "INSUFFICIENT_CASH"
+    assert orders["VALID.SZ"]["status"] == "FILLED"
+
+
+def _execution_bar(symbol: str, open_price: float) -> dict[str, object]:
+    """构造具备充足流动性的统一开盘行情。"""
+    return {
+        "trade_date": "20260709",
+        "symbol": symbol,
+        "name": symbol,
+        "open": open_price,
+        "close": open_price,
+        "volume": 1_000_000,
+        "is_suspended": False,
+        "limit_up": False,
+        "limit_down": False,
+    }

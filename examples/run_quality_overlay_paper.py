@@ -18,6 +18,7 @@ from backtest.notifier import NotificationMessage, build_notifier
 from backtest.quality_overlay_paper import QualityPaperSnapshot, QualityPaperStore, build_target_weights
 from backtest.research_benchmark import load_hs300_benchmark
 from data.live_market_view import open_live_market_connection
+from data.market_style_view import MARKET_STYLE_INDEX_SYMBOLS
 from data.tushare_benchmark_incremental import (
     BenchmarkIncrementalStore,
     TushareBenchmarkProClient,
@@ -80,7 +81,7 @@ def update_incremental(end_date: str) -> tuple[list[str], list[str]]:
 
 
 def update_benchmark_incremental(end_date: str) -> list[str]:
-    """补齐510300、主线代理ETF和上证指数基准缓存。"""
+    """补齐ETF、上证指数及大小盘风格指数基准缓存。"""
     token = get_config_value("TUSHARE_TOKEN")
     if not token:
         return ["未检测到TUSHARE_TOKEN，本次未更新ETF/指数基准"]
@@ -94,7 +95,10 @@ def update_benchmark_incremental(end_date: str) -> list[str]:
                 symbol: _latest_etf_base_date(symbol) if symbol == "510300.SH" else None
                 for symbol in fund_symbols
             },
-            index_base_latest={"000001.SH": _latest_index_base_date("000001.SH")},
+            index_base_latest={
+                "000001.SH": _latest_index_base_date("000001.SH"),
+                **{symbol: None for symbol in MARKET_STYLE_INDEX_SYMBOLS},
+            },
         )
     except Exception as exc:
         return [f"Tushare ETF/指数基准更新失败: {exc}"]

@@ -37,7 +37,7 @@ export function DashboardPage() {
               dates={allDates}
               series={data.strategies.map((strategy) => {
                 const byDate = new Map((data.strategySeriesMap[strategy.strategy_id] ?? []).map((item) => [item.trade_date, item.drawdown]));
-                return { name: strategy.name, data: allDates.map((date) => byDate.get(date) ?? Number.NaN) };
+                return { name: strategy.name, data: allDates.map((date) => byDate.get(date) ?? Number.NaN), valueType: "percent" as const };
               })}
             />
           </section>
@@ -61,9 +61,9 @@ export function DashboardPage() {
             title="风险状态"
             dates={dates}
             series={[
-              { name: "当前回撤", data: selectedSeries.map((item) => item.drawdown) },
-              { name: "20日波动率", data: selectedSeries.map((item) => item.volatility_20) },
-              { name: "目标仓位", data: selectedSeries.map((item) => item.exposure), yAxisIndex: 1 }
+              { name: "当前回撤", data: selectedSeries.map((item) => item.drawdown), valueType: "percent" },
+              { name: "20日波动率", data: selectedSeries.map((item) => item.volatility_20), valueType: "percent" },
+              { name: "目标仓位", data: selectedSeries.map((item) => item.exposure), yAxisIndex: 1, valueType: "percent" }
             ]}
             dualAxis
           />
@@ -75,6 +75,7 @@ export function DashboardPage() {
               { name: "MA60", data: data.marketSeries.map((item) => item.ma60) },
               { name: "MA120", data: data.marketSeries.map((item) => item.ma120) }
             ]}
+            scaleYAxis
           />
         </section>
         <aside className="column side">

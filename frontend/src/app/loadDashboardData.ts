@@ -8,6 +8,7 @@ import { getOperationsDecision } from "../entities/operations/decisionApi";
 import { getOperationsObservation } from "../entities/operations/api";
 import { getOperationsReview } from "../entities/operations/reviewApi";
 import { getReadinessReport } from "../entities/readiness/api";
+import { getRiskConfirmations } from "../entities/riskConfirmation/api";
 import { listReports } from "../entities/report/api";
 import {
   getResearchTodos,
@@ -65,7 +66,8 @@ export async function loadDashboardData() {
     strategyInstances,
     marketSeries,
     marketBeta,
-    readiness
+    readiness,
+    riskConfirmations
   ] = await Promise.all([
     getBackupManifest(),
     getEnvironmentAudit(),
@@ -92,7 +94,8 @@ export async function loadDashboardData() {
     listStrategyInstances(),
     getMarketSeries("510300"),
     getLatestMarketBeta(),
-    getReadinessReport()
+    getReadinessReport(),
+    getRiskConfirmations()
   ]);
   const strategy = strategyDetails[strategyId] ?? strategyDetailsList[0];
   const strategySeries = strategySeriesMap[strategyId] ?? [];
@@ -127,6 +130,7 @@ export async function loadDashboardData() {
     strategySeriesMap,
     marketSeries,
     marketBeta,
-    readiness
+    readiness,
+    riskConfirmations
   };
 }

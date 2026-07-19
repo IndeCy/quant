@@ -52,6 +52,7 @@ def test_live_risk_guard_notifies_critical_action(
     assert result.action_count == 1
     assert actions.iloc[0]["action_status"] == "NEED_CONFIRM"
     assert actions.iloc[0]["severity"] == "CRITICAL"
+    assert actions.iloc[0]["recommended_target_exposure"] == pytest.approx(0.30)
     assert "当日收益 -10.74%" in actions.iloc[0]["reasons"]
     assert "当前回撤 -22.09%" in actions.iloc[0]["reasons"]
     assert notifications[0]["title"] == "量化风险处置触发"
