@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from pathlib import Path
+from dataclasses import asdict
+import sqlite3
 from typing import Any
 
 import duckdb
@@ -13,6 +15,8 @@ from data.market_snapshot import create_market_snapshot
 from runtime.account_projection_service import project_paper_account_snapshot
 from runtime.local_paper_broker import LocalPaperBroker, PaperBrokerTarget, PaperBrokerSyncResult
 from runtime.paths import RuntimePaths
+from runtime.repository import SystemRepository
+from runtime.risk_policy import RiskPolicyRepository, apply_risk_cap
 
 
 def next_broker_trading_dates(trade_date: str) -> list[str]:
@@ -35,8 +39,13 @@ def sync_strategy_target_to_local_paper(
     initial_cash: float,
     benchmark_symbol: str,
     benchmark_name: str,
+    *,
+    risk_as_of_date: str | None = None,
+    replace_pending_orders: bool = False,
 ) -> PaperBrokerSyncResult:
     """把任意策略目标权重同步到统一本地模拟盘账户。"""
+    policy = RiskPolicyRepository(paths.system_state_path).resolve(strategy_id, risk_as_of_date or trade_date)
+    effective_weights = apply_risk_cap(target_weights, policy.max_exposure if policy else None)
     broker = LocalPaperBroker(paths.paper_trading_path)
     try:
         result = broker.sync_target(
@@ -44,12 +53,15 @@ def sync_strategy_target_to_local_paper(
                 strategy_id=strategy_id,
                 strategy_name=strategy_name,
                 trade_date=trade_date,
-                target_weights=target_weights,
+                target_weights=effective_weights,
                 market_data=market_data,
                 trading_dates=next_broker_trading_dates(trade_date),
                 initial_cash=initial_cash,
                 benchmark_symbol=benchmark_symbol,
                 benchmark_name=benchmark_name,
+                # 盘后策略提交只生成下一交易日订单；旧单只能由开盘撮合任务处理。
+                execute_due_orders=False,
+                replace_pending_orders=replace_pending_orders,
             )
         )
         project_paper_account_snapshot(
@@ -58,11 +70,85 @@ def sync_strategy_target_to_local_paper(
             result.account_id,
             result.trade_date,
             market_data,
+            # 查询投影保留策略理论目标，风险上限单独展示并只约束委托。
             target_weights,
         )
         return result
     finally:
         broker.close()
+
+
+def replan_paper_orders_for_risk_policy(
+    paths: RuntimePaths,
+    strategy_id: str,
+    signal_date: str,
+    effective_date: str,
+) -> dict[str, Any]:
+    """风险上限变化后，用最近理论目标替换未成交委托。"""
+    repository = SystemRepository(paths.system_state_path)
+    snapshot = repository.load_account_snapshot(strategy_id)
+    if snapshot is None:
+        return {"status": "SKIPPED", "message": "没有可重算的策略目标快照"}
+    target_weights = {
+        str(item["symbol"]): float(item.get("target_weight") or 0.0)
+        for item in snapshot.get("positions", [])
+        if float(item.get("target_weight") or 0.0) > 0
+    }
+    if not target_weights:
+        return {"status": "SKIPPED", "message": "策略理论目标为空"}
+    try:
+        instance = repository.load_strategy_instance(strategy_id)
+    except KeyError:
+        instance = {"strategy_id": strategy_id, "name": strategy_id, "benchmark": "510300", "config": {}}
+    symbols = sorted(set(target_weights) | _paper_account_symbols(paths, strategy_id))
+    market_data = load_live_market_for_symbols(paths, signal_date, symbols)
+    if market_data.empty:
+        return {"status": "FAILED", "message": f"{signal_date} 行情为空，未替换原委托"}
+    config = instance.get("config") if isinstance(instance.get("config"), dict) else {}
+    result = sync_strategy_target_to_local_paper(
+        paths=paths,
+        strategy_id=strategy_id,
+        strategy_name=str(instance.get("name") or strategy_id),
+        trade_date=signal_date,
+        target_weights=target_weights,
+        market_data=market_data,
+        initial_cash=float(config.get("initial_capital", 1_000_000.0)),
+        benchmark_symbol=str(instance.get("benchmark") or "510300"),
+        benchmark_name=str(instance.get("benchmark") or "510300"),
+        risk_as_of_date=effective_date,
+        replace_pending_orders=True,
+    )
+    return {
+        "status": "SUCCESS",
+        "message": (
+            f"旧单取消{result.cancelled_orders}笔，新建{result.created_orders}笔，"
+            f"计划{result.next_trade_date}撮合"
+        ),
+        **asdict(result),
+    }
+
+
+def _paper_account_symbols(paths: RuntimePaths, strategy_id: str) -> set[str]:
+    """读取实际持仓和未成交委托标的，保证退出单也能获得行情。"""
+    if not paths.paper_trading_path.exists():
+        return set()
+    with sqlite3.connect(paths.paper_trading_path) as con:
+        account = con.execute(
+            "SELECT id FROM paper_account WHERE strategy_code = ? ORDER BY id LIMIT 1",
+            [strategy_id],
+        ).fetchone()
+        if account is None:
+            return set()
+        account_id = int(account[0])
+        positions = con.execute(
+            "SELECT symbol FROM paper_position WHERE account_id = ?",
+            [account_id],
+        ).fetchall()
+        pending = con.execute(
+            "SELECT symbol FROM paper_order WHERE account_id = ? AND status = 'PENDING'",
+            [account_id],
+        ).fetchall()
+    return {str(row[0]) for row in positions + pending}
 
 
 def load_live_market_for_symbols(paths: RuntimePaths, trade_date: str, symbols: list[str], names: dict[str, str] | None = None) -> pd.DataFrame:

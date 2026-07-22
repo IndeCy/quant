@@ -18,6 +18,17 @@ export interface StrategyMetric {
   strategy_id: string;
   nav: number;
   paper_nav?: number | null;
+  paper_daily_return?: number | null;
+  paper_exposure?: number | null;
+  risk_cap?: number | null;
+  effective_exposure?: number | null;
+  risk_adjusted_daily_return?: number | null;
+  risk_adjusted_nav?: number | null;
+  risk_overlay_contribution?: number | null;
+  execution_tracking_contribution?: number | null;
+  trading_cost_contribution?: number | null;
+  estimated_trading_cost_return?: number | null;
+  risk_attribution_type?: "RISK_AVOIDED_LOSS" | "RISK_REENTRY_DRAG" | "NEUTRAL";
   daily_return: number;
   cumulative_return: number;
   benchmark_id: string;

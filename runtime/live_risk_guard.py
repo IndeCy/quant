@@ -16,6 +16,9 @@ from monitoring.repository import MonitoringRepository
 from runtime.notification_config import send_bark_notification
 from runtime.paths import RuntimePaths, get_runtime_paths
 from runtime.repository import SystemRepository
+from runtime.risk_policy import RiskPolicyRepository
+from runtime.risk_recovery import sync_recovery_recommendations
+from runtime.risk_rules import classify_strategy_risk, risk_exposure_limit
 
 
 RISK_GUARD_ID = "live_risk_guard"
@@ -30,6 +33,8 @@ class RiskGuardResult:
     action_count: int
     report_path: str
     actions_path: str
+    recovery_count: int = 0
+    recovery_path: str = ""
 
 
 def run_live_risk_guard(
@@ -44,44 +49,67 @@ def run_live_risk_guard(
     run_dir = runtime_paths.runs_dir / target_date
     run_dir.mkdir(parents=True, exist_ok=True)
     actions = build_risk_actions(runtime_paths, target_date)
+    recovery_assessments, new_recoveries = sync_recovery_recommendations(runtime_paths, target_date)
     status = _overall_status(actions)
     actions_path = run_dir / "risk_actions.csv"
+    recovery_path = run_dir / "risk_recovery_assessments.csv"
     report_path = run_dir / "risk_guard_report.md"
     actions.to_csv(actions_path, index=False)
-    report_path.write_text(_format_report(target_date, status, actions), encoding="utf-8")
+    pd.DataFrame([assessment.__dict__ for assessment in recovery_assessments]).to_csv(recovery_path, index=False)
+    report_path.write_text(
+        _format_report(target_date, status, actions, recovery_assessments),
+        encoding="utf-8",
+    )
 
     repository = SystemRepository(runtime_paths.system_state_path)
-    repository.record_strategy_run(RISK_GUARD_ID, target_date, status, run_dir, f"risk_actions={len(actions)}")
-    repository.record_run_step(RISK_GUARD_ID, target_date, 1, "risk_scan", status, f"risk_actions={len(actions)}", run_dir)
+    message = f"risk_actions={len(actions)} recovery_candidates={len(new_recoveries)}"
+    repository.record_strategy_run(RISK_GUARD_ID, target_date, status, run_dir, message)
+    repository.record_run_step(RISK_GUARD_ID, target_date, 1, "risk_scan", status, message, run_dir)
     if not actions.empty and push:
         send_bark_notification("量化风险处置触发", _format_notification(target_date, actions))
+    if new_recoveries and push:
+        send_bark_notification("风险仓位恢复待确认", _format_recovery_notification(target_date, new_recoveries))
     return RiskGuardResult(
         trade_date=target_date,
         status=status,
         action_count=len(actions),
         report_path=str(report_path),
         actions_path=str(actions_path),
+        recovery_count=len(new_recoveries),
+        recovery_path=str(recovery_path),
     )
 
 
-def build_risk_actions(paths: RuntimePaths, trade_date: str) -> pd.DataFrame:
+def build_risk_actions(
+    paths: RuntimePaths,
+    trade_date: str,
+    *,
+    include_controlled: bool = False,
+) -> pd.DataFrame:
     """从监控事实构建风险动作，供盘后报告和次日门禁复用。"""
     monitoring = MonitoringRepository(paths.monitoring_path)
+    policies = RiskPolicyRepository(paths.system_state_path)
     rows: list[dict[str, Any]] = []
     for strategy in _latest_strategy_metrics(monitoring, trade_date):
         severity, reasons = _classify_strategy_risk(strategy)
         if severity == "NORMAL":
             continue
-        max_exposure = 0.30 if severity == "CRITICAL" else 0.70
+        max_exposure = risk_exposure_limit(severity)
         current_exposure = float(strategy["exposure"])
         recommended_target = min(current_exposure, max_exposure)
+        active_policy = policies.resolve(str(strategy["strategy_id"]), trade_date)
+        # 已经处于同等或更严格上限时不重复触发；风险恶化需要进一步减仓时仍要确认。
+        controlled = active_policy is not None and active_policy.max_exposure <= recommended_target + 1e-12
+        if controlled and not include_controlled:
+            continue
         rows.append(
             {
                 "trade_date": trade_date,
                 "strategy_id": strategy["strategy_id"],
                 "strategy_name": strategy["strategy_name"],
                 "severity": severity,
-                "action_status": "NEED_CONFIRM",
+                "action_status": "CONTROLLED" if controlled else "NEED_CONFIRM",
+                "requires_confirmation": not controlled,
                 "suggested_action": f"T+1开盘前确认，建议风险仓位不高于{recommended_target:.0%}",
                 "daily_return": float(strategy["daily_return"]),
                 "drawdown": float(strategy["drawdown"]),
@@ -100,6 +128,7 @@ def build_risk_actions(paths: RuntimePaths, trade_date: str) -> pd.DataFrame:
             "strategy_name",
             "severity",
             "action_status",
+            "requires_confirmation",
             "suggested_action",
             "daily_return",
             "drawdown",
@@ -130,28 +159,8 @@ def _latest_strategy_metrics(monitoring: MonitoringRepository, trade_date: str) 
 
 
 def _classify_strategy_risk(metrics: dict[str, Any]) -> tuple[str, list[str]]:
-    daily_return = float(metrics.get("daily_return") or 0.0)
-    drawdown = float(metrics.get("drawdown") or 0.0)
-    volatility = float(metrics.get("volatility_20") or 0.0)
-    reasons: list[str] = []
-    critical = False
-    warning = False
-    if daily_return <= -0.08:
-        critical = True
-        reasons.append(f"当日收益 {daily_return:.2%} <= -8%")
-    elif daily_return <= -0.05:
-        warning = True
-        reasons.append(f"当日收益 {daily_return:.2%} <= -5%")
-    if drawdown <= -0.20:
-        critical = True
-        reasons.append(f"当前回撤 {drawdown:.2%} <= -20%")
-    elif drawdown <= -0.10:
-        warning = True
-        reasons.append(f"当前回撤 {drawdown:.2%} <= -10%")
-    if volatility >= 0.50:
-        critical = True
-        reasons.append(f"20日波动率 {volatility:.2%} >= 50%")
-    return ("CRITICAL" if critical else "WARNING" if warning else "NORMAL", reasons)
+    """兼容旧测试入口，实际规则由共享风险规则模块维护。"""
+    return classify_strategy_risk(metrics)
 
 
 def _overall_status(actions: pd.DataFrame) -> str:
@@ -162,8 +171,8 @@ def _overall_status(actions: pd.DataFrame) -> str:
     return "WARNING"
 
 
-def _format_report(trade_date: str, status: str, actions: pd.DataFrame) -> str:
-    if actions.empty:
+def _format_report(trade_date: str, status: str, actions: pd.DataFrame, recoveries: list[Any]) -> str:
+    if actions.empty and not recoveries:
         return f"# 盘后风险处置报告\n\n- 交易日：{trade_date}\n- 状态：NORMAL\n- 风险操作：无\n"
     lines = ["# 盘后风险处置报告", "", f"- 交易日：{trade_date}", f"- 状态：{status}", "- 风险操作：需要人工确认", ""]
     for _, row in actions.iterrows():
@@ -181,6 +190,14 @@ def _format_report(trade_date: str, status: str, actions: pd.DataFrame) -> str:
                 "",
             ]
         )
+    if recoveries:
+        lines.extend(["## 风险恢复观察", ""])
+        for item in recoveries:
+            state = "待人工确认" if item.eligible else "继续观察"
+            lines.append(
+                f"- {item.strategy_name}：{state}，上限 {item.current_cap:.0%}→{item.recommended_cap:.0%}，{item.reason}"
+            )
+        lines.append("")
     return "\n".join(lines).strip() + "\n"
 
 
@@ -194,6 +211,21 @@ def _format_notification(trade_date: str, actions: pd.DataFrame) -> str:
                 f"- 当前回撤：{float(row['drawdown']):.2%}",
                 f"- 20日波动率：{float(row['volatility_20']):.2%}",
                 f"- 建议：{row['suggested_action']}",
+                "",
+            ]
+        )
+    return "\n".join(lines).strip()
+
+
+def _format_recovery_notification(trade_date: str, recoveries: list[dict[str, Any]]) -> str:
+    """恢复建议只在首次满足条件时推送，避免每天重复打扰。"""
+    lines = [f"风险仓位恢复待确认 {trade_date}", "", "系统不会自动加仓，请到调度页确认。", ""]
+    for item in recoveries:
+        lines.extend(
+            [
+                f"{item['strategy_id']}：{float(item['current_cap']):.0%} → {float(item['recommended_cap']):.0%}",
+                f"- 稳定天数：{item['stable_days_observed']}/{item['stable_days_required']}",
+                f"- 依据：{item['reason']}",
                 "",
             ]
         )

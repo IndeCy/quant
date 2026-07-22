@@ -15,3 +15,10 @@ export function confirmStrategyRisk(
     decision
   });
 }
+
+export function confirmStrategyRiskRecovery(
+  recommendationId: string,
+  decision: "APPROVE" | "KEEP"
+): Promise<RiskConfirmationState> {
+  return postJson<RiskConfirmationState>(`/api/risk-recoveries/${recommendationId}`, { decision });
+}

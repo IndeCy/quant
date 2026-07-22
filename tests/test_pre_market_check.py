@@ -9,6 +9,7 @@ from monitoring.metrics import build_strategy_monitor_frame
 from monitoring.repository import MonitoringRepository
 from runtime.pre_market_check import run_pre_market_check
 from runtime.paths import RuntimePaths
+from runtime.risk_policy import RiskPolicyRepository
 
 
 def test_pre_market_check_no_action_without_previous_risk_file(
@@ -65,6 +66,28 @@ def test_pre_market_check_uses_previous_trading_day_on_monday(tmp_path: Path) ->
     assert result.previous_trade_date == "20260717"
     assert result.status == "NEED_CONFIRM"
     assert result.item_count == 1
+
+
+def test_pre_market_check_marks_active_cap_as_controlled_without_notification(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    """持续风险上限生效后不应每天重复要求人工确认。"""
+    paths = RuntimePaths(tmp_path / "runtime")
+    _seed_strategy_metrics(paths, "20260721", daily_return=0.08, drawdown=-0.21, volatility_20=0.55)
+    RiskPolicyRepository(paths.system_state_path).activate("mainline_chain_factor_v1", "20260720", 0.3)
+    notifications: list[str] = []
+    monkeypatch.setattr("runtime.pre_market_check.send_bark_notification", lambda title, body: notifications.append(body))
+
+    result = run_pre_market_check(paths, trade_date="20260722", previous_trade_date="20260721", push=True)
+    checklist = pd.read_csv(paths.runs_dir / "20260722" / "execution_checklist.csv")
+    report = (paths.runs_dir / "20260722" / "pre_market_check.md").read_text(encoding="utf-8")
+
+    assert result.status == "RISK_CONTROLLED"
+    assert checklist.iloc[0]["check_status"] == "RISK_CONTROLLED"
+    assert checklist.iloc[0]["active_risk_cap"] == pytest.approx(0.3)
+    assert notifications == []
+    assert "当前有效风险上限：30.00%" in report
 
 
 def _seed_strategy_metrics(

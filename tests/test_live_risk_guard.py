@@ -8,7 +8,9 @@ import pytest
 from monitoring.metrics import build_strategy_monitor_frame
 from monitoring.repository import MonitoringRepository
 from runtime.live_risk_guard import run_live_risk_guard
+from runtime.live_risk_guard import build_risk_actions
 from runtime.paths import RuntimePaths
+from runtime.risk_policy import RiskPolicyRepository
 
 
 def test_live_risk_guard_creates_no_action_for_normal_strategy(
@@ -58,6 +60,23 @@ def test_live_risk_guard_notifies_critical_action(
     assert notifications[0]["title"] == "量化风险处置触发"
     assert "明日开盘前复核" in notifications[0]["body"]
     assert "主线链动因子 V1" in report
+
+
+def test_existing_cap_suppresses_duplicate_action_but_worsening_requires_confirmation(tmp_path: Path) -> None:
+    """已有上限不重复告警，但 70% 上限遇到 CRITICAL 时仍需进一步降到 30%。"""
+    paths = RuntimePaths(tmp_path / "runtime")
+    paths.ensure_directories()
+    _seed_strategy_metrics(paths, daily_return=-0.06, drawdown=-0.12, volatility_20=0.30)
+    policies = RiskPolicyRepository(paths.system_state_path)
+    policies.activate("mainline_chain_factor_v1", "20260702", 0.7)
+
+    controlled = build_risk_actions(paths, "20260702")
+    _seed_strategy_metrics(paths, daily_return=-0.09, drawdown=-0.22, volatility_20=0.55)
+    worsening = build_risk_actions(paths, "20260702")
+
+    assert controlled.empty
+    assert len(worsening) == 1
+    assert float(worsening.iloc[0]["recommended_max_exposure"]) == 0.3
 
 
 def _seed_strategy_metrics(paths: RuntimePaths, daily_return: float, drawdown: float, volatility_20: float) -> None:

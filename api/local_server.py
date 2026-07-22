@@ -10,13 +10,15 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from api.market_beta import latest_market_beta, market_beta_series
 from api.market_style import market_style_overview as build_market_style_overview
+from api.risk_recovery_routes import register_risk_recovery_routes
 from api.service import LocalApiService
 from runtime.environment_audit import build_environment_audit
 from runtime.operations_ack import list_operations_ack, record_operations_ack
 from runtime.operations_quality_report import build_operations_quality_report
 from runtime.hot_money_research_view import build_hot_money_research_view
 from runtime.operations_review import build_operations_review
-from runtime.risk_confirmation import build_risk_confirmation_state, record_risk_confirmation
+from runtime.risk_confirmation import build_risk_confirmation_state
+from runtime.risk_confirmation_service import confirm_risk_action
 
 
 def create_app(service: LocalApiService | None = None) -> FastAPI:
@@ -29,6 +31,7 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
         allow_methods=["GET", "POST"],
         allow_headers=["*"],
     )
+    register_risk_recovery_routes(app, api_service)
 
     @app.get("/api/health")
     def health() -> dict[str, Any]:
@@ -110,12 +113,13 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
     def confirm_strategy_risk(strategy_id: str, payload: dict[str, Any]) -> dict[str, Any]:
         """确认风险减仓、允许原计划撮合或暂停当日撮合。"""
         try:
-            return record_risk_confirmation(
+            return confirm_risk_action(
                 api_service.paths,
                 strategy_id,
                 str(payload.get("trade_date") or ""),
                 str(payload.get("decision") or ""),
                 str(payload.get("resolution") or ""),
+                push=True,
             )
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc

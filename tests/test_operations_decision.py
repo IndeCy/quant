@@ -68,3 +68,26 @@ def test_operations_decision_includes_pending_risk_confirmation(tmp_path: Path, 
     assert decision["decision"] == "ACTION_REQUIRED"
     assert decision["severity"] == "CRITICAL"
     assert any(action["category"] == "risk_confirmation" for action in decision["actions"])
+
+
+def test_operations_decision_includes_pending_risk_recovery(tmp_path: Path, monkeypatch) -> None:
+    """分级恢复待确认也属于人工操作，不能被统一判断页漏掉。"""
+    monkeypatch.setenv("BARK_URL", "https://api.day.app/key")
+    _seed_complete_run(tmp_path)
+    state = {
+        "tasks": [],
+        "recovery": {
+            "tasks": [
+                {
+                    "strategy_id": "quality_overlay",
+                    "status": "PENDING_CONFIRM",
+                    "reason": "连续稳定3日，建议70%→100%",
+                }
+            ]
+        },
+    }
+
+    decision = build_operations_decision(tmp_path, {"status": "READY", "checks": []}, state)
+
+    assert decision["decision"] == "ACTION_REQUIRED"
+    assert any(action["category"] == "risk_recovery" for action in decision["actions"])

@@ -4,6 +4,7 @@ export interface PaperWindow {
   dates: string[];
   paperNav: number[];
   theoreticalNav: number[];
+  riskAdjustedNav: number[];
   benchmarkNav: number[];
 }
 
@@ -23,12 +24,13 @@ export function buildPaperWindow(rows: StrategyMetric[]): PaperWindow {
     .filter((row) => typeof row.paper_nav === "number" && Number.isFinite(row.paper_nav) && row.paper_nav > 0)
     .sort((left, right) => left.trade_date.localeCompare(right.trade_date));
   if (paperRows.length === 0) {
-    return { dates: [], paperNav: [], theoreticalNav: [], benchmarkNav: [] };
+    return { dates: [], paperNav: [], theoreticalNav: [], riskAdjustedNav: [], benchmarkNav: [] };
   }
   return {
     dates: paperRows.map((row) => row.trade_date),
     paperNav: rebase(paperRows.map((row) => row.paper_nav as number)),
     theoreticalNav: rebase(paperRows.map((row) => row.nav)),
+    riskAdjustedNav: rebase(paperRows.map((row) => row.risk_adjusted_nav ?? row.nav)),
     benchmarkNav: rebase(paperRows.map((row) => row.benchmark_nav))
   };
 }

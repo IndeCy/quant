@@ -89,6 +89,7 @@ def test_local_paper_broker_executes_due_orders_and_updates_positions(tmp_path: 
             market_data=_market_data(),
             trading_dates=["20260708", "20260709"],
             initial_cash=100_000.0,
+            execute_due_orders=True,
         )
     )
     orders = broker.store.list_orders(result.account_id)
@@ -99,6 +100,42 @@ def test_local_paper_broker_executes_due_orders_and_updates_positions(tmp_path: 
     assert orders[0]["fill_date"] == "2026-07-09"
     assert positions[0]["symbol"] == "AAA.SZ"
     assert positions[0]["quantity"] > 0
+
+
+def test_target_sync_can_defer_due_orders_to_market_open_executor(tmp_path: Path) -> None:
+    """盘后目标同步不得绕过开盘门禁成交旧委托，也不得叠加新订单。"""
+    broker = LocalPaperBroker(tmp_path / "paper.sqlite3")
+    first = broker.sync_target(
+        PaperBrokerTarget(
+            strategy_id="quality_overlay",
+            strategy_name="Quality Alpha",
+            trade_date="20260708",
+            target_weights={"AAA.SZ": 0.5},
+            market_data=_market_data(),
+            trading_dates=["20260708", "20260709"],
+            initial_cash=100_000.0,
+        )
+    )
+
+    second = broker.sync_target(
+        PaperBrokerTarget(
+            strategy_id="quality_overlay",
+            strategy_name="Quality Alpha",
+            trade_date="20260709",
+            target_weights={"AAA.SZ": 0.7},
+            market_data=_market_data(),
+            trading_dates=["20260709", "20260710"],
+            initial_cash=100_000.0,
+            execute_due_orders=False,
+        )
+    )
+
+    orders = broker.store.list_orders(first.account_id)
+    assert second.executed_orders == 0
+    assert second.created_orders == 0
+    assert len(orders) == 1
+    assert orders[0]["status"] == "PENDING"
+    assert broker.store.list_positions(first.account_id) == []
 
 
 def test_next_broker_trading_dates_uses_calendar_for_future_order_date() -> None:

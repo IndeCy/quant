@@ -14,6 +14,7 @@ from runtime.paths import RuntimePaths
 from runtime.portfolio_account import build_account_snapshot
 from runtime.repository import SystemRepository
 from runtime.risk_confirmation import PROCEED_DECISION, REDUCE_DECISION, record_risk_confirmation
+from runtime.risk_policy import RiskPolicyRepository
 
 
 def test_market_open_execution_fills_pending_orders_with_realtime_quotes(tmp_path: Path, monkeypatch) -> None:
@@ -267,6 +268,50 @@ def test_market_open_risk_reduction_runs_without_original_rebalance_order(tmp_pa
     assert result.executed_orders == 1
     assert risk_orders[0]["quantity"] == 2_000
     assert risk_orders[0]["status"] == "FILLED"
+    assert positions[0]["quantity"] == 3_000
+
+
+def test_active_risk_cap_allows_next_day_compliant_top_up_without_reconfirmation(tmp_path: Path, monkeypatch) -> None:
+    """持续上限已在规划阶段生效时，次日合规补仓单不得再次被减仓流程取消。"""
+    paths = RuntimePaths(tmp_path / "runtime")
+    paths.ensure_directories()
+    store = PaperTradingStore(paths.paper_trading_path)
+    try:
+        account_id = store.create_account(
+            "主线链动因子 V1", "mainline_chain_factor_v1", 100_000.0, "000001.SH", "上证指数", "2026-07-17"
+        )
+        seed_order = store.record_pending_order(
+            account_id, "2026-07-17", "000001.SZ", "平安银行", "BUY", 10.0, 2_000, "seed"
+        )
+        store.fill_order(seed_order, "2026-07-17", 10.0)
+        store.record_pending_order(
+            account_id, "2026-07-21", "000001.SZ", "平安银行", "BUY", 10.0, 1_000, "signal=2026-07-20"
+        )
+    finally:
+        store.close()
+    _seed_risk_metrics(paths)
+    RiskPolicyRepository(paths.system_state_path).activate("mainline_chain_factor_v1", "20260720", 0.3)
+    monkeypatch.setattr(
+        "runtime.market_open_paper_execution.fetch_realtime_market_data",
+        lambda symbols, trade_date=None: pd.DataFrame(
+            [{**_market_open_bar("000001.SZ", 10.0), "trade_date": "20260721"}]
+        ),
+    )
+
+    result = run_market_open_paper_execution(paths, trade_date="20260721", push=False)
+    store = PaperTradingStore(paths.paper_trading_path)
+    try:
+        orders = store.list_orders(account_id)
+        positions = store.list_positions(account_id)
+    finally:
+        store.close()
+
+    compliant_buy = next(order for order in orders if order["order_date"] == "2026-07-21" and order["side"] == "BUY")
+    assert result.blocked_orders == 0
+    assert result.cancelled_orders == 0
+    assert result.risk_reduction_orders == 0
+    assert result.executed_orders == 1
+    assert compliant_buy["status"] == "FILLED"
     assert positions[0]["quantity"] == 3_000
 
 

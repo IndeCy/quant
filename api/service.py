@@ -424,7 +424,7 @@ class LocalApiService:
     def strategy_series(self, strategy_id: str) -> list[dict[str, Any]]:
         """返回策略净值、风险和执行成本曲线。"""
         frame = self.monitoring_repository.load_strategy_history(strategy_id)
-        frame = attach_paper_nav(frame, self.paths.paper_trading_path, strategy_id)
+        frame = attach_paper_nav(frame, self.paths.paper_trading_path, strategy_id, self.paths.system_state_path)
         return _frame_records(frame)
 
     def market_series(self, benchmark_id: str) -> list[dict[str, Any]]:

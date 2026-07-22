@@ -4,6 +4,7 @@ import type { StrategyMetric } from "../../../entities/strategy/model";
 import { buildPaperWindow } from "../../../entities/strategy/paperWindow";
 import { ChartPanel } from "../../../shared/ui/ChartPanel";
 import { PerformanceModeSwitch, type PerformanceMode } from "./PerformanceModeSwitch";
+import { RiskAttributionPanel } from "./RiskAttributionPanel";
 
 interface StrategyPerformanceChartProps {
   rows: StrategyMetric[];
@@ -19,7 +20,8 @@ export function StrategyPerformanceChart({ rows }: StrategyPerformanceChartProps
   ];
   const paperSeries = [
     { name: "Paper实际", data: paperWindow.paperNav },
-    { name: "回测同期", data: paperWindow.theoreticalNav },
+    { name: "Alpha理论", data: paperWindow.theoreticalNav },
+    { name: "风险调整理论", data: paperWindow.riskAdjustedNav },
     { name: "基准同期", data: paperWindow.benchmarkNav }
   ];
 
@@ -33,6 +35,7 @@ export function StrategyPerformanceChart({ rows }: StrategyPerformanceChartProps
         dualAxis={mode === "history"}
         scaleYAxis
       />
+      {mode === "paper" ? <RiskAttributionPanel rows={rows} /> : null}
     </>
   );
 }

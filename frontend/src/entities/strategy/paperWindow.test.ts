@@ -37,6 +37,7 @@ describe("buildPaperWindow", () => {
     expect(result.dates).toEqual(["20260709", "20260710"]);
     expect(result.paperNav).toEqual([1, 0.99]);
     expect(result.theoreticalNav).toEqual([1, 1.02]);
+    expect(result.riskAdjustedNav).toEqual([1, 1.02]);
     expect(result.benchmarkNav).toEqual([1, 1.01]);
   });
 
@@ -45,6 +46,7 @@ describe("buildPaperWindow", () => {
       dates: [],
       paperNav: [],
       theoreticalNav: [],
+      riskAdjustedNav: [],
       benchmarkNav: []
     });
   });

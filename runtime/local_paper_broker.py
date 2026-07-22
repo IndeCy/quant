@@ -29,6 +29,8 @@ class PaperBrokerTarget:
     initial_cash: float = 1_000_000.0
     benchmark_symbol: str = "510300"
     benchmark_name: str = "沪深300"
+    execute_due_orders: bool = False
+    replace_pending_orders: bool = False
 
 
 @dataclass(frozen=True)
@@ -42,6 +44,7 @@ class PaperBrokerSyncResult:
     executed_orders: int
     rejected_orders: int
     pending_orders: int
+    cancelled_orders: int = 0
 
 
 @dataclass(frozen=True)
@@ -67,7 +70,7 @@ class LocalPaperBroker:
         self.store.close()
 
     def sync_target(self, target: PaperBrokerTarget) -> PaperBrokerSyncResult:
-        """执行到期委托，并为最新目标组合创建 T+1 委托。"""
+        """同步最新目标并创建 T+1 委托；仅显式启用时兼容撮合旧单。"""
         trade_date = _compact_date(target.trade_date)
         trade_iso = _iso_date(trade_date)
         market = _normalize_market_data(target.market_data)
@@ -75,13 +78,34 @@ class LocalPaperBroker:
         next_trade_date = _next_trade_date(trade_date, dates)
         account_id = self._get_or_create_account(target, trade_iso)
 
-        executed, rejected = self._execute_due_orders(account_id, trade_iso, market)
+        executed, rejected = (0, 0)
+        if target.execute_due_orders:
+            executed, rejected = self._execute_due_orders(account_id, trade_iso, market)
+        cancelled = 0
+        if next_trade_date and target.replace_pending_orders:
+            cancelled = self._cancel_pending_orders(account_id, "RISK_POLICY_REPLAN")
         created = 0
-        if next_trade_date:
-            created = self._create_next_orders(account_id, target, trade_date, _iso_date(next_trade_date), market)
+        if next_trade_date and not self._has_pending_orders(account_id):
+            created = self._create_next_orders(
+                account_id,
+                target,
+                trade_date,
+                _iso_date(next_trade_date),
+                market,
+                allow_replacement=target.replace_pending_orders,
+            )
         self._record_snapshot(account_id, target, trade_date, market)
         pending = len(self.store.list_orders(account_id, status="PENDING"))
-        return PaperBrokerSyncResult(account_id, trade_date, next_trade_date or "", created, executed, rejected, pending)
+        return PaperBrokerSyncResult(
+            account_id,
+            trade_date,
+            next_trade_date or "",
+            created,
+            executed,
+            rejected,
+            pending,
+            cancelled,
+        )
 
     def execute_due_orders(
         self,
@@ -245,8 +269,9 @@ class LocalPaperBroker:
         signal_date: str,
         execute_iso: str,
         market: pd.DataFrame,
+        allow_replacement: bool = False,
     ) -> int:
-        if self._has_orders(account_id, execute_iso):
+        if not allow_replacement and self._has_orders(account_id, execute_iso):
             return 0
         target_quantities = self._target_quantities(account_id, target.target_weights, signal_date, market)
         current_quantities = {str(row["symbol"]): int(row["quantity"]) for row in self.store.list_positions(account_id)}
@@ -271,6 +296,19 @@ class LocalPaperBroker:
             )
             created += 1
         return created
+
+    def _cancel_pending_orders(self, account_id: int, reason: str) -> int:
+        """重算目标前只取消未成交委托，已成交和已拒绝记录保持不可变。"""
+        cursor = self.store.conn.execute(
+            """
+            UPDATE paper_order
+            SET status = 'CANCELLED', reject_reason = ?, modify_time = CURRENT_TIMESTAMP
+            WHERE account_id = ? AND status = 'PENDING'
+            """,
+            (reason, account_id),
+        )
+        self.store.conn.commit()
+        return max(int(cursor.rowcount), 0)
 
     def _target_quantities(
         self,
@@ -359,6 +397,14 @@ class LocalPaperBroker:
         row = self.store.conn.execute(
             "SELECT 1 FROM paper_order WHERE account_id = ? AND order_date = ? LIMIT 1",
             (account_id, execute_iso),
+        ).fetchone()
+        return row is not None
+
+    def _has_pending_orders(self, account_id: int) -> bool:
+        """未完成委托存在时不得叠加下一批目标单，避免跨日重复下单。"""
+        row = self.store.conn.execute(
+            "SELECT 1 FROM paper_order WHERE account_id = ? AND status = 'PENDING' LIMIT 1",
+            (account_id,),
         ).fetchone()
         return row is not None
 

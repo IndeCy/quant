@@ -103,6 +103,21 @@ def _risk_confirmation_actions(state: Mapping[str, object]) -> list[dict[str, st
                 "suggested_action": str(task.get("suggested_action") or "确认风险减仓、原计划撮合或暂停"),
             }
         )
+    recovery = state.get("recovery", {})
+    recovery_tasks = recovery.get("tasks", []) if isinstance(recovery, Mapping) else []
+    for task in recovery_tasks if isinstance(recovery_tasks, list) else []:
+        if not isinstance(task, Mapping) or task.get("status") != "PENDING_CONFIRM":
+            continue
+        result.append(
+            {
+                "source": "live_risk_guard",
+                "category": "risk_recovery",
+                "name": str(task.get("strategy_id") or "unknown"),
+                "severity": "WARNING",
+                "message": str(task.get("reason") or "风险仓位恢复待确认"),
+                "suggested_action": "确认分级恢复风险上限，或继续维持当前限仓",
+            }
+        )
     return result
 
 

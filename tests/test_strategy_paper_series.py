@@ -9,6 +9,7 @@ from backtest.paper_trading import PaperTradingStore
 from monitoring.metrics import build_strategy_monitor_frame
 from monitoring.repository import MonitoringRepository
 from runtime.paths import RuntimePaths
+from runtime.risk_policy import RiskPolicyRepository
 
 
 def test_strategy_series_includes_paper_nav(tmp_path) -> None:
@@ -23,7 +24,7 @@ def test_strategy_series_includes_paper_nav(tmp_path) -> None:
             strategy_name="Quality Alpha V1",
             daily_values=pd.Series([100.0, 103.0], index=dates),
             benchmark_values=pd.Series([1.0, 1.02], index=dates),
-            exposure=pd.Series([1.0, 0.3], index=dates),
+            exposure=pd.Series([1.0, 1.0], index=dates),
             total_cost=0.0,
             failed_order_count=0,
             turnover_notional=0.0,
@@ -34,9 +35,22 @@ def test_strategy_series_includes_paper_nav(tmp_path) -> None:
     store.record_daily_snapshot(account_id, "2026-06-23", 1000000, 1000000, 0, 0.0, 0.0, 0.0, "", "", [])
     store.record_daily_snapshot(account_id, "2026-06-24", 990000, 100000, 890000, -0.01, 0.02, -0.03, "", "", [])
     store.close()
+    RiskPolicyRepository(paths.system_state_path).activate("quality_overlay", "20260624", 0.5)
     service = LocalApiService(paths)
 
     series = service.strategy_series("quality_overlay")
 
     assert series[0]["paper_nav"] == 1.0
     assert series[1]["paper_nav"] == 0.99
+    assert series[1]["risk_cap"] == 0.5
+    assert series[1]["effective_exposure"] == 0.5
+    assert round(series[1]["risk_adjusted_daily_return"], 6) == 0.015
+    assert round(series[1]["risk_overlay_contribution"], 6) == -0.015
+    assert round(series[1]["execution_tracking_contribution"], 6) == -0.025
+    assert series[1]["risk_attribution_type"] == "RISK_REENTRY_DRAG"
+    attribution_total = (
+        series[1]["risk_overlay_contribution"]
+        + series[1]["execution_tracking_contribution"]
+        + series[1]["trading_cost_contribution"]
+    )
+    assert round(series[1]["paper_daily_return"] - series[1]["daily_return"], 10) == round(attribution_total, 10)

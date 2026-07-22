@@ -14,6 +14,8 @@ from data.calendar import TradingCalendar
 from runtime.live_risk_guard import build_risk_actions
 from runtime.operations_ack import RESOLVED_STATUS, list_operations_ack, record_operations_ack
 from runtime.paths import RuntimePaths
+from runtime.risk_policy import RiskPolicyRepository
+from runtime.risk_recovery import build_risk_recovery_state
 
 
 RISK_CONFIRMATION_SOURCE = "pre_market_check"
@@ -32,16 +34,24 @@ def build_risk_confirmation_state(
     """构建指定交易日的盘前确认状态。"""
     target_date = _target_trade_date(trade_date)
     previous_date = previous_trade_date or _latest_market_date_before(paths, target_date)
-    actions = build_risk_actions(paths, previous_date) if previous_date else []
+    actions = build_risk_actions(paths, previous_date, include_controlled=True) if previous_date else []
     actionable_strategy_ids = _actionable_strategy_ids(paths)
     if actionable_strategy_ids is not None and hasattr(actions, "loc"):
         actions = actions.loc[actions["strategy_id"].isin(actionable_strategy_ids)].copy()
     acknowledgements = _acknowledgements_by_strategy(paths, target_date)
+    risk_policies = RiskPolicyRepository(paths.system_state_path)
     tasks: list[dict[str, Any]] = []
     for action in actions.to_dict("records") if hasattr(actions, "to_dict") else actions:
         strategy_id = str(action["strategy_id"])
         acknowledgement = acknowledgements.get(strategy_id)
         decision = str(acknowledgement.get("decision") or "") if acknowledgement else ""
+        active_policy = risk_policies.resolve(strategy_id, target_date)
+        active_risk_cap = float(active_policy.max_exposure) if active_policy else None
+        # 风险指标来自上一交易日，但仓位上限可能在随后人工确认并于今日生效，必须按撮合日比较。
+        requires_confirmation = (
+            active_risk_cap is None
+            or active_risk_cap > float(action["recommended_target_exposure"]) + 1e-12
+        )
         tasks.append(
             {
                 "trade_date": target_date,
@@ -49,8 +59,13 @@ def build_risk_confirmation_state(
                 "strategy_id": strategy_id,
                 "strategy_name": str(action["strategy_name"]),
                 "severity": str(action["severity"]),
-                "status": _task_status(decision),
+                "status": _task_status(decision, active_policy is not None, requires_confirmation),
                 "decision": decision,
+                "active_risk_cap": active_risk_cap,
+                "effective_target_exposure": min(
+                    float(action["exposure"]),
+                    active_risk_cap if active_risk_cap is not None else 1.0,
+                ),
                 "current_exposure": float(action["exposure"]),
                 "recommended_max_exposure": float(action["recommended_max_exposure"]),
                 "recommended_target_exposure": float(action["recommended_target_exposure"]),
@@ -62,6 +77,7 @@ def build_risk_confirmation_state(
                 "reasons": str(action["reasons"]),
             }
         )
+    recovery_date = _latest_market_date_at_or_before(paths, target_date) or previous_date or target_date
     return {
         "trade_date": target_date,
         "previous_trade_date": previous_date,
@@ -69,6 +85,7 @@ def build_risk_confirmation_state(
         "task_count": len(tasks),
         "pending_count": sum(task["status"] == "PENDING_MANUAL_CONFIRM" for task in tasks),
         "tasks": tasks,
+        "recovery": build_risk_recovery_state(paths, recovery_date),
     }
 
 
@@ -93,7 +110,7 @@ def record_risk_confirmation(
         PROCEED_DECISION: "允许按原策略计划进行Paper撮合",
         PAUSE_DECISION: "暂停当日Paper撮合",
     }[normalized_decision]
-    record_operations_ack(
+    acknowledgement = record_operations_ack(
         paths.system_state_path,
         {
             "ack_id": f"risk-confirmation:{state['trade_date']}:{strategy_id}",
@@ -109,6 +126,14 @@ def record_risk_confirmation(
             "status": RESOLVED_STATUS,
         },
     )
+    if normalized_decision == REDUCE_DECISION:
+        RiskPolicyRepository(paths.system_state_path).activate(
+            strategy_id,
+            state["trade_date"],
+            float(task["recommended_target_exposure"]),
+            source_ack_id=str(acknowledgement["ack_id"]),
+            reason=str(task["reasons"]),
+        )
     return build_risk_confirmation_state(paths, state["trade_date"], state["previous_trade_date"])
 
 
@@ -117,12 +142,12 @@ def blocked_strategy_ids(state: dict[str, Any]) -> set[str]:
     return {
         str(task["strategy_id"])
         for task in state.get("tasks", [])
-        if str(task.get("decision") or "") not in {PROCEED_DECISION, REDUCE_DECISION}
+        if str(task.get("status") or "") in {"PENDING_MANUAL_CONFIRM", "CONFIRMED_PAUSE"}
     }
 
 
 def risk_reduction_targets(state: dict[str, Any]) -> dict[str, float]:
-    """返回已确认执行风险减仓的策略及目标总仓位。"""
+    """只返回当日新确认的减仓目标；持续上限由订单规划阶段执行。"""
     return {
         str(task["strategy_id"]): float(task["recommended_target_exposure"])
         for task in state.get("tasks", [])
@@ -195,13 +220,19 @@ def _actionable_strategy_ids(paths: RuntimePaths) -> set[str] | None:
     return {str(row[0]) for row in rows}
 
 
-def _task_status(decision: str) -> str:
+def _task_status(
+    decision: str,
+    has_active_policy: bool = False,
+    requires_confirmation: bool = True,
+) -> str:
     if decision == REDUCE_DECISION:
         return "CONFIRMED_REDUCE"
     if decision == PROCEED_DECISION:
         return "CONFIRMED_PROCEED"
     if decision == PAUSE_DECISION:
         return "CONFIRMED_PAUSE"
+    if has_active_policy and not requires_confirmation:
+        return "RISK_CONTROLLED"
     return "PENDING_MANUAL_CONFIRM"
 
 
@@ -214,7 +245,26 @@ def _overall_status(tasks: list[dict[str, Any]]) -> str:
         return "PAUSED"
     if any(task["status"] == "CONFIRMED_REDUCE" for task in tasks):
         return "REDUCTION_READY"
+    if any(task["status"] == "RISK_CONTROLLED" for task in tasks):
+        return "RISK_CONTROLLED"
     return "READY"
+
+
+def _latest_market_date_at_or_before(paths: RuntimePaths, trade_date: str) -> str:
+    """恢复观察可以读取当天盘后指标，但盘前风险仍只读取上一交易日。"""
+    if not paths.monitoring_path.exists():
+        return ""
+    with sqlite3.connect(paths.monitoring_path) as con:
+        table = con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='strategy_nav_daily'"
+        ).fetchone()
+        if table is None:
+            return ""
+        row = con.execute(
+            "SELECT MAX(trade_date) FROM strategy_nav_daily WHERE trade_date <= ?",
+            [trade_date],
+        ).fetchone()
+    return _compact_date(str(row[0])) if row and row[0] else ""
 
 
 def _compact_date(value: str) -> str:

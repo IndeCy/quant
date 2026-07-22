@@ -83,6 +83,8 @@ def _build_checklist(state: dict[str, object]) -> pd.DataFrame:
                 "decision": task.get("decision", ""),
                 "current_exposure": task.get("current_exposure", 0.0),
                 "recommended_target_exposure": task.get("recommended_target_exposure", 0.0),
+                "active_risk_cap": task.get("active_risk_cap"),
+                "effective_target_exposure": task.get("effective_target_exposure", 0.0),
                 "tradability_check": task.get("tradability_check", ""),
                 "suggested_action": task.get("suggested_action", ""),
                 "reasons": task.get("reasons", ""),
@@ -100,6 +102,8 @@ def _build_checklist(state: dict[str, object]) -> pd.DataFrame:
             "decision",
             "current_exposure",
             "recommended_target_exposure",
+            "active_risk_cap",
+            "effective_target_exposure",
             "tradability_check",
             "suggested_action",
             "reasons",
@@ -126,8 +130,10 @@ def _format_report(trade_date: str, previous_trade_date: str, status: str, check
                 "",
                 f"- 严重级别：{row['severity']}",
                 f"- 确认状态：{row['check_status']}",
-                f"- 当前仓位：{float(row['current_exposure']):.2%}",
+                f"- 策略理论仓位：{float(row['current_exposure']):.2%}",
                 f"- 建议风险仓位上限：{float(row['recommended_target_exposure']):.2%}",
+                f"- 当前有效风险上限：{_optional_percent(row['active_risk_cap'])}",
+                f"- 当前有效目标仓位：{float(row['effective_target_exposure']):.2%}",
                 f"- 可交易性检查：{row['tradability_check']}",
                 f"- 建议：{row['suggested_action']}",
                 f"- 原因：{row['reasons']}",
@@ -152,3 +158,10 @@ def _format_notification(trade_date: str, previous_trade_date: str, checklist: p
             ]
         )
     return "\n".join(lines).strip()
+
+
+def _optional_percent(value: object) -> str:
+    """格式化可能尚未激活的风险上限。"""
+    if value is None or pd.isna(value):
+        return "未激活"
+    return f"{float(value):.2%}"
