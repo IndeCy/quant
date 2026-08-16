@@ -1,0 +1,64 @@
+{
+  "strategy_id": "quality_defensive_assets_core_scoped_70_15_15_v2",
+  "name": "Quality 防守资产 V2",
+  "version": "2.0.0",
+  "template_id": "factor_topn_monthly",
+  "status": "paper",
+  "enabled": true,
+  "universe": "quality_cleanup_all_a",
+  "filters": [
+    "listed_3y",
+    "exclude_st",
+    "exclude_delisted",
+    "annual_report_1231",
+    "amount_above_p20",
+    "material_corporate_action_gate_10pct",
+    "qfq"
+  ],
+  "factors": [
+    {"factor_id": "roe", "weight": 0.26666666666666666, "transform": "winsorize_5_95_zscore"},
+    {"factor_id": "roa", "weight": 0.26666666666666666, "transform": "winsorize_5_95_zscore"},
+    {"factor_id": "ocf_to_or", "weight": 0.26666666666666666, "transform": "winsorize_5_95_zscore"},
+    {"factor_id": "earnings_yield", "weight": 0.1, "transform": "winsorize_1_99_zscore"},
+    {"factor_id": "book_yield", "weight": 0.1, "transform": "winsorize_1_99_zscore"}
+  ],
+  "construction": {
+    "top_n": 20,
+    "weighting": "equal_weight",
+    "rebalance": "monthly",
+    "core_allocation": 0.7,
+    "fixed_sleeves": [
+      {"symbol": "518880.SH", "name": "黄金ETF", "weight": 0.15},
+      {"symbol": "511010.SH", "name": "5年国债ETF", "weight": 0.15}
+    ]
+  },
+  "risk_overlay": "vol_20_45_to_30_core_only",
+  "benchmark": "510300",
+  "adjust_policy": "qfq",
+  "execution_policy": "m0_t1",
+  "config": {
+    "adapter": "quality_value_extension_asof_v1",
+    "score_mode": "quality_balanced_value_v1",
+    "risk_scope": "quality_core_only",
+    "initial_capital": 1000000.0,
+    "execution_slippage_bps": 5.0,
+    "volatility_window": 20,
+    "volatility_threshold": 0.45,
+    "reduced_exposure": 0.3,
+    "corporate_action_materiality_threshold": 0.1,
+    "deployment_scope": "forward_paper_only",
+    "paper_observation_gate_days": 20,
+    "research_fingerprint": "quality_defensive_assets_core_scoped_70_15_15_v2",
+    "paper_execution_policy": {
+      "slippage_bps": 10.0,
+      "execution_delay": 1,
+      "max_participation_rate": 0.01,
+      "commission_rate": 0.0003,
+      "stamp_tax_rate": 0.001,
+      "min_commission": 5.0,
+      "lot_size": 100,
+      "open_aware_order_sizing": true,
+      "tax_exempt_symbols": ["518880.SH", "511010.SH"]
+    }
+  }
+}

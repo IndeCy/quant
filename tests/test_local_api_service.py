@@ -86,8 +86,11 @@ def test_local_api_service_exposes_factor_detail(tmp_path: Path) -> None:
     assert detail is not None
     assert detail["name"] == "ROA"
     assert detail["config"]["as_of_field"] == "f_ann_date"
-    assert detail["strategies"][0]["strategy_id"] == "quality_overlay"
-    assert round(detail["strategies"][0]["weight"], 6) == round(1 / 3, 6)
+    quality = next(
+        item for item in detail["strategies"]
+        if item["strategy_id"] == "quality_overlay"
+    )
+    assert round(quality["weight"], 6) == round(1 / 3, 6)
     assert contract is not None
     assert contract["as_of_field"] == "f_ann_date"
     assert contract["input_datasets"] == ["fina_indicator_duckdb"]
@@ -113,6 +116,74 @@ def test_local_api_service_saves_strategy_draft(tmp_path: Path) -> None:
     assert saved["draft_id"] == "draft_quality_two_factor"
     assert saved["status"] == "draft"
     assert len(service.strategy_drafts()) == 1
+
+
+def test_local_api_service_exposes_research_experiments(tmp_path: Path) -> None:
+    """研究页应通过通用 API 读取实验摘要和详情。"""
+    paths = _seed_runtime(tmp_path)
+    repository = SystemRepository(paths.system_state_path)
+    repository.upsert_experiment(
+        {
+            "experiment_id": "quality_ml_ranker_v0",
+            "name": "Quality ML Ranker V0",
+            "category": "machine_learning",
+            "status": "active",
+            "config": {},
+        }
+    )
+    output_dir = paths.runs_dir / "experiments" / "quality_ml_ranker_v0" / "20260722-001"
+    output_dir.mkdir(parents=True)
+    report_path = output_dir / "report.md"
+    report_path.write_text("# Quality ML Ranker V0\n\n晋级结论：FAIL", encoding="utf-8")
+    run = repository.record_experiment_run(
+        "quality_ml_ranker_v0",
+        "quality_ml_ranker_v0:20260722:001",
+        "20260722",
+        "SUCCESS",
+        output_dir,
+        metrics={"gate": {"status": "FAIL"}},
+        definition_fingerprint="definition-hash",
+        run_fingerprint="run-hash",
+        data_as_of="20260721",
+        outcome="REJECTED",
+        decision_reason="样本外门槛未通过",
+    )
+    repository.record_experiment_artifact(run["run_id"], "summary", report_path, "研究报告")
+    service = LocalApiService(paths)
+
+    experiments = service.experiments()
+    detail = service.experiment_detail("quality_ml_ranker_v0")
+
+    assert experiments[0]["latest_metrics"]["gate"]["status"] == "FAIL"
+    assert experiments[0]["latest_outcome"] == "REJECTED"
+    assert experiments[0]["latest_data_as_of"] == "20260721"
+    assert detail is not None
+    assert detail["latest_run"]["status"] == "SUCCESS"
+    assert detail["latest_run"]["run_fingerprint"] == "run-hash"
+    assert detail["latest_run"]["decision_reason"] == "样本外门槛未通过"
+    assert detail["latest_run"]["artifacts"][0]["preview"].startswith("# Quality ML Ranker V0")
+
+
+def test_experiment_preview_does_not_read_files_outside_runs(tmp_path: Path) -> None:
+    """实验预览不能借登记路径读取 runs 目录之外的本机文件。"""
+    paths = _seed_runtime(tmp_path)
+    repository = SystemRepository(paths.system_state_path)
+    repository.upsert_experiment({"experiment_id": "outside", "name": "Outside", "config": {}})
+    run = repository.record_experiment_run(
+        "outside",
+        "outside:20260722:001",
+        "20260722",
+        "SUCCESS",
+        paths.runs_dir / "experiments" / "outside",
+    )
+    outside_path = tmp_path / "secret.md"
+    outside_path.write_text("不应暴露", encoding="utf-8")
+    repository.record_experiment_artifact(run["run_id"], "summary", outside_path, "越界文件")
+
+    detail = LocalApiService(paths).experiment_detail("outside")
+
+    assert detail is not None
+    assert "preview" not in detail["latest_run"]["artifacts"][0]
 
 
 def test_local_api_service_saves_research_ideas(tmp_path: Path) -> None:
@@ -259,6 +330,44 @@ def test_local_api_service_lists_reports_and_series(tmp_path: Path) -> None:
     assert reports[0]["report_type"] == "daily_report"
     assert strategy_series[-1]["trade_date"] == "20260624"
     assert market_series[-1]["benchmark_id"] == "510300"
+    assert market_series[-1]["breadth_data_status"] == "MISSING"
+    assert market_series[-1]["limit_data_status"] == "MISSING"
+
+
+def test_market_series_distinguishes_ready_observations_from_zero(tmp_path: Path) -> None:
+    """宽度与涨跌停缓存真实存在时应显式标记 READY，即使计数可能为 0。"""
+    paths = _seed_runtime(tmp_path)
+    monitoring = MonitoringRepository(paths.monitoring_path)
+    monitoring.upsert_market_daily(
+        pd.DataFrame(
+            [
+                {
+                    "trade_date": "20260624",
+                    "benchmark_id": "510300",
+                    "benchmark_nav": 1.02,
+                    "benchmark_return": 0.01,
+                    "benchmark_drawdown": 0.0,
+                    "ma60": 1.01,
+                    "ma120": 1.0,
+                    "trend_state": "UP",
+                    "breadth_up_count": 2600,
+                    "breadth_down_count": 2700,
+                    "breadth_flat_count": 150,
+                    "limit_up_count": 0,
+                    "limit_down_count": 0,
+                }
+            ]
+        )
+    )
+    with duckdb.connect(str(paths.limit_list_increment_path)) as con:
+        con.execute("CREATE TABLE limit_list_daily(trade_date VARCHAR)")
+        con.execute("INSERT INTO limit_list_daily VALUES ('20260624')")
+
+    latest = LocalApiService(paths).market_series("510300")[-1]
+
+    assert latest["breadth_data_status"] == "READY"
+    assert latest["limit_data_status"] == "READY"
+    assert latest["breadth_up_count"] == 2600
 
 
 def test_local_api_service_reads_registered_report_content(tmp_path: Path) -> None:
@@ -453,7 +562,8 @@ def test_fastapi_manual_daily_run_uses_unified_pipeline(monkeypatch, tmp_path: P
     assert "quality_overlay" in strategy_ids
     assert "mainline_chain_factor_v1" in strategy_ids
     assert "mainline_chain_b" not in strategy_ids
-    assert client.get("/api/factors/roa").json()["strategies"][0]["strategy_id"] == "quality_overlay"
+    roa_strategies = client.get("/api/factors/roa").json()["strategies"]
+    assert "quality_overlay" in {item["strategy_id"] for item in roa_strategies}
     assert client.get("/api/factor-contracts").json()[0]["factor_id"]
     assert client.get("/api/factor-contracts/roa").json()["as_of_field"] == "f_ann_date"
     assert client.get("/api/factor-contracts/missing").status_code == 404

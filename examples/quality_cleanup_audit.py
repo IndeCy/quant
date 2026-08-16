@@ -17,17 +17,16 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from backtest.execution_model import ExecutionModel
 from backtest.industry import IndustryManager
 from backtest.research_benchmark import load_hs300_benchmark
+from data.quality_financial import materialize_quality_financial_asof
 from examples.quality_strategy_v1 import (
     DB_PATH,
     FUND_BASIC_PATH,
     FUND_DAILY_PATH,
-    QUALITY_COLUMNS,
     START_DATE,
     attach_financial_dbs,
     build_quality_selections,
     create_signal_date_table,
     load_quality_candidates,
-    score_quality_frame,
 )
 from examples.strategy_comparison_research import (
     build_metrics_table,
@@ -39,6 +38,11 @@ from examples.strategy_comparison_research import (
     markdown_table,
     run_monthly_backtest,
 )
+from strategies.quality_signal import build_quality_topn
+from strategies.quality_universe import (
+    apply_quality_universe_filters,
+    load_annual_quality_candidates,
+)
 
 
 REPORT_PATH = Path("reports/quality_cleanup_audit.md")
@@ -48,51 +52,7 @@ CURRENT_HOLDINGS_PATH = Path("reports/quality_current_holdings_for_comparison.cs
 
 def create_annual_financial_asof_table(con) -> None:
     """构造只使用 1231 年报的 f_ann_date as-of 快照。"""
-    con.execute(
-        """
-        CREATE OR REPLACE TEMP TABLE financial_quality_asof_annual AS
-        WITH publish_dates AS (
-            SELECT ts_code, end_date, MAX(f_ann_date) AS f_ann_date
-            FROM (
-                SELECT ts_code, end_date, f_ann_date FROM income_db.default_table WHERE f_ann_date IS NOT NULL
-                UNION ALL
-                SELECT ts_code, end_date, f_ann_date FROM balance_db.default_table WHERE f_ann_date IS NOT NULL
-                UNION ALL
-                SELECT ts_code, end_date, f_ann_date FROM cashflow_db.default_table WHERE f_ann_date IS NOT NULL
-            )
-            WHERE RIGHT(end_date, 4) = '1231'
-            GROUP BY ts_code, end_date
-        ),
-        clean_fina AS (
-            SELECT
-                f.ts_code AS symbol,
-                f.end_date,
-                p.f_ann_date,
-                CAST(f.roe AS DOUBLE) AS roe,
-                CAST(f.roa AS DOUBLE) AS roa,
-                CAST(f.ocf_to_or AS DOUBLE) AS ocf_to_or,
-                CAST(f.debt_to_assets AS DOUBLE) AS debt_to_assets,
-                CAST(f.tr_yoy AS DOUBLE) AS tr_yoy
-            FROM fina_db.default_table f
-            JOIN publish_dates p ON f.ts_code = p.ts_code AND f.end_date = p.end_date
-            WHERE p.f_ann_date IS NOT NULL
-        ),
-        ranked AS (
-            SELECT
-                d.signal_date,
-                q.*,
-                ROW_NUMBER() OVER(
-                    PARTITION BY d.signal_date, q.symbol
-                    ORDER BY q.end_date DESC, q.f_ann_date DESC
-                ) AS rn
-            FROM quality_signal_dates d
-            JOIN clean_fina q ON q.f_ann_date <= d.signal_date
-        )
-        SELECT signal_date, symbol, end_date, f_ann_date, roe, roa, ocf_to_or, debt_to_assets, tr_yoy
-        FROM ranked
-        WHERE rn = 1
-        """
-    )
+    materialize_quality_financial_asof(con, annual_only=True)
 
 
 def create_current_financial_asof_table(con) -> None:
@@ -104,106 +64,17 @@ def create_current_financial_asof_table(con) -> None:
 
 def load_annual_candidates(con) -> pd.DataFrame:
     """读取清理版候选池，包含上市和 ST/退市审计字段。"""
-    return con.execute(
-        """
-        WITH name_history AS (
-            SELECT ts_code, name, start_date, end_date FROM stock_namechange
-            UNION ALL
-            SELECT ts_code, name, start_date, end_date FROM stock_name_manual
-        ),
-        name_asof AS (
-            SELECT
-                f.trade_date AS signal_date,
-                f.symbol,
-                h.name AS asof_name,
-                ROW_NUMBER() OVER(
-                    PARTITION BY f.trade_date, f.symbol
-                    ORDER BY h.start_date DESC
-                ) AS rn
-            FROM features f
-            JOIN name_history h ON f.symbol = h.ts_code
-             AND h.start_date <= f.trade_date
-             AND (h.end_date IS NULL OR h.end_date >= f.trade_date)
-            WHERE f.trade_date IN (SELECT signal_date FROM quality_signal_dates)
-        )
-        SELECT
-            f.trade_date AS signal_date,
-            f.symbol,
-            COALESCE(na.asof_name, sb.name) AS name,
-            sb.list_status,
-            sb.list_date,
-            sb.delist_date,
-            f.close,
-            f.amount,
-            f.amount_p20,
-            f.volume,
-            f.st_name,
-            q.end_date,
-            q.f_ann_date,
-            q.roe,
-            q.roa,
-            q.ocf_to_or,
-            q.debt_to_assets,
-            q.tr_yoy
-        FROM features f
-        JOIN financial_quality_asof_annual q ON f.trade_date = q.signal_date AND f.symbol = q.symbol
-        LEFT JOIN stock_basic sb ON f.symbol = sb.ts_code
-        LEFT JOIN name_asof na ON f.trade_date = na.signal_date AND f.symbol = na.symbol AND na.rn = 1
-        WHERE f.trade_date IN (SELECT signal_date FROM quality_signal_dates)
-          AND f.amount > f.amount_p20
-          AND f.volume > 0
-          AND f.close > 0
-        ORDER BY f.trade_date, f.symbol
-        """
-    ).fetchdf()
+    return load_annual_quality_candidates(con)
 
 
 def apply_quality_cleanup_filters(frame: pd.DataFrame, quantile_filter: bool = True) -> pd.DataFrame:
     """执行上市满3年、ST/退市、1231年报和 ROE/ROA 分位清理。"""
-    data = frame.copy()
-    signal_dt = pd.to_datetime(data["signal_date"], format="%Y%m%d")
-    list_dt = pd.to_datetime(data["list_date"], format="%Y%m%d", errors="coerce")
-    delist_dt = pd.to_datetime(data["delist_date"], format="%Y%m%d", errors="coerce")
-    listed_years = (signal_dt - list_dt).dt.days / 365.25
-    delisted_asof = delist_dt.notna() & (delist_dt <= signal_dt)
-    valid = (
-        (listed_years >= 3)
-        & data["st_name"].isna()
-        & ~data["name"].fillna("").str.contains("ST|退", regex=True)
-        & ~delisted_asof
-        & data["end_date"].astype(str).str.endswith("1231")
-        & data[QUALITY_COLUMNS].notna().all(axis=1)
-    )
-    data = data[valid].copy()
-    if not quantile_filter or data.empty:
-        return data
-
-    kept = []
-    for _, group in data.groupby("signal_date", sort=True):
-        roe_low, roe_high = group["roe"].quantile([0.05, 0.95])
-        roa_low, roa_high = group["roa"].quantile([0.05, 0.95])
-        filtered = group[
-            group["roe"].between(roe_low, roe_high, inclusive="both")
-            & group["roa"].between(roa_low, roa_high, inclusive="both")
-        ]
-        kept.append(filtered)
-    return pd.concat(kept, ignore_index=True) if kept else data.iloc[0:0].copy()
+    return apply_quality_universe_filters(frame, quantile_filter=quantile_filter)
 
 
 def build_top20_from_candidates(candidates: pd.DataFrame) -> tuple[dict[str, list[str]], pd.DataFrame]:
     """按当前 Quality 打分逻辑生成 Top20。"""
-    selections: dict[str, list[str]] = {}
-    holdings = []
-    for signal_date, group in candidates.groupby("signal_date", sort=True):
-        scored = score_quality_frame(group)
-        top = scored.head(20).copy()
-        top["signal_date"] = str(signal_date)
-        top["rank"] = range(1, len(top) + 1)
-        selections[str(signal_date)] = top["symbol"].tolist()
-        holdings.append(top)
-    if not holdings:
-        return selections, pd.DataFrame()
-    return selections, pd.concat(holdings, ignore_index=True)
+    return build_quality_topn(candidates, top_n=20)
 
 
 def add_industry(frame: pd.DataFrame) -> pd.DataFrame:

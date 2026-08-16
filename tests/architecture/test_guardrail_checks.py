@@ -2,8 +2,13 @@
 
 from pathlib import Path
 
-from scripts.check_architecture import check_file_size, check_forbidden_imports
+from scripts.check_architecture import (
+    check_file_size,
+    check_forbidden_imports,
+    check_research_attempt_guard,
+)
 from scripts.check_generated_artifacts import find_forbidden_paths, find_ignored_sources
+from scripts.check_research_risk_fidelity import find_research_risk_errors
 
 
 def test_forbidden_api_import_is_rejected(tmp_path: Path) -> None:
@@ -70,3 +75,87 @@ def test_source_files_cannot_be_silently_ignored() -> None:
     ignored = ["frontend/node_modules/lib.js", "frontend/src/shared/lib/formatters.ts", "runtime/__pycache__/x.pyc"]
 
     assert find_ignored_sources(ignored) == ["frontend/src/shared/lib/formatters.ts"]
+
+
+def test_new_research_entrypoint_requires_dedup_guard(tmp_path: Path) -> None:
+    """新增研究脚本若绕过研究指纹门禁，架构验收必须失败。"""
+    examples = tmp_path / "examples"
+    examples.mkdir()
+    research = examples / "new_factor_study.py"
+    research.write_text("def run():\n    return 1\n", encoding="utf-8")
+
+    assert check_research_attempt_guard(tmp_path) == [
+        "examples/new_factor_study.py: 耗时研究必须先通过 runtime.research_attempts 去重门禁"
+    ]
+
+    research.write_text(
+        "from runtime.research_attempts import begin_research_attempt\n",
+        encoding="utf-8",
+    )
+    assert check_research_attempt_guard(tmp_path) == []
+
+
+def test_research_risk_overlay_requires_explicit_grid(tmp_path: Path) -> None:
+    """有阈值的覆盖层必须显式进入研究指纹。"""
+    examples = tmp_path / "examples"
+    examples.mkdir()
+    study = examples / "factor_study.py"
+    study.write_text(
+        'SPEC = {"risk_overlay": {"threshold": 0.45, '
+        '"reduced_exposure": 0.3}}\n',
+        encoding="utf-8",
+    )
+
+    errors = find_research_risk_errors(tmp_path)
+
+    assert errors == [
+        "examples/factor_study.py:1: 波动率风险层必须显式声明 "
+        "scheme/mode=GRID"
+    ]
+
+
+def test_research_grid_declaration_cannot_call_fixed(tmp_path: Path) -> None:
+    """声明GRID但执行FIXED时总验收必须失败。"""
+    examples = tmp_path / "examples"
+    examples.mkdir()
+    study = examples / "factor_study.py"
+    study.write_text(
+        'SPEC = {"risk_overlay": {"scheme": "GRID", '
+        '"threshold": 0.45, "reduced_exposure": 0.3}}\n'
+        'run_risk_layer_backtest("x", "FIXED", {}, None)\n',
+        encoding="utf-8",
+    )
+
+    assert find_research_risk_errors(tmp_path) == [
+        "examples/factor_study.py: 声明 GRID 风险层但实际调用 FIXED"
+    ]
+
+
+def test_research_none_declaration_allows_fixed(tmp_path: Path) -> None:
+    """明确无覆盖层的研究可以用FIXED表示满仓。"""
+    examples = tmp_path / "examples"
+    examples.mkdir()
+    study = examples / "factor_study.py"
+    study.write_text(
+        'SPEC = {"risk_overlay": "none"}\n'
+        'run_risk_layer_backtest("x", "FIXED", {}, None)\n',
+        encoding="utf-8",
+    )
+
+    assert find_research_risk_errors(tmp_path) == []
+
+
+def test_fixed_cannot_silently_ignore_grid_thresholds(tmp_path: Path) -> None:
+    """即使没有声明，FIXED也不能吞掉波动率阈值参数。"""
+    examples = tmp_path / "examples"
+    examples.mkdir()
+    study = examples / "factor_study.py"
+    study.write_text(
+        'run_risk_layer_backtest("x", "FIXED", {}, None, None, None, None, '
+        'vol_threshold=0.45, reduced_exposure=0.3)\n',
+        encoding="utf-8",
+    )
+
+    assert find_research_risk_errors(tmp_path) == [
+        "examples/factor_study.py:1: FIXED 会忽略波动率阈值参数，应使用 GRID"
+    ]

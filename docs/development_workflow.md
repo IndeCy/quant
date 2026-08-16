@@ -61,7 +61,7 @@ REFACTOR：在测试通过后整理代码
 Python 代码变更默认执行：
 
 ```bash
-/Users/admin/recommend_analysis/.venv/bin/python3 -m pytest -q
+"$HOME/recommend_analysis/.venv/bin/python3" -m pytest -q
 ```
 
 前端代码变更默认执行：

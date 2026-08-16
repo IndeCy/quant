@@ -1,12 +1,12 @@
 """本地前端 API 查询服务。"""
-
 from __future__ import annotations
-
 from pathlib import Path
 import sqlite3
 from typing import Any
-
 import pandas as pd
+from api.experiment_service import ExperimentApiMixin
+from api.market_observation import attach_market_observation_status
+from api.paper_execution_sla_service import PaperExecutionSlaApiMixin
 from api.paper_series import attach_paper_nav
 from monitoring.repository import MonitoringRepository
 from runtime.backup import build_backup_manifest
@@ -29,8 +29,7 @@ from runtime.strategy_instance_catalog import register_builtin_strategy_instance
 from runtime.strategy_templates import list_strategy_templates
 from runtime.strategy_catalog import register_builtin_strategies
 
-
-class LocalApiService:
+class LocalApiService(ExperimentApiMixin, PaperExecutionSlaApiMixin):
     """聚合系统状态库和监控库，给本地前端提供稳定 JSON 数据。"""
 
     def __init__(self, paths: RuntimePaths | None = None) -> None:
@@ -430,6 +429,7 @@ class LocalApiService:
     def market_series(self, benchmark_id: str) -> list[dict[str, Any]]:
         """返回大盘/基准观测曲线。"""
         frame = self.monitoring_repository.load_market_history(benchmark_id)
+        frame = attach_market_observation_status(frame, self.paths.limit_list_increment_path)
         return _frame_records(frame)
 
 

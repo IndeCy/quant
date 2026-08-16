@@ -22,6 +22,7 @@ def build_leader_stock_daily(
     limit_rows: pd.DataFrame,
     sector_momentum: pd.DataFrame,
     sector_map: pd.DataFrame | None = None,
+    trade_date: str | None = None,
 ) -> pd.DataFrame:
     """识别主线板块内唯一龙头、次级龙头和过滤对象。"""
     if limit_rows.empty:
@@ -29,6 +30,8 @@ def build_leader_stock_daily(
     base_rows = limit_rows.sort_values(["ts_code", "trade_date"]).copy()
     # 连板是股票自身时间序列属性，必须在概念展开前计算，避免多概念重复计数。
     base_rows["limit_streak"] = _limit_streak(base_rows)
+    if trade_date is not None:
+        base_rows = base_rows[base_rows["trade_date"].astype(str).eq(str(trade_date))].copy()
     rows = _attach_sector(base_rows, sector_map)
     rows = rows[rows["limit_type"].astype(str).eq("U")].copy()
     if rows.empty:

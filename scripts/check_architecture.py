@@ -19,6 +19,16 @@ STRATEGY_CORE_FILES = {
     "backtest/chain_selection.py",
 }
 DAILY_PIPELINE_ALLOWED_IMPORTERS = {"runtime/pipeline_service.py"}
+LEGACY_RESEARCH_ENTRYPOINTS = {
+    "examples/low_vol_attribution_study.py",
+    "examples/quality_factor_purity_study.py",
+    "examples/quality_market_risk_overlay_study.py",
+    "examples/quality_overlay_robustness_study.py",
+    "examples/quality_portfolio_construction_study.py",
+    "examples/quality_risk_layer_research.py",
+    "examples/strategy_comparison_research.py",
+    "examples/style_rotation_diagnostic_study.py",
+}
 
 
 def load_rules(root: Path) -> dict[str, object]:
@@ -29,7 +39,7 @@ def load_rules(root: Path) -> dict[str, object]:
 
 def iter_source_files(root: Path) -> list[Path]:
     """返回需要检查的源码，排除缓存和依赖目录。"""
-    directories = ["api", "backtest", "data", "domain", "factors", "monitoring", "portfolio", "risk", "runtime", "scripts", "strategies", "frontend/src"]
+    directories = ["api", "backtest", "data", "domain", "factors", "ml", "monitoring", "portfolio", "risk", "runtime", "scripts", "strategies", "frontend/src"]
     files: list[Path] = []
     for directory in directories:
         base = root / directory
@@ -129,6 +139,30 @@ def check_frontend_storage_access(root: Path, files: Iterable[Path]) -> list[str
     return errors
 
 
+def check_research_attempt_guard(root: Path) -> list[str]:
+    """新增耗时研究入口必须在计算前接入统一指纹门禁。"""
+    examples = root / "examples"
+    if not examples.exists():
+        return []
+    candidates = {
+        path
+        for pattern in ("*_study.py", "*_research.py")
+        for path in examples.glob(pattern)
+    }
+    ml_entry = examples / "quality_ml_ranker_v0.py"
+    if ml_entry.exists():
+        candidates.add(ml_entry)
+    errors: list[str] = []
+    for path in sorted(candidates):
+        relative = path.relative_to(root).as_posix()
+        if relative in LEGACY_RESEARCH_ENTRYPOINTS:
+            continue
+        modules = imported_modules(path)
+        if not any(_matches_module(module, "runtime.research_attempts") for module in modules):
+            errors.append(f"{relative}: 耗时研究必须先通过 runtime.research_attempts 去重门禁")
+    return errors
+
+
 def run_checks(root: Path) -> list[str]:
     """执行全部架构围栏并返回稳定错误列表。"""
     rules = load_rules(root)
@@ -137,6 +171,7 @@ def run_checks(root: Path) -> list[str]:
     api_files = [path for path in files if path.relative_to(root).as_posix().startswith("api/")]
     strategy_core = [path for path in files if path.relative_to(root).as_posix() in STRATEGY_CORE_FILES]
     strategy_runners = [path for path in files if path.relative_to(root).as_posix().startswith("strategies/")]
+    ml_research = [path for path in files if path.relative_to(root).as_posix().startswith("ml/")]
     errors = check_file_size(
         files,
         int(rules.get("max_file_lines", 500)),
@@ -146,8 +181,10 @@ def run_checks(root: Path) -> list[str]:
     errors.extend(check_forbidden_imports(api_files, forbidden.get("api", []), root))
     errors.extend(check_forbidden_imports(strategy_core, forbidden.get("strategy_core", []), root))
     errors.extend(check_forbidden_imports(strategy_runners, forbidden.get("strategy_runners", []), root))
+    errors.extend(check_forbidden_imports(ml_research, forbidden.get("ml_research", []), root))
     errors.extend(check_unique_daily_pipeline_import(root, files))
     errors.extend(check_frontend_storage_access(root, files))
+    errors.extend(check_research_attempt_guard(root))
     return sorted(set(errors))
 
 

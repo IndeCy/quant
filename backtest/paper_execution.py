@@ -12,6 +12,8 @@ import math
 
 import pandas as pd
 
+from backtest.paper_drift import DriftAnalyzer
+
 
 @dataclass
 class BrokerConfig:
@@ -21,6 +23,11 @@ class BrokerConfig:
     execution_delay: int = 1
     max_participation_rate: float = 0.20
     commission_rate: float = 0.0
+    stamp_tax_rate: float = 0.0
+    min_commission: float = 0.0
+    lot_size: int = 1
+    open_aware_order_sizing: bool = False
+    tax_exempt_symbols: frozenset[str] = field(default_factory=frozenset)
 
 
 @dataclass
@@ -52,6 +59,8 @@ class ExecutionLog:
     fill_price: float
     execution_impact: float
     reason: str = ""
+    commission: float = 0.0
+    stamp_tax: float = 0.0
 
 
 @dataclass
@@ -75,6 +84,7 @@ class PaperTradingResult:
     executions: list[ExecutionLog]
     snapshots: list[PortfolioSnapshot]
     actual_turnover: float
+    total_execution_cost: float = 0.0
 
 
 class OrderManager:
@@ -108,7 +118,15 @@ class OrderManager:
         self.orders.append(order)
         return order
 
-    def mark_filled(self, order_id: int, filled_quantity: int, fill_price: float) -> PaperOrder:
+    def mark_filled(
+        self,
+        order_id: int,
+        filled_quantity: int,
+        fill_price: float,
+        *,
+        commission: float = 0.0,
+        stamp_tax: float = 0.0,
+    ) -> PaperOrder:
         """按成交数量更新委托状态。"""
         order = self._find(order_id)
         order.filled_quantity = int(filled_quantity)
@@ -116,7 +134,17 @@ class OrderManager:
         order.status = "FILLED" if filled_quantity >= order.quantity else "PARTIAL_FILLED"
         impact = abs(order.fill_price - order.signal_price) * order.filled_quantity
         self.execution_logs.append(
-            ExecutionLog(order_id, order.symbol, order.side, order.status, order.filled_quantity, order.fill_price, impact)
+            ExecutionLog(
+                order_id=order_id,
+                symbol=order.symbol,
+                side=order.side,
+                status=order.status,
+                quantity=order.filled_quantity,
+                fill_price=order.fill_price,
+                execution_impact=impact,
+                commission=float(commission),
+                stamp_tax=float(stamp_tax),
+            )
         )
         return order
 
@@ -143,7 +171,14 @@ class BrokerSimulator:
     def __init__(self, config: BrokerConfig | None = None) -> None:
         self.config = config or BrokerConfig()
 
-    def execute(self, order: PaperOrder, market_row: pd.Series, manager: OrderManager) -> PaperOrder:
+    def execute(
+        self,
+        order: PaperOrder,
+        market_row: pd.Series,
+        manager: OrderManager,
+        *,
+        cash_available: float | None = None,
+    ) -> PaperOrder:
         """按行情约束执行一笔委托。"""
         reason = self._reject_reason(order, market_row)
         if reason:
@@ -152,16 +187,59 @@ class BrokerSimulator:
         open_price = float(market_row["open"])
         volume = int(market_row.get("volume", 0))
         max_quantity = max(int(volume * self.config.max_participation_rate), 0)
+        lot_size = max(int(self.config.lot_size), 1)
         filled_quantity = min(order.quantity, max_quantity)
-        if filled_quantity <= 0:
-            return manager.mark_rejected(order.order_id, "LIQUIDITY_NO_FILL")
-
+        filled_quantity = (filled_quantity // lot_size) * lot_size
         direction = 1 if order.side == "BUY" else -1
         fill_price = open_price * (1 + direction * self.config.slippage_bps / 10_000)
-        filled_order = manager.mark_filled(order.order_id, filled_quantity, fill_price)
+        if order.side == "BUY" and cash_available is not None:
+            filled_quantity = min(
+                filled_quantity,
+                self._affordable_quantity(float(cash_available), fill_price),
+            )
+        if filled_quantity <= 0:
+            reason = "CASH_NO_FILL" if order.side == "BUY" else "LIQUIDITY_NO_FILL"
+            return manager.mark_rejected(order.order_id, reason)
+
+        notional = fill_price * filled_quantity
+        commission = max(
+            notional * self.config.commission_rate,
+            self.config.min_commission,
+        )
+        stamp_tax = 0.0
+        if (
+            order.side == "SELL"
+            and order.symbol not in self.config.tax_exempt_symbols
+        ):
+            stamp_tax = notional * self.config.stamp_tax_rate
+        filled_order = manager.mark_filled(
+            order.order_id,
+            filled_quantity,
+            fill_price,
+            commission=commission,
+            stamp_tax=stamp_tax,
+        )
         last_log = manager.execution_logs[-1]
         last_log.execution_impact = abs(fill_price - open_price) * filled_quantity
         return filled_order
+
+    def _affordable_quantity(self, cash: float, fill_price: float) -> int:
+        """按佣金和整手约束计算最大可买数量。"""
+        lot_size = max(int(self.config.lot_size), 1)
+        available = max(cash - self.config.min_commission, 0.0)
+        unit_cash = fill_price * (1 + self.config.commission_rate)
+        quantity = int(available / unit_cash) if unit_cash > 0 else 0
+        quantity = (quantity // lot_size) * lot_size
+        while quantity > 0:
+            notional = fill_price * quantity
+            commission = max(
+                notional * self.config.commission_rate,
+                self.config.min_commission,
+            )
+            if notional + commission <= cash:
+                return quantity
+            quantity -= lot_size
+        return 0
 
     def _reject_reason(self, order: PaperOrder, market_row: pd.Series) -> str:
         """判断停牌、缺价和涨跌停导致的不可成交。"""
@@ -187,12 +265,23 @@ class PortfolioTracker:
         self.target_holdings: dict[str, int] = {}
         self.avg_cost: dict[str, float] = {}
         self.traded_notional = 0.0
+        self.total_fees = 0.0
 
     def set_target_holdings(self, target_holdings: dict[str, int]) -> None:
         """设置当前信号对应的目标持仓。"""
         self.target_holdings = {symbol: int(quantity) for symbol, quantity in target_holdings.items()}
 
-    def apply_fill(self, symbol: str, side: str, quantity: int, price: float, signal_price: float) -> None:
+    def apply_fill(
+        self,
+        symbol: str,
+        side: str,
+        quantity: int,
+        price: float,
+        signal_price: float,
+        *,
+        commission: float = 0.0,
+        stamp_tax: float = 0.0,
+    ) -> None:
         """成交后更新现金、持仓和成本。"""
         quantity = int(quantity)
         price = float(price)
@@ -204,15 +293,16 @@ class PortfolioTracker:
             old_cost = self.avg_cost.get(symbol, float(signal_price)) * old_quantity
             self.avg_cost[symbol] = (old_cost + price * quantity) / new_quantity
             self.actual_holdings[symbol] = new_quantity
-            self.cash -= price * quantity
+            self.cash -= price * quantity + commission
         else:
             sold_quantity = min(quantity, old_quantity)
             self.actual_holdings[symbol] = old_quantity - sold_quantity
-            self.cash += price * sold_quantity
+            self.cash += price * sold_quantity - commission - stamp_tax
             if self.actual_holdings[symbol] <= 0:
                 self.actual_holdings.pop(symbol, None)
                 self.avg_cost.pop(symbol, None)
         self.traded_notional += price * quantity
+        self.total_fees += float(commission) + float(stamp_tax)
 
     def snapshot(self, date: str, prices: dict[str, float]) -> PortfolioSnapshot:
         """生成组合快照。"""
@@ -238,42 +328,6 @@ class PortfolioTracker:
         )
 
 
-class DriftAnalyzer:
-    """比较回测目标与模拟盘实际执行结果。"""
-
-    def compare_curves(self, backtest_curve: pd.Series, paper_curve: pd.Series) -> dict[str, float]:
-        """计算回测与模拟盘净值曲线差异。"""
-        backtest_returns = backtest_curve.pct_change().dropna()
-        paper_returns = paper_curve.pct_change().dropna()
-        diff = (paper_returns - backtest_returns).dropna()
-        tracking_error = float(diff.std(ddof=0) * (252 ** 0.5)) if not diff.empty else 0.0
-        return {
-            "tracking_error": tracking_error,
-            "backtest_total_return": float(backtest_curve.iloc[-1] / backtest_curve.iloc[0] - 1),
-            "paper_total_return": float(paper_curve.iloc[-1] / paper_curve.iloc[0] - 1),
-        }
-
-    def compare_positions(self, target: dict[str, int], actual: dict[str, int]) -> dict[str, float]:
-        """计算持仓数量偏离。"""
-        symbols = set(target) | set(actual)
-        deviation = sum(abs(actual.get(symbol, 0) - target.get(symbol, 0)) for symbol in symbols)
-        target_total = sum(abs(quantity) for quantity in target.values()) or 1
-        return {"position_deviation": float(deviation / target_total)}
-
-    def compare_turnover(self, target_turnover: float, actual_turnover: float) -> dict[str, float]:
-        """计算目标换手与实际换手偏离。"""
-        return {
-            "target_turnover": float(target_turnover),
-            "actual_turnover": float(actual_turnover),
-            "turnover_deviation": float(abs(target_turnover - actual_turnover)),
-        }
-
-    def execution_cost_impact(self, executions: list[ExecutionLog], initial_cash: float) -> float:
-        """汇总滑点等执行冲击占初始资金比例。"""
-        impact = sum(log.execution_impact for log in executions if log.status != "REJECTED")
-        return float(impact / initial_cash) if initial_cash else 0.0
-
-
 class PaperTradingEngine:
     """从信号到订单、成交和组合更新的模拟盘引擎。"""
 
@@ -291,33 +345,85 @@ class PaperTradingEngine:
 
     def run_signals(self, signals_by_date: dict[str, dict[str, float]], market_data: pd.DataFrame) -> PaperTradingResult:
         """执行 signal→order→execution→portfolio update 流程。"""
+        if self.broker.config.open_aware_order_sizing:
+            from backtest.paper_open_aware_replay import run_open_aware_replay
+
+            return run_open_aware_replay(self, signals_by_date, market_data)
         data = self._normalize_market_data(market_data)
         trading_dates = sorted(data["date"].unique())
-        for signal_date in sorted(signals_by_date):
-            execute_date = self._execution_date(signal_date, trading_dates)
-            if execute_date is None:
-                continue
-            target_holdings = self._target_holdings(signal_date, signals_by_date[signal_date], data)
-            self.portfolio.set_target_holdings(target_holdings)
-            orders = self._create_rebalance_orders(signal_date, execute_date, target_holdings, data)
-            for order in orders:
-                market_row = self._market_row(data, execute_date, order.symbol)
-                filled = self.broker.execute(order, market_row, self.order_manager)
+        market_by_date = {
+            date: rows.set_index("symbol", drop=False)
+            for date, rows in data.groupby("date", sort=False)
+        }
+        signals = {
+            pd.Timestamp(date).strftime("%Y-%m-%d"): weights
+            for date, weights in signals_by_date.items()
+        }
+        pending: dict[str, list[PaperOrder]] = {}
+        latest_prices: dict[str, float] = {}
+        snapshots: list[PortfolioSnapshot] = []
+        for date in trading_dates:
+            daily_market = market_by_date[date]
+            for order in pending.pop(date, []):
+                market_row = self._market_row(daily_market, order.symbol)
+                filled = self.broker.execute(
+                    order,
+                    market_row,
+                    self.order_manager,
+                    cash_available=self.portfolio.cash,
+                )
                 if filled.status in {"FILLED", "PARTIAL_FILLED"}:
+                    log = self.order_manager.execution_logs[-1]
                     self.portfolio.apply_fill(
                         filled.symbol,
                         filled.side,
                         filled.filled_quantity,
                         filled.fill_price,
                         filled.signal_price,
+                        commission=log.commission,
+                        stamp_tax=log.stamp_tax,
                     )
-        snapshots = self._snapshots(data)
+            latest_prices.update(
+                {
+                    str(row["symbol"]): float(row["close"])
+                    for _, row in daily_market.iterrows()
+                    if pd.notna(row["close"]) and float(row["close"]) > 0
+                }
+            )
+            if date in signals:
+                portfolio_value = self.portfolio.snapshot(
+                    date,
+                    latest_prices,
+                ).total_value
+                target_holdings = self._target_holdings(
+                    signals[date],
+                    latest_prices,
+                    portfolio_value,
+                )
+                self.portfolio.set_target_holdings(target_holdings)
+                execute_date = self._execution_date(date, trading_dates)
+                if execute_date is not None:
+                    pending.setdefault(execute_date, []).extend(
+                        self._create_rebalance_orders(
+                            date,
+                            execute_date,
+                            target_holdings,
+                            latest_prices,
+                        )
+                    )
+            snapshots.append(self.portfolio.snapshot(date, latest_prices))
         actual_turnover = self.portfolio.traded_notional / self.initial_cash if self.initial_cash else 0.0
+        total_cost = self.portfolio.total_fees + sum(
+            log.execution_impact
+            for log in self.order_manager.execution_logs
+            if log.status != "REJECTED"
+        )
         return PaperTradingResult(
             orders=self.order_manager.orders,
             executions=self.order_manager.execution_logs,
             snapshots=snapshots,
             actual_turnover=actual_turnover,
+            total_execution_cost=total_cost,
         )
 
     def _normalize_market_data(self, market_data: pd.DataFrame) -> pd.DataFrame:
@@ -331,12 +437,20 @@ class PaperTradingEngine:
         index = self.broker.config.execution_delay - 1
         return future_dates[index] if len(future_dates) > index else None
 
-    def _target_holdings(self, signal_date: str, signals: dict[str, float], data: pd.DataFrame) -> dict[str, int]:
+    def _target_holdings(
+        self,
+        signals: dict[str, float],
+        prices: dict[str, float],
+        portfolio_value: float,
+    ) -> dict[str, int]:
         target: dict[str, int] = {}
+        lot_size = max(int(self.broker.config.lot_size), 1)
         for symbol, weight in signals.items():
-            row = self._market_row(data, signal_date, symbol)
-            price = float(row["close"])
-            target[symbol] = int((self.portfolio.snapshot(signal_date, {symbol: price}).total_value * float(weight)) / price)
+            price = float(prices.get(symbol, 0.0))
+            if price <= 0:
+                continue
+            quantity = int(portfolio_value * float(weight) / price)
+            target[symbol] = (quantity // lot_size) * lot_size
         return target
 
     def _create_rebalance_orders(
@@ -344,7 +458,7 @@ class PaperTradingEngine:
         signal_date: str,
         execute_date: str,
         target_holdings: dict[str, int],
-        data: pd.DataFrame,
+        prices: dict[str, float],
     ) -> list[PaperOrder]:
         orders: list[PaperOrder] = []
         symbols = set(target_holdings) | set(self.portfolio.actual_holdings)
@@ -355,25 +469,29 @@ class PaperTradingEngine:
             if delta == 0:
                 continue
             side = "BUY" if delta > 0 else "SELL"
-            signal_price = float(self._market_row(data, signal_date, symbol)["close"])
+            signal_price = float(prices.get(symbol, 0.0))
+            if signal_price <= 0:
+                continue
             orders.append(
                 self.order_manager.create_order(signal_date, execute_date, symbol, side, abs(delta), signal_price)
             )
-        return orders
+        return sorted(orders, key=lambda order: (order.side == "BUY", order.symbol))
 
-    def _market_row(self, data: pd.DataFrame, date: str, symbol: str) -> pd.Series:
-        rows = data[(data["date"] == date) & (data["symbol"] == symbol)]
-        if rows.empty:
-            raise ValueError(f"缺少行情数据: {date} {symbol}")
-        return rows.iloc[0]
-
-    def _snapshots(self, data: pd.DataFrame) -> list[PortfolioSnapshot]:
-        if not self.order_manager.orders:
-            return []
-        dates = sorted({order.execute_date for order in self.order_manager.orders})
-        snapshots = []
-        for date in dates:
-            rows = data[data["date"] == date]
-            prices = {str(row["symbol"]): float(row["close"]) for _, row in rows.iterrows()}
-            snapshots.append(self.portfolio.snapshot(date, prices))
-        return snapshots
+    def _market_row(
+        self,
+        daily_market: pd.DataFrame,
+        symbol: str,
+    ) -> pd.Series:
+        if symbol not in daily_market.index:
+            return pd.Series(
+                {
+                    "open": 0.0,
+                    "close": 0.0,
+                    "volume": 0,
+                    "is_suspended": True,
+                    "limit_up": False,
+                    "limit_down": False,
+                }
+            )
+        row = daily_market.loc[symbol]
+        return row.iloc[0] if isinstance(row, pd.DataFrame) else row

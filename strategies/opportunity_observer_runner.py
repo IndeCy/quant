@@ -283,6 +283,25 @@ def _save_observation_state(
         )
 
 
+def save_observation_state(
+    paths: RuntimePaths,
+    strategy_id: str,
+    trade_date: str,
+    target_weights: dict[str, float],
+    current_prices: dict[str, float],
+    nav: float,
+) -> None:
+    """供其他只观察模板复用统一观察状态契约。"""
+    _save_observation_state(
+        paths,
+        strategy_id,
+        trade_date,
+        target_weights,
+        current_prices,
+        nav,
+    )
+
+
 def _estimate_next_nav(previous_nav: float, old_holdings: list[tuple[str, float, float]], current_prices: dict[str, float]) -> float:
     """根据上一期持仓价格变化滚动净值；缺价格时保守保持上一净值。"""
     if not old_holdings:

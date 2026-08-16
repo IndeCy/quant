@@ -18,6 +18,7 @@ from backtest.notifier import NotificationMessage, build_notifier
 from backtest.quality_overlay_paper import QualityPaperSnapshot, QualityPaperStore, build_target_weights
 from backtest.research_benchmark import load_hs300_benchmark
 from data.live_market_view import open_live_market_connection
+from data.market_data_dependencies import load_market_data_dependencies, validate_fund_incremental_coverage
 from data.market_style_view import MARKET_STYLE_INDEX_SYMBOLS
 from data.tushare_benchmark_incremental import (
     BenchmarkIncrementalStore,
@@ -87,12 +88,13 @@ def update_benchmark_incremental(end_date: str) -> list[str]:
         return ["未检测到TUSHARE_TOKEN，本次未更新ETF/指数基准"]
     store = BenchmarkIncrementalStore(BENCHMARK_INCREMENT_PATH)
     updater = TushareBenchmarkUpdater(TushareBenchmarkProClient(token), store)
-    fund_symbols = tuple(dict.fromkeys(("510300.SH", *mainline_proxy_fund_symbols())))
+    configured_funds = load_market_data_dependencies().fund_symbols
+    fund_symbols = tuple(dict.fromkeys((*configured_funds, *mainline_proxy_fund_symbols())))
     try:
         result = updater.update(
             end_date=end_date,
             fund_base_latest={
-                symbol: _latest_etf_base_date(symbol) if symbol == "510300.SH" else None
+                symbol: _latest_etf_base_date(symbol)
                 for symbol in fund_symbols
             },
             index_base_latest={
@@ -102,6 +104,9 @@ def update_benchmark_incremental(end_date: str) -> list[str]:
         )
     except Exception as exc:
         return [f"Tushare ETF/指数基准更新失败: {exc}"]
+    coverage_issues = validate_fund_incremental_coverage(store, fund_symbols, end_date)
+    if coverage_issues:
+        return [f"Tushare ETF/指数基准更新失败: {'; '.join(coverage_issues)}"]
     if result.updated_symbols:
         return [f"ETF/指数基准已更新: {', '.join(result.updated_symbols)}"]
     return []

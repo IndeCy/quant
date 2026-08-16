@@ -6,6 +6,9 @@
 DataSource -> DataQuality -> Factor -> Strategy Signal
            -> Portfolio -> Risk Overlay -> Target Portfolio
            -> Order Plan -> Paper Broker -> Monitoring -> API -> Frontend
+
+Research only: Point-in-time Dataset -> ML Score -> Portfolio -> M0 Backtest
+                                      -> Experiment Repository -> API -> Frontend
 ```
 
 ## 依赖规则
@@ -14,7 +17,7 @@ DataSource -> DataQuality -> Factor -> Strategy Signal
 frontend -> api -> runtime/application -> domain
                                   |-> infrastructure
 
-data, factors, strategies, portfolio, risk, backtest
+data, factors, ml, strategies, portfolio, risk, backtest
 不得反向依赖 api、frontend 或 scheduler。
 ```
 
@@ -39,6 +42,8 @@ data, factors, strategies, portfolio, risk, backtest
 | 生产行情快照 | `data/market_snapshot.py` | 策略直接拼基线库与增量库 |
 | 策略定义 | `config/strategies/` | 多处硬编码同一策略参数 |
 | 运行状态 | `state/quant_system.sqlite` | 以日报作为状态存储 |
+| ML 研究逻辑 | `ml/` | 在策略 Runner、API 或页面中训练模型 |
+| 研究实验记录 | `runtime/research_attempts.py` + Experiment Repository | 为每类研究另建数据库或页面扫描目录 |
 
 ## 受保护文件
 
@@ -49,6 +54,17 @@ M0 文件包括交易日历、Schema、清洗、复权、财务 as-of、Executio
 
 新增因子时先登记因子契约；新增策略时组合已有因子并创建带版本的策略声明；新增页面时读取
 通用 API 模型。正常新增策略不应修改调度器、Paper Broker 或前端路由。
+
+机器学习研究只允许消费统一点时数据、输出连续评分，并继续复用 Portfolio、M0 Backtest 和通用
+Experiment Repository。`ml/` 不得依赖 `runtime`、`api`、`monitoring` 或前端；产物写入和实验登记由
+运行层负责。模型只有通过冻结的晋级门槛后才能另行创建带版本的策略实例，失败实验不得进入每日调度、
+Paper Broker 或生产持仓。
+
+所有耗时研究在读取大表、构造因子或启动回测前，必须通过 `begin_research_attempt()` 申请运行许可。
+研究定义指纹只描述计算语义，运行指纹额外绑定数据截止日和数据版本。相同运行指纹的成功结果默认复用，
+只有显式 `force` 才能重新计算；改名不得绕过去重。完成、淘汰、失败和复用次数统一写入 Experiment
+Repository，研究页不得扫描 Markdown 推断结论。新增 `*_study.py`、`*_research.py` 或模型研究入口时，
+必须先接入该门禁并提供“相同口径不执行计算”的单测。
 
 每日生产依赖固定为：`data_update -> data_quality_gate -> strategy_batch + market_beta_observer`。
 策略和 Beta 位于同一受控波次，但共享 `monitoring.sqlite3` 时由资源锁串行写入；任何策略运行都不得早于数据质量门禁。

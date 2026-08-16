@@ -248,6 +248,21 @@ def test_daily_pipeline_sends_data_update_template(
     )
     monkeypatch.setattr("runtime.daily_pipeline.run_data_quality_gate", lambda paths: _quality_pass())
     monkeypatch.setattr("runtime.daily_pipeline.run_strategy_batch", lambda paths, push=False, trade_date=None: _strategy_summary(trade_date))
+    monkeypatch.setattr(
+        "runtime.daily_pipeline.build_hot_money_research_view",
+        lambda *args, **kwargs: {
+            "latest_trade_date": "20260702",
+            "top_sectors": [
+                {
+                    "sector_name": f"板块{index}",
+                    "sector_score": 90 - index,
+                    "limit_up_count": 7 - index,
+                    "leader_name": f"龙头{index}",
+                }
+                for index in range(1, 7)
+            ],
+        },
+    )
 
     def capture_notification(title: str, body: str) -> NotificationResult:
         notifications.append({"title": title, "body": body})
@@ -261,6 +276,10 @@ def test_daily_pipeline_sends_data_update_template(
     assert "数据更新状态：SUCCESS" in notifications[0]["body"]
     assert "A股日线：已是最新，无新增交易日" in notifications[0]["body"]
     assert "游资涨跌停缓存：写入85行" in notifications[0]["body"]
+    assert "今日最强势板块 Top5（20260702）：" in notifications[0]["body"]
+    assert "1. 板块1｜强度89.00｜涨停6家｜龙头龙头1" in notifications[0]["body"]
+    assert "5. 板块5｜强度85.00｜涨停2家｜龙头龙头5" in notifications[0]["body"]
+    assert "板块6" not in notifications[0]["body"]
     assert "策略执行：数据成功后继续执行" in notifications[0]["body"]
 
 

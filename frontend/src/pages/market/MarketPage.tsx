@@ -29,6 +29,7 @@ export function MarketPage() {
   const [styleOverview, setStyleOverview] = useState<MarketStyleOverview | null>(null);
   const [styleError, setStyleError] = useState("");
   const latestMarket = data.marketSeries[data.marketSeries.length - 1];
+  const latestLimitMarket = [...data.marketSeries].reverse().find((item) => item.limit_data_status === "READY");
   const trendSeries = data.marketSeries.slice(-240);
   const observedSeries = data.marketSeries.filter(hasMarketObservation).slice(-120);
   const marketObservationSeries = observedSeries.length > 0 ? observedSeries : data.marketSeries.slice(-120);
@@ -62,8 +63,17 @@ export function MarketPage() {
       <section className="metrics market-metrics">
         <MarketMetricCard label="Beta状态" value={BETA_LABELS[data.marketBeta.beta_state]} tone={BETA_TONES[data.marketBeta.beta_state]} />
         <MarketMetricCard label="Beta总分" value={formatNumber(data.marketBeta.beta_score, 1)} helper="顺风>=70，中性45-70" />
-        <MarketMetricCard label="上涨占比" value={formatPercent(upRatio(latestMarket), 1)} helper="强>=65%，弱<50%" />
+        <MarketMetricCard
+          label="上涨占比"
+          value={latestMarket?.breadth_data_status === "READY" ? formatPercent(upRatio(latestMarket), 1) : "待更新"}
+          helper="强>=65%，弱<50%"
+        />
         <MarketMetricCard label="成交额热度" value={`${formatNumber(latestMarket?.amount_ratio_20, 2)}x`} helper="放量>=1.15x，缩量<0.85x" />
+        <MarketMetricCard
+          label="涨停/跌停"
+          value={latestLimitMarket ? `${latestLimitMarket.limit_up_count ?? 0}/${latestLimitMarket.limit_down_count ?? 0}` : "待更新"}
+          helper={latestLimitMarket ? `数据日期 ${latestLimitMarket.trade_date}` : "尚无有效涨跌停观测"}
+        />
       </section>
       {styleOverview?.styles.length ? (
         <MarketStyleSection overview={styleOverview} />
@@ -89,7 +99,13 @@ export function MarketPage() {
             title="市场宽度（有效观测日）"
             dates={observationDates}
             series={[
-              { name: "上涨占比", data: marketObservationSeries.map(upRatio), valueType: "percent" },
+              {
+                name: "上涨占比",
+                data: marketObservationSeries.map((item) =>
+                  item.breadth_data_status === "READY" ? upRatio(item) : Number.NaN
+                ),
+                valueType: "percent"
+              },
               { name: "MA20宽度", data: marketObservationSeries.map((item) => item.ma20_above_ratio ?? 0), valueType: "percent" },
               { name: "MA60宽度", data: marketObservationSeries.map((item) => item.ma60_above_ratio ?? 0), valueType: "percent" }
             ]}
@@ -99,8 +115,22 @@ export function MarketPage() {
             dates={observationDates}
             series={[
               { name: "成交额热度", data: marketObservationSeries.map((item) => item.amount_ratio_20 ?? 0) },
-              { name: "涨停数", data: marketObservationSeries.map((item) => item.limit_up_count ?? 0), yAxisIndex: 1, valueType: "integer" },
-              { name: "跌停数", data: marketObservationSeries.map((item) => item.limit_down_count ?? 0), yAxisIndex: 1, valueType: "integer" }
+              {
+                name: "涨停数",
+                data: marketObservationSeries.map((item) =>
+                  item.limit_data_status === "READY" ? item.limit_up_count ?? 0 : Number.NaN
+                ),
+                yAxisIndex: 1,
+                valueType: "integer"
+              },
+              {
+                name: "跌停数",
+                data: marketObservationSeries.map((item) =>
+                  item.limit_data_status === "READY" ? item.limit_down_count ?? 0 : Number.NaN
+                ),
+                yAxisIndex: 1,
+                valueType: "integer"
+              }
             ]}
             dualAxis
           />
@@ -162,10 +192,14 @@ export function MarketPage() {
             {recentRows.map((item) => (
               <tr key={item.trade_date}>
                 <td>{item.trade_date}</td>
-                <td>{formatPercent(upRatio(item), 1)}</td>
+                <td>{item.breadth_data_status === "READY" ? formatPercent(upRatio(item), 1) : "待更新"}</td>
                 <td>{formatPercent(item.ma20_above_ratio, 1)}</td>
                 <td>{formatNumber(item.amount_ratio_20, 2)}x</td>
-                <td>{item.limit_up_count ?? 0}/{item.limit_down_count ?? 0}</td>
+                <td>
+                  {item.limit_data_status === "READY"
+                    ? `${item.limit_up_count ?? 0}/${item.limit_down_count ?? 0}`
+                    : "待更新"}
+                </td>
                 <td>{item.new_high_20_count ?? 0}/{item.new_low_20_count ?? 0}</td>
                 <td>{formatPercent(item.benchmark_return, 2)}</td>
               </tr>
@@ -198,6 +232,8 @@ function upRatio(item: MarketMetric | undefined): number {
 
 function hasMarketObservation(item: MarketMetric): boolean {
   return (
+    item.breadth_data_status === "READY" ||
+    item.limit_data_status === "READY" ||
     (item.market_amount ?? 0) > 0 ||
     (item.breadth_up_count ?? 0) + (item.breadth_down_count ?? 0) + (item.breadth_flat_count ?? 0) > 0 ||
     (item.limit_up_count ?? 0) + (item.limit_down_count ?? 0) > 0 ||

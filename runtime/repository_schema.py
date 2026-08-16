@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import sqlite3
 
+from runtime.research_schema import init_research_schema
+
 
 def init_system_schema(con: sqlite3.Connection) -> None:
     """初始化本地运行状态库表结构。"""
@@ -197,50 +199,7 @@ def init_system_schema(con: sqlite3.Connection) -> None:
         )
         """
     )
-    con.execute(
-        """
-        CREATE TABLE IF NOT EXISTS experiments (
-            experiment_id TEXT NOT NULL PRIMARY KEY,
-            name TEXT NOT NULL,
-            category TEXT NOT NULL,
-            status TEXT NOT NULL,
-            owner TEXT NOT NULL DEFAULT '',
-            description TEXT NOT NULL DEFAULT '',
-            config_json TEXT NOT NULL DEFAULT '{}',
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
-    con.execute(
-        """
-        CREATE TABLE IF NOT EXISTS experiment_runs (
-            run_id TEXT NOT NULL PRIMARY KEY,
-            experiment_id TEXT NOT NULL,
-            run_date TEXT NOT NULL,
-            status TEXT NOT NULL,
-            output_dir TEXT NOT NULL,
-            config_json TEXT NOT NULL DEFAULT '{}',
-            metrics_json TEXT NOT NULL DEFAULT '{}',
-            message TEXT NOT NULL DEFAULT '',
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
-    con.execute(
-        """
-        CREATE TABLE IF NOT EXISTS experiment_artifacts (
-            artifact_id TEXT NOT NULL PRIMARY KEY,
-            run_id TEXT NOT NULL,
-            artifact_type TEXT NOT NULL,
-            file_path TEXT NOT NULL,
-            title TEXT NOT NULL,
-            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-            modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-        )
-        """
-    )
+    init_research_schema(con)
     con.execute(
         """
         CREATE TABLE IF NOT EXISTS data_sources (
@@ -473,8 +432,6 @@ def init_system_schema(con: sqlite3.Connection) -> None:
     con.execute("CREATE INDEX IF NOT EXISTS idx_research_notes_type ON research_notes(note_type, modified_at)")
     con.execute("CREATE INDEX IF NOT EXISTS idx_opportunity_stocks_theme ON opportunity_stocks(theme_id, watch_level)")
     con.execute("CREATE INDEX IF NOT EXISTS idx_research_monitor_runs_theme ON research_monitor_runs(theme_id, trade_date)")
-    con.execute("CREATE INDEX IF NOT EXISTS idx_experiment_runs_exp ON experiment_runs(experiment_id, run_date)")
-    con.execute("CREATE INDEX IF NOT EXISTS idx_experiment_artifacts_run ON experiment_artifacts(run_id)")
     con.execute("CREATE INDEX IF NOT EXISTS idx_opportunity_direction_rankings_date ON opportunity_direction_rankings(trade_date, strength_score)")
     con.execute("CREATE INDEX IF NOT EXISTS idx_data_sources_status ON data_sources(status, latest_date)")
     con.execute("CREATE INDEX IF NOT EXISTS idx_data_source_tables_dataset ON data_source_tables(dataset_id)")

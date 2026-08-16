@@ -53,13 +53,30 @@ def test_builtin_strategies_are_registered_as_instances(tmp_path: Path) -> None:
 
     instances = repository.list_strategy_instances(enabled_only=True)
     assert [item["strategy_id"] for item in instances] == [
+        "global_defensive_equal_v1",
         "innovative_drug_globalization_observer_v0",
         "mainline_chain_factor_v1",
+        "quality_balanced_value_v1",
+        "quality_defensive_assets_core_scoped_70_15_15_v2",
         "quality_overlay",
     ]
-    assert instances[0]["template_id"] == "opportunity_observer"
-    assert instances[1]["template_id"] == "factor_chain_rotation"
-    assert instances[2]["template_id"] == "factor_topn_monthly"
+    by_id = {item["strategy_id"]: item for item in instances}
+    assert by_id["global_defensive_equal_v1"]["template_id"] == "fixed_allocation_observer"
+    assert (
+        by_id["innovative_drug_globalization_observer_v0"]["template_id"]
+        == "opportunity_observer"
+    )
+    assert by_id["mainline_chain_factor_v1"]["template_id"] == "factor_chain_rotation"
+    balanced = by_id["quality_balanced_value_v1"]
+    assert balanced["template_id"] == "factor_topn_monthly"
+    assert balanced["status"] == "shadow_live"
+    assert balanced["config"]["deployment_scope"] == "forward_paper_only"
+    defensive = by_id["quality_defensive_assets_core_scoped_70_15_15_v2"]
+    assert defensive["status"] == "paper"
+    assert defensive["construction"]["core_allocation"] == 0.7
+    candidate = repository.load_strategy_instance("quality_value_lowvol_v0")
+    assert candidate["enabled"] is False
+    assert candidate["config"]["adapter"] == "quality_value_lowvol_asof_v0"
 
 
 def test_strategy_instance_state_returns_empty_before_first_run(tmp_path: Path) -> None:

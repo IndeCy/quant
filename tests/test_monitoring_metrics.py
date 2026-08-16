@@ -5,7 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-from monitoring.metrics import build_strategy_monitor_frame
+from monitoring.metrics import build_market_monitor_frame, build_strategy_monitor_frame
 
 
 def test_build_strategy_monitor_frame_outputs_nav_return_and_risk_columns() -> None:
@@ -42,3 +42,16 @@ def test_build_strategy_monitor_frame_outputs_nav_return_and_risk_columns() -> N
     assert frame.loc[2, "failed_order_count"] == 2
     assert frame.loc[2, "turnover_notional"] == 55.0
     assert "volatility_2" in frame.columns
+
+
+def test_build_market_monitor_frame_omits_unobserved_breadth_columns() -> None:
+    """仅刷新基准曲线时不得用假 0 覆盖已存在的宽度和涨跌停观测。"""
+    dates = pd.to_datetime(["2026-07-27", "2026-07-28"])
+    values = pd.Series([100.0, 101.0], index=dates)
+
+    frame = build_market_monitor_frame("510300", values)
+
+    assert "breadth_up_count" not in frame.columns
+    assert "breadth_down_count" not in frame.columns
+    assert "limit_up_count" not in frame.columns
+    assert "limit_down_count" not in frame.columns

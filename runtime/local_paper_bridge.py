@@ -10,8 +10,9 @@ from typing import Any
 import duckdb
 import pandas as pd
 
+from backtest.paper_execution import BrokerConfig
 from data.calendar import TradingCalendar
-from data.market_snapshot import create_market_snapshot
+from data.market_snapshot import create_fund_market_snapshot, create_market_snapshot
 from runtime.account_projection_service import project_paper_account_snapshot
 from runtime.local_paper_broker import LocalPaperBroker, PaperBrokerTarget, PaperBrokerSyncResult
 from runtime.paths import RuntimePaths
@@ -42,11 +43,12 @@ def sync_strategy_target_to_local_paper(
     *,
     risk_as_of_date: str | None = None,
     replace_pending_orders: bool = False,
+    broker_config: BrokerConfig | None = None,
 ) -> PaperBrokerSyncResult:
     """把任意策略目标权重同步到统一本地模拟盘账户。"""
     policy = RiskPolicyRepository(paths.system_state_path).resolve(strategy_id, risk_as_of_date or trade_date)
     effective_weights = apply_risk_cap(target_weights, policy.max_exposure if policy else None)
-    broker = LocalPaperBroker(paths.paper_trading_path)
+    broker = LocalPaperBroker(paths.paper_trading_path, broker_config)
     try:
         result = broker.sync_target(
             PaperBrokerTarget(
@@ -152,26 +154,89 @@ def _paper_account_symbols(paths: RuntimePaths, strategy_id: str) -> set[str]:
 
 
 def load_live_market_for_symbols(paths: RuntimePaths, trade_date: str, symbols: list[str], names: dict[str, str] | None = None) -> pd.DataFrame:
-    """从统一 base+increment 快照读取 Broker 撮合所需原始行情。"""
-    if not symbols or not paths.live_market_increment_path.exists():
+    """从统一快照读取行情，并把Tushare成交量手数转换为Broker股数。"""
+    if not symbols:
         return pd.DataFrame(columns=_market_columns())
     symbol_list = sorted(set(symbols))
-    if paths.base_market_path.exists():
-        frame = _load_market_from_snapshot(paths, trade_date, symbol_list)
-        return _finalize_market_frame(frame, names or {})
-    # 兼容尚未挂载历史基线的测试或迁移中环境；生产就绪检查会提示缺失。
-    placeholders = ",".join(["?"] * len(symbol_list))
+    stock_frame = _load_stock_market(paths, trade_date, symbol_list)
+    loaded = set(stock_frame["symbol"].astype(str)) if not stock_frame.empty else set()
+    fund_frame = _load_fund_market_from_snapshot(paths, trade_date, sorted(set(symbol_list) - loaded))
+    pieces = [frame for frame in (stock_frame, fund_frame) if not frame.empty]
+    frame = pd.concat(pieces, ignore_index=True) if pieces else pd.DataFrame(columns=_market_columns())
+    frame = _convert_tushare_volume_to_shares(frame)
+    return _finalize_market_frame(frame.drop_duplicates("symbol", keep="first"), names or {})
+
+
+def _convert_tushare_volume_to_shares(frame: pd.DataFrame) -> pd.DataFrame:
+    """Tushare日线vol单位为手，Broker参与率约束统一使用股。"""
+    if frame.empty or "volume" not in frame.columns:
+        return frame
+    result = frame.copy()
+    result["volume"] = (
+        pd.to_numeric(result["volume"], errors="coerce").fillna(0.0) * 100.0
+    )
+    return result
+
+
+def _load_stock_market(paths: RuntimePaths, trade_date: str, symbols: list[str]) -> pd.DataFrame:
+    """优先读取统一股票快照，迁移中环境才直接读取增量表。"""
+    if paths.base_market_path.exists() and paths.live_market_increment_path.exists():
+        return _load_market_from_snapshot(paths, trade_date, symbols)
+    if not paths.live_market_increment_path.exists():
+        return pd.DataFrame(columns=_market_columns())
+    placeholders = ",".join(["?"] * len(symbols))
     with duckdb.connect(str(paths.live_market_increment_path), read_only=True) as con:
-        frame = con.execute(
+        return con.execute(
             f"""
             SELECT ts_code AS symbol, trade_date, open, high, low, close, vol AS volume, amount
             FROM daily
             WHERE trade_date = ? AND ts_code IN ({placeholders})
             ORDER BY ts_code
             """,
-            [_compact_date(trade_date), *symbol_list],
+            [_compact_date(trade_date), *symbols],
         ).fetchdf()
-    return _finalize_market_frame(frame, names or {})
+
+
+def _load_fund_market_from_snapshot(
+    paths: RuntimePaths,
+    trade_date: str,
+    symbols: list[str],
+) -> pd.DataFrame:
+    """对股票快照未命中的标的补读基金快照，执行价格保持不复权。"""
+    if (
+        not symbols
+        or not paths.fund_daily_history_path.exists()
+        or not paths.benchmark_increment_path.exists()
+    ):
+        return pd.DataFrame(columns=_market_columns())
+    compact_date = _compact_date(trade_date)
+    snapshot = create_fund_market_snapshot(
+        paths.fund_daily_history_path,
+        paths.benchmark_increment_path,
+        compact_date,
+        lookback_start=compact_date,
+        adjust_policy="none",
+    )
+    rows: list[dict[str, Any]] = []
+    for symbol in symbols:
+        bars = snapshot.load_daily_bars(symbol)
+        if bars.empty:
+            continue
+        row = bars.iloc[-1]
+        rows.append(
+            {
+                "trade_date": compact_date,
+                "symbol": symbol,
+                "open": float(row["open"]),
+                "high": float(row["high"]),
+                "low": float(row["low"]),
+                "close": float(row["close"]),
+                "volume": float(row["volume"]),
+                "amount": float(row["amount"]),
+                "is_suspended": bool(row["is_suspended"]),
+            }
+        )
+    return pd.DataFrame(rows)
 
 
 def _load_market_from_snapshot(paths: RuntimePaths, trade_date: str, symbols: list[str]) -> pd.DataFrame:
@@ -250,7 +315,7 @@ def _finalize_market_frame(frame: pd.DataFrame, names: dict[str, str]) -> pd.Dat
     for column in ["is_suspended", "limit_up", "limit_down"]:
         if column not in result.columns:
             result[column] = False
-        result[column] = result[column].fillna(False).astype(bool)
+        result[column] = result[column].map(lambda value: bool(value) if pd.notna(value) else False)
     return result.reindex(columns=_market_columns())
 
 

@@ -21,6 +21,7 @@ import { PageHeader } from "../../shared/ui/PageHeader";
 import { ManualOrderPanel } from "./ManualOrderPanel";
 import { StrategyAccountSnapshotPanel } from "./StrategyAccountSnapshotPanel";
 import { StrategyOperationsPanel } from "./StrategyOperationsPanel";
+import { StrategyHoldingsPanel } from "../dashboard/components/StrategyHoldingsPanel";
 
 export function StrategiesPage() {
   const data = useOutletContext<DashboardContext>();
@@ -42,7 +43,7 @@ export function StrategiesPage() {
   const [instanceBenchmark, setInstanceBenchmark] = useState("510300");
   const [instanceRiskOverlay, setInstanceRiskOverlay] = useState("vol_20_45_to_30");
   const [instanceFactors, setInstanceFactors] = useState(createEditableFactors(data.factors));
-  const [instanceStates, setInstanceStates] = useState<Record<string, StrategyInstanceState>>({});
+  const [instanceStates, setInstanceStates] = useState<Record<string, StrategyInstanceState>>(data.strategyInstanceStates);
   const [instanceMessage, setInstanceMessage] = useState("");
   const [selectedInstanceId, setSelectedInstanceId] = useState(
     defaultAccountStrategyInstance(data.strategyInstances)?.strategy_id ?? ""
@@ -455,6 +456,12 @@ export function StrategiesPage() {
           ))}
         </div>
       </section>
+      {selectedInstance ? (
+        <StrategyHoldingsPanel
+          name={selectedInstance.name}
+          state={instanceStates[selectedInstance.strategy_id]}
+        />
+      ) : null}
       {selectedIsObservation ? (
         <section className="panel">
           <div className="detail-heading">

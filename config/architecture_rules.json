@@ -39,6 +39,12 @@
       "runtime.scheduler",
       "runtime.pipeline_service",
       "runtime.local_paper_broker"
+    ],
+    "ml_research": [
+      "api",
+      "frontend",
+      "monitoring",
+      "runtime"
     ]
   }
 }

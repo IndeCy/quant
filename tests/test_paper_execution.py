@@ -155,6 +155,286 @@ class TestPaperExecution(unittest.TestCase):
         self.assertEqual(manager.orders[1].status, "REJECTED")
         self.assertEqual(len(manager.execution_logs), 2)
 
+    def test_multi_asset_rebalance_uses_complete_portfolio_value(self):
+        """二次调仓必须按全部持仓市值计算目标，而不是逐票漏估。"""
+        rows = []
+        for date, aaa_close in [
+            ("2024-01-02", 10.0),
+            ("2024-01-03", 10.0),
+            ("2024-01-04", 20.0),
+            ("2024-01-05", 20.0),
+        ]:
+            rows.extend(
+                [
+                    {
+                        "date": date,
+                        "symbol": "AAA",
+                        "open": aaa_close,
+                        "close": aaa_close,
+                    },
+                    {
+                        "date": date,
+                        "symbol": "BBB",
+                        "open": 10.0,
+                        "close": 10.0,
+                    },
+                ]
+            )
+        broker = BrokerSimulator(BrokerConfig(slippage_bps=0))
+        engine = PaperTradingEngine(initial_cash=10_000.0, broker=broker)
+
+        result = engine.run_signals(
+            {
+                "2024-01-02": {"AAA": 0.50, "BBB": 0.50},
+                "2024-01-04": {"AAA": 0.50, "BBB": 0.50},
+            },
+            market_frame(rows),
+        )
+        signal_snapshot = next(
+            item for item in result.snapshots if item.date == "2024-01-04"
+        )
+
+        self.assertEqual(signal_snapshot.total_value, 15_000.0)
+        self.assertEqual(signal_snapshot.target_holdings, {"AAA": 375, "BBB": 750})
+        self.assertEqual(len(result.snapshots), 4)
+
+    def test_open_aware_replay_sizes_target_with_t1_open_price(self):
+        """历史Paper启用新政策后，应在T+1按开盘价重算目标股数。"""
+        data = market_frame(
+            [
+                {"date": "2024-01-02", "symbol": "AAA", "close": 10.0},
+                {"date": "2024-01-02", "symbol": "BBB", "close": 10.0},
+                {
+                    "date": "2024-01-03",
+                    "symbol": "AAA",
+                    "open": 10.5,
+                    "close": 10.5,
+                },
+                {
+                    "date": "2024-01-03",
+                    "symbol": "BBB",
+                    "open": 10.5,
+                    "close": 10.5,
+                },
+            ]
+        )
+        broker = BrokerSimulator(
+            BrokerConfig(
+                slippage_bps=10.0,
+                max_participation_rate=1.0,
+                commission_rate=0.0003,
+                min_commission=5.0,
+                lot_size=100,
+                open_aware_order_sizing=True,
+            )
+        )
+
+        result = PaperTradingEngine(
+            initial_cash=100_000.0,
+            broker=broker,
+        ).run_signals(
+            {"2024-01-02": {"AAA": 0.5, "BBB": 0.5}},
+            data,
+        )
+
+        self.assertEqual(
+            sorted(order.quantity for order in result.orders),
+            [4_700, 4_700],
+        )
+        self.assertTrue(all(order.status == "FILLED" for order in result.orders))
+        self.assertEqual(
+            result.snapshots[-1].target_holdings,
+            {"AAA": 4_700, "BBB": 4_700},
+        )
+
+    def test_open_aware_replay_retries_only_missing_symbol(self):
+        """单票T+1缺价时其他股票照常成交，缺价票在T+2重试。"""
+        data = market_frame(
+            [
+                {"date": "2024-01-02", "symbol": "AAA", "close": 10.0},
+                {"date": "2024-01-02", "symbol": "BBB", "close": 10.0},
+                {
+                    "date": "2024-01-03",
+                    "symbol": "AAA",
+                    "open": 10.0,
+                    "close": 10.0,
+                },
+                {
+                    "date": "2024-01-03",
+                    "symbol": "BBB",
+                    "open": 0.0,
+                    "close": 10.0,
+                    "is_suspended": True,
+                },
+                {
+                    "date": "2024-01-04",
+                    "symbol": "AAA",
+                    "open": 10.0,
+                    "close": 10.0,
+                },
+                {
+                    "date": "2024-01-04",
+                    "symbol": "BBB",
+                    "open": 0.0,
+                    "close": 10.0,
+                    "is_suspended": True,
+                },
+                {
+                    "date": "2024-01-05",
+                    "symbol": "AAA",
+                    "open": 10.0,
+                    "close": 10.0,
+                },
+                {
+                    "date": "2024-01-05",
+                    "symbol": "BBB",
+                    "open": 10.0,
+                    "close": 10.0,
+                },
+            ]
+        )
+        broker = BrokerSimulator(
+            BrokerConfig(
+                slippage_bps=0.0,
+                max_participation_rate=1.0,
+                lot_size=100,
+                open_aware_order_sizing=True,
+            )
+        )
+
+        result = PaperTradingEngine(
+            initial_cash=100_000.0,
+            broker=broker,
+        ).run_signals(
+            {"2024-01-02": {"AAA": 0.5, "BBB": 0.5}},
+            data,
+        )
+        day_two = next(
+            item for item in result.snapshots if item.date == "2024-01-03"
+        )
+        bbb_order = next(
+            order for order in result.orders if order.symbol == "BBB"
+        )
+
+        self.assertGreater(day_two.actual_holdings.get("AAA", 0), 0)
+        self.assertEqual(day_two.actual_holdings.get("BBB", 0), 0)
+        self.assertEqual(bbb_order.execute_date, "2024-01-05")
+        self.assertEqual(bbb_order.status, "FILLED")
+        self.assertEqual(
+            sum(order.symbol == "AAA" for order in result.orders),
+            1,
+        )
+        self.assertGreater(result.snapshots[-1].actual_holdings["BBB"], 0)
+
+    def test_open_aware_new_target_removes_stale_unfilled_symbol(self):
+        """新目标必须清除上期已落选但未成交的幽灵目标。"""
+        data = market_frame(
+            [
+                {"date": "2024-01-02", "symbol": "BBB", "close": 10.0},
+                {
+                    "date": "2024-01-03",
+                    "symbol": "AAA",
+                    "open": 10.0,
+                    "close": 10.0,
+                },
+                {
+                    "date": "2024-01-03",
+                    "symbol": "BBB",
+                    "open": 10.0,
+                    "close": 10.0,
+                    "limit_up": True,
+                },
+                {
+                    "date": "2024-01-04",
+                    "symbol": "AAA",
+                    "open": 10.0,
+                    "close": 10.0,
+                },
+                {
+                    "date": "2024-01-04",
+                    "symbol": "BBB",
+                    "open": 10.0,
+                    "close": 10.0,
+                },
+            ]
+        )
+        broker = BrokerSimulator(
+            BrokerConfig(
+                slippage_bps=0.0,
+                max_participation_rate=1.0,
+                lot_size=100,
+                open_aware_order_sizing=True,
+            )
+        )
+
+        result = PaperTradingEngine(
+            initial_cash=100_000.0,
+            broker=broker,
+        ).run_signals(
+            {
+                "2024-01-02": {"BBB": 1.0},
+                "2024-01-03": {"AAA": 1.0},
+            },
+            data,
+        )
+
+        self.assertEqual(result.orders[0].status, "REJECTED")
+        self.assertNotIn("BBB", result.snapshots[-1].target_holdings)
+        self.assertGreater(
+            result.snapshots[-1].actual_holdings.get("AAA", 0),
+            0,
+        )
+
+    def test_paper_execution_applies_cash_and_asset_tax_constraints(self):
+        """买入不得透支，卖出股票收税而ETF免税。"""
+        config = BrokerConfig(
+            slippage_bps=0,
+            commission_rate=0.001,
+            stamp_tax_rate=0.001,
+            min_commission=5.0,
+            tax_exempt_symbols=frozenset({"ETF"}),
+        )
+        broker = BrokerSimulator(config)
+        manager = OrderManager()
+        buy = manager.create_order(
+            "2024-01-02",
+            "2024-01-03",
+            "AAA",
+            "BUY",
+            1_000,
+            10.0,
+        )
+
+        filled = broker.execute(
+            buy,
+            market_frame(
+                [{"date": "2024-01-03", "symbol": "AAA"}]
+            ).iloc[0],
+            manager,
+            cash_available=1_000.0,
+        )
+
+        self.assertEqual(filled.status, "PARTIAL_FILLED")
+        self.assertLessEqual(
+            filled.fill_price * filled.filled_quantity
+            + manager.execution_logs[-1].commission,
+            1_000.0,
+        )
+        stock_sell = manager.create_order(
+            "2024-01-02", "2024-01-03", "AAA", "SELL", 100, 10.0
+        )
+        etf_sell = manager.create_order(
+            "2024-01-02", "2024-01-03", "ETF", "SELL", 100, 10.0
+        )
+        row = market_frame(
+            [{"date": "2024-01-03", "symbol": "AAA"}]
+        ).iloc[0]
+        broker.execute(stock_sell, row, manager)
+        broker.execute(etf_sell, row, manager)
+
+        self.assertGreater(manager.execution_logs[-2].stamp_tax, 0)
+        self.assertEqual(manager.execution_logs[-1].stamp_tax, 0)
+
 
 if __name__ == "__main__":
     unittest.main()

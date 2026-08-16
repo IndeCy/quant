@@ -12,6 +12,7 @@ from typing import Any
 
 from monitoring.repository import MonitoringRepository
 from runtime.data_quality_gate import run_data_quality_gate
+from runtime.hot_money_research_view import build_hot_money_research_view
 from runtime.notification_config import NotificationResult, send_bark_notification
 from runtime.paths import RuntimePaths, get_runtime_paths
 from runtime.pipeline_dag import PipelineDagExecutor, PipelineNode, PipelineNodeResult
@@ -79,7 +80,7 @@ def run_production_daily_pipeline(
         _with_duration(data_message, data_node),
         run_dir,
     )
-    _notify_data_update(repository, target_date, run_dir, push, data_node.status, data_message)
+    _notify_data_update(runtime_paths, repository, target_date, run_dir, push, data_node.status, data_message)
     if data_node.status != "SUCCESS":
         _fail_pipeline(
             repository,
@@ -306,6 +307,7 @@ def _notify_if_needed(
 
 
 def _notify_data_update(
+    paths: RuntimePaths,
     repository: SystemRepository,
     trade_date: str,
     run_dir: object,
@@ -314,11 +316,13 @@ def _notify_data_update(
     message: str,
 ) -> NotificationResult:
     """数据更新使用独立 Bark 模板，先于策略通知。"""
+    top_sector_lines = _format_hot_money_top_sectors(paths) if push and status == "SUCCESS" else []
     body = "\n".join(
         [
             f"数据更新状态：{status}",
             f"交易日：{trade_date}",
             *_format_data_update_lines(message),
+            *top_sector_lines,
             f"策略执行：{'数据成功后继续执行' if status == 'SUCCESS' else '已阻断，策略未执行'}",
         ]
     )
@@ -366,6 +370,41 @@ def _format_data_update_lines(message: str) -> list[str]:
     if not lines:
         lines.append(f"摘要：{message}")
     return lines
+
+
+def _format_hot_money_top_sectors(paths: RuntimePaths) -> list[str]:
+    """把最新游资板块强度排行压缩成 Bark 可读的 Top5。"""
+    try:
+        view = build_hot_money_research_view(
+            paths.limit_list_increment_path,
+            concept_path=paths.opportunity_concept_increment_path,
+            industry_path=paths.industry_increment_path,
+        )
+    except Exception:
+        return ["今日最强势板块 Top5：排行生成失败"]
+    rows = view.get("top_sectors")
+    if not isinstance(rows, list) or not rows:
+        return ["今日最强势板块 Top5：暂无可用排行"]
+    latest = str(view.get("latest_trade_date") or "")
+    title = f"今日最强势板块 Top5（{latest}）：" if latest else "今日最强势板块 Top5："
+    lines = [title]
+    for index, row in enumerate(rows[:5], start=1):
+        if not isinstance(row, dict):
+            continue
+        name = str(row.get("sector_name") or "未分类")
+        score = _number(row.get("sector_score"))
+        limit_ups = int(_number(row.get("limit_up_count")))
+        leader = str(row.get("leader_name") or "-")
+        lines.append(f"{index}. {name}｜强度{score:.2f}｜涨停{limit_ups}家｜龙头{leader}")
+    return lines if len(lines) > 1 else ["今日最强势板块 Top5：暂无可用排行"]
+
+
+def _number(value: object) -> float:
+    """容错转换缓存中的数值字段，避免通知格式化阻断每日流水线。"""
+    try:
+        return float(value or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
 
 
 def _summarize_strategy_batch(summary: dict[str, object]) -> str:

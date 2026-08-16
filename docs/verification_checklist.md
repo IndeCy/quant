@@ -13,7 +13,7 @@
 - [ ] Python 是否通过：
 
 ```bash
-/Users/admin/recommend_analysis/.venv/bin/python3 -m pytest -q
+"$HOME/recommend_analysis/.venv/bin/python3" -m pytest -q
 ```
 
 - [ ] 前端变更是否通过：

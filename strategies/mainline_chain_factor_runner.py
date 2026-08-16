@@ -7,7 +7,6 @@ from dataclasses import dataclass
 import io
 import json
 from pathlib import Path
-import sqlite3
 from typing import Any
 
 import pandas as pd
@@ -23,6 +22,7 @@ from monitoring.metrics import build_strategy_monitor_frame
 from monitoring.repository import MonitoringRepository
 from runtime.paths import RuntimePaths
 from runtime.repository import SystemRepository
+from runtime.strategy_state_writer import StrategyHoldingState, write_strategy_instance_state
 
 
 INITIAL_CAPITAL = 1_000_000.0
@@ -246,13 +246,19 @@ def persist_factor_chain_rotation_instance(
         computation.engine,
         instance,
     )
-    _write_instance_state(
+    write_strategy_instance_state(
         paths,
         strategy_id,
         latest_date,
         float(result["nav"]),
-        computation.strategy.latest_targets,
-        computation.latest_prices,
+        [
+            StrategyHoldingState(
+                symbol=item.symbol,
+                weight=item.target_weight,
+                last_close=computation.latest_prices.get(item.symbol, 0.0),
+            )
+            for item in computation.strategy.latest_targets
+        ],
     )
     _record_success(
         paths,
@@ -406,59 +412,6 @@ def _risk_state(volatility_20: float, drawdown: float) -> str:
     if volatility_20 >= 0.35 or drawdown <= -0.10:
         return "ELEVATED"
     return "NORMAL"
-
-
-def _write_instance_state(
-    paths: RuntimePaths,
-    strategy_id: str,
-    trade_date: str,
-    nav: float,
-    targets: list[SelectionRecord],
-    latest_prices: dict[str, float],
-) -> None:
-    with sqlite3.connect(paths.system_state_path) as con:
-        con.execute(
-            """
-            CREATE TABLE IF NOT EXISTS strategy_instance_state (
-                strategy_id TEXT NOT NULL PRIMARY KEY,
-                trade_date TEXT NOT NULL,
-                nav REAL NOT NULL,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                modified_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-            )
-            """
-        )
-        con.execute(
-            """
-            CREATE TABLE IF NOT EXISTS strategy_instance_holdings (
-                strategy_id TEXT NOT NULL,
-                symbol TEXT NOT NULL,
-                weight REAL NOT NULL,
-                last_close REAL NOT NULL,
-                created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-                PRIMARY KEY(strategy_id, symbol)
-            )
-            """
-        )
-        con.execute(
-            """
-            INSERT INTO strategy_instance_state(strategy_id, trade_date, nav)
-            VALUES (?, ?, ?)
-            ON CONFLICT(strategy_id) DO UPDATE SET
-                trade_date=excluded.trade_date,
-                nav=excluded.nav,
-                modified_at=CURRENT_TIMESTAMP
-            """,
-            [strategy_id, trade_date, nav],
-        )
-        con.execute("DELETE FROM strategy_instance_holdings WHERE strategy_id = ?", [strategy_id])
-        con.executemany(
-            """
-            INSERT INTO strategy_instance_holdings(strategy_id, symbol, weight, last_close)
-            VALUES (?, ?, ?, ?)
-            """,
-            [(strategy_id, item.symbol, item.target_weight, latest_prices.get(item.symbol, 0.0)) for item in targets],
-        )
 
 
 def _record_success(

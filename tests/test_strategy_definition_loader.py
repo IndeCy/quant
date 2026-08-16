@@ -16,9 +16,13 @@ def test_builtin_strategy_definitions_are_versioned_and_valid() -> None:
     definitions = load_strategy_definitions()
 
     assert {item.strategy_id for item in definitions} == {
+        "global_defensive_equal_v1",
         "innovative_drug_globalization_observer_v0",
         "mainline_chain_factor_v1",
+        "quality_balanced_value_v1",
+        "quality_defensive_assets_core_scoped_70_15_15_v2",
         "quality_overlay",
+        "quality_value_lowvol_v0",
     }
     assert all(item.version for item in definitions)
     assert all(item.adjust_policy == "qfq" for item in definitions)

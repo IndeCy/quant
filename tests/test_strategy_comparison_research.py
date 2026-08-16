@@ -70,7 +70,8 @@ class TestStrategyComparisonResearch(unittest.TestCase):
                     high_qfq DOUBLE,
                     low_qfq DOUBLE,
                     close_qfq DOUBLE,
-                    pre_close_qfq DOUBLE
+                    pre_close_qfq DOUBLE,
+                    adj_factor DOUBLE
                 )
                 """
             )
@@ -79,6 +80,7 @@ class TestStrategyComparisonResearch(unittest.TestCase):
                 CREATE TABLE daily(
                     ts_code VARCHAR,
                     trade_date VARCHAR,
+                    close DOUBLE,
                     vol DOUBLE,
                     amount DOUBLE
                 )
@@ -88,17 +90,17 @@ class TestStrategyComparisonResearch(unittest.TestCase):
             con.execute(
                 """
                 INSERT INTO daily_adj_cache VALUES
-                ('AAA.SZ','20250102',10,10,10,10,9),
-                ('AAA.SZ','20250103',10,10,10,10,10),
-                ('BBB.SZ','20250103',11,11,11,11,10)
+                ('AAA.SZ','20250102',10,10,10,10,9,1),
+                ('AAA.SZ','20250103',10,10,10,10,10,1),
+                ('BBB.SZ','20250103',11,11,11,11,10,1)
                 """
             )
             con.execute(
                 """
                 INSERT INTO daily VALUES
-                ('AAA.SZ','20250102',100,1000),
-                ('AAA.SZ','20250103',0,0),
-                ('BBB.SZ','20250103',200,3000)
+                ('AAA.SZ','20250102',10,100,1000),
+                ('AAA.SZ','20250103',10,0,0),
+                ('BBB.SZ','20250103',11,200,3000)
                 """
             )
 

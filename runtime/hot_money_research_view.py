@@ -27,12 +27,17 @@ def build_hot_money_research_view(
         return _empty_view("NO_DATA", "涨跌停缓存为空")
     if sector_map is None and concept_path is not None and industry_path is not None:
         sector_map = load_hot_money_sector_map(concept_path, industry_path)
-    sector = build_sector_momentum_daily(limit_rows, sector_map)
-    leader = build_leader_stock_daily(limit_rows, sector, sector_map)
+    latest = str(limit_rows["trade_date"].astype(str).max())
+    latest_limit_rows = limit_rows[limit_rows["trade_date"].astype(str).eq(latest)].copy()
+    sector = build_sector_momentum_daily(latest_limit_rows, sector_map)
+    leader = build_leader_stock_daily(limit_rows, sector, sector_map, trade_date=latest)
     if sector.empty:
         return _empty_view("NO_LIMIT_UP", "缓存中没有涨停样本")
-    latest = str(sector["trade_date"].max())
     latest_sector = sector[sector["trade_date"].astype(str).eq(latest)].sort_values("rank")
+    ranked_sector = latest_sector[
+        latest_sector["sector_name"].astype(str).str.strip().ne("")
+        & latest_sector["sector_name"].astype(str).ne("UNKNOWN")
+    ]
     latest_leader = leader[leader["trade_date"].astype(str).eq(latest)].sort_values(
         ["sector_name", "role", "leader_score"],
         ascending=[True, True, False],
@@ -43,6 +48,7 @@ def build_hot_money_research_view(
         "message": "已生成最新游资主线与龙头识别",
         "cache_path": str(path),
         "latest_trade_date": latest,
+        "top_sectors": ranked_sector.head(5).to_dict("records"),
         "mainlines": latest_sector[latest_sector["is_mainline"]].to_dict("records"),
         "leaders": latest_leader[latest_leader["role"].isin(["LEADER", "SECONDARY_LEADER"])].to_dict("records"),
         "sector_limit_ups": latest_limit_ups.to_dict("records"),
@@ -111,6 +117,7 @@ def _empty_view(status: str, message: str) -> dict[str, object]:
         "message": message,
         "cache_path": "",
         "latest_trade_date": "",
+        "top_sectors": [],
         "mainlines": [],
         "leaders": [],
         "sector_limit_ups": [],

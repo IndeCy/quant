@@ -17,6 +17,19 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backtest.execution_model import ExecutionModel
 from backtest.research_benchmark import load_hs300_benchmark
+from data.quality_financial import (
+    QualityFinancialPaths,
+    attach_quality_financial_databases,
+    create_quality_signal_date_table,
+    materialize_quality_financial_asof,
+)
+from factors.quality import (
+    ATTRIBUTION_COLUMNS,
+    QUALITY_COLUMNS,
+    score_quality_frame,
+    winsorize_series,
+    zscore_series,
+)
 from examples.strategy_comparison_research import (
     START_DATE,
     build_metrics_table,
@@ -38,100 +51,24 @@ CASHFLOW_PATH = Path("cashflow.duckdb")
 FUND_DAILY_PATH = Path("etf_lof_reits_daily_adj_20041220_20260617.duckdb")
 FUND_BASIC_PATH = Path("etf_lof_reits_basic_export_20041220_20260617.duckdb")
 REPORT_PATH = Path("reports/quality_strategy_v1.md")
-QUALITY_COLUMNS = ["roe", "roa", "ocf_to_or"]
-ATTRIBUTION_COLUMNS = ["roe", "roa", "debt_to_assets", "tr_yoy"]
-
-
-def winsorize_series(series: pd.Series, lower: float = 0.05, upper: float = 0.95) -> pd.Series:
-    """对单个横截面因子做分位数缩尾，降低极端财务值影响。"""
-    numeric = pd.to_numeric(series, errors="coerce")
-    lower_bound = numeric.quantile(lower)
-    upper_bound = numeric.quantile(upper)
-    return numeric.clip(lower_bound, upper_bound)
-
-
-def zscore_series(series: pd.Series) -> pd.Series:
-    """对单个横截面因子做 Z-score 标准化。"""
-    numeric = pd.to_numeric(series, errors="coerce")
-    std = numeric.std(ddof=0)
-    if pd.isna(std) or std == 0:
-        return pd.Series(0.0, index=series.index)
-    return (numeric - numeric.mean()) / std
-
-
-def score_quality_frame(frame: pd.DataFrame) -> pd.DataFrame:
-    """计算 ROE、ROA、经营现金流质量三因子等权分数。"""
-    scored = frame.dropna(subset=QUALITY_COLUMNS).copy()
-    for column in QUALITY_COLUMNS:
-        # 先缩尾再标准化，避免单个异常财报指标主导选股。
-        scored[f"{column}_z"] = zscore_series(winsorize_series(scored[column]))
-    scored["quality_score"] = scored[[f"{column}_z" for column in QUALITY_COLUMNS]].mean(axis=1)
-    return scored.sort_values(["quality_score", "symbol"], ascending=[False, True]).reset_index(drop=True)
 
 
 def attach_financial_dbs(con) -> None:
     """挂载财务库，后续 SQL 统一从 f_ann_date 做 as-of。"""
-    for path in [FINA_PATH, INCOME_PATH, BALANCE_PATH, CASHFLOW_PATH]:
-        if not path.exists():
-            raise FileNotFoundError(f"缺少财务 DuckDB 数据文件: {path.resolve()}")
-    con.execute(f"ATTACH DATABASE '{FINA_PATH}' AS fina_db (READ_ONLY)")
-    con.execute(f"ATTACH DATABASE '{INCOME_PATH}' AS income_db (READ_ONLY)")
-    con.execute(f"ATTACH DATABASE '{BALANCE_PATH}' AS balance_db (READ_ONLY)")
-    con.execute(f"ATTACH DATABASE '{CASHFLOW_PATH}' AS cashflow_db (READ_ONLY)")
+    attach_quality_financial_databases(
+        con,
+        QualityFinancialPaths(FINA_PATH, INCOME_PATH, BALANCE_PATH, CASHFLOW_PATH),
+    )
 
 
 def create_signal_date_table(con, signal_dates: list[str]) -> None:
     """把月末调仓日写成临时表，便于 as-of SQL join。"""
-    con.execute("CREATE OR REPLACE TEMP TABLE quality_signal_dates(signal_date VARCHAR)")
-    con.executemany("INSERT INTO quality_signal_dates VALUES (?)", [(date,) for date in signal_dates])
+    create_quality_signal_date_table(con, signal_dates)
 
 
 def create_financial_asof_table(con) -> None:
     """构造严格按 f_ann_date 截止的财务因子快照。"""
-    con.execute(
-        """
-        CREATE OR REPLACE TEMP TABLE financial_quality_asof AS
-        WITH publish_dates AS (
-            SELECT ts_code, end_date, MAX(f_ann_date) AS f_ann_date
-            FROM (
-                SELECT ts_code, end_date, f_ann_date FROM income_db.default_table WHERE f_ann_date IS NOT NULL
-                UNION ALL
-                SELECT ts_code, end_date, f_ann_date FROM balance_db.default_table WHERE f_ann_date IS NOT NULL
-                UNION ALL
-                SELECT ts_code, end_date, f_ann_date FROM cashflow_db.default_table WHERE f_ann_date IS NOT NULL
-            )
-            GROUP BY ts_code, end_date
-        ),
-        clean_fina AS (
-            SELECT
-                f.ts_code AS symbol,
-                f.end_date,
-                p.f_ann_date,
-                CAST(f.roe AS DOUBLE) AS roe,
-                CAST(f.roa AS DOUBLE) AS roa,
-                CAST(f.ocf_to_or AS DOUBLE) AS ocf_to_or,
-                CAST(f.debt_to_assets AS DOUBLE) AS debt_to_assets,
-                CAST(f.tr_yoy AS DOUBLE) AS tr_yoy
-            FROM fina_db.default_table f
-            JOIN publish_dates p ON f.ts_code = p.ts_code AND f.end_date = p.end_date
-            WHERE p.f_ann_date IS NOT NULL
-        ),
-        ranked AS (
-            SELECT
-                d.signal_date,
-                q.*,
-                ROW_NUMBER() OVER(
-                    PARTITION BY d.signal_date, q.symbol
-                    ORDER BY q.end_date DESC, q.f_ann_date DESC
-                ) AS rn
-            FROM quality_signal_dates d
-            JOIN clean_fina q ON q.f_ann_date <= d.signal_date
-        )
-        SELECT signal_date, symbol, end_date, f_ann_date, roe, roa, ocf_to_or, debt_to_assets, tr_yoy
-        FROM ranked
-        WHERE rn = 1
-        """
-    )
+    materialize_quality_financial_asof(con, annual_only=False)
 
 
 def load_quality_candidates(con) -> pd.DataFrame:

@@ -32,5 +32,7 @@ describe("chart theme", () => {
     expect(resolveSeriesColor("MA60", 1)).toBe(CHART_COLORS.green);
     expect(resolveSeriesColor("基准", 2)).toBe(CHART_COLORS.slate);
     expect(resolveSeriesColor("510300净值", 0)).toBe(CHART_COLORS.blue);
+    expect(resolveSeriesColor("上证指数", 5)).toBe(CHART_COLORS.slate);
+    expect(resolveSeriesColor("沪深300", 6)).toBe(CHART_COLORS.cyan);
   });
 });

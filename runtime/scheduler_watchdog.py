@@ -11,9 +11,11 @@ import sqlite3
 
 from monitoring.repository import MonitoringRepository
 from runtime.notification_config import send_bark_notification
+from runtime.paper_execution_sla_tracker import record_daily_paper_execution_sla
 from runtime.paths import RuntimePaths, get_runtime_paths
 from runtime.repository import SystemRepository
 from runtime.strategy_commit_journal import StrategyCommitJournalRepository
+from runtime.strategy_paper_observation import record_strategy_paper_observation
 
 
 WATCHDOG_ID = "scheduler_watchdog"
@@ -59,6 +61,8 @@ def _collect_issues(paths: RuntimePaths, repository: SystemRepository, trade_dat
             f"{commit['strategy_id']} {commit['trade_date']} "
             f"{commit['status']}@{commit['last_step']}"
         )
+    paper_sla = record_daily_paper_execution_sla(paths, trade_date).result
+    issues.extend(f"Paper执行SLA: {issue}" for issue in paper_sla.issues)
     pipeline = repository.get_run("daily_trading_pipeline", trade_date)
     if not pipeline or pipeline.get("status") != "SUCCESS":
         issues.append("daily_trading_pipeline 未成功运行")
@@ -72,6 +76,22 @@ def _collect_issues(paths: RuntimePaths, repository: SystemRepository, trade_dat
         run = repository.get_run(strategy_id, trade_date)
         if not run or run.get("status") != "SUCCESS":
             issues.append(f"{strategy_id} 未成功运行")
+        gate_days = int(
+            dict(instance.get("config") or {}).get(
+                "paper_observation_gate_days",
+                0,
+            )
+        )
+        if gate_days > 0:
+            observation = record_strategy_paper_observation(
+                paths,
+                strategy_id,
+                trade_date,
+                required_days=gate_days,
+            )
+            result = dict(observation["result"])
+            for issue in result.get("issues", []):
+                issues.append(f"{strategy_id} Paper观察: {issue}")
 
     monitoring = MonitoringRepository(paths.monitoring_path)
     for instance in repository.list_strategy_instances(enabled_only=True):
@@ -114,6 +134,7 @@ def _format_watchdog_message(trade_date: str, issues: list[str]) -> str:
             issue_text,
             "",
             "建议：",
+            "- 检查开盘撮合记录与到期委托，必要时在交易时段内复用标准撮合入口",
             "- 执行 scripts/run_daily_pipeline.py --source manual --push",
             "- 执行 scripts/run_research_monitor.py --push",
         ]

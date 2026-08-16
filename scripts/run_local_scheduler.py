@@ -11,6 +11,8 @@ import time
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from runtime.paths import get_runtime_paths
+from runtime.etf_premium_scheduler import install_etf_premium_monitor_jobs
+from runtime.portfolio_rebalance_scheduler import install_portfolio_rebalance_job
 from runtime.scheduler import create_scheduler, install_daily_pipeline_jobs
 from runtime.scheduler_liveness import wake_scheduler_after_system_resume
 
@@ -34,6 +36,8 @@ def main() -> None:
         skip_update=args.skip_update,
         push=args.push,
     )
+    jobs.extend(install_etf_premium_monitor_jobs(scheduler, paths, push=args.push))
+    jobs.append(install_portfolio_rebalance_job(scheduler, paths, push=args.push))
     scheduler.resume()
     wake_scheduler_after_system_resume(scheduler, paths)
     job_ids = ", ".join(job.id for job in jobs)

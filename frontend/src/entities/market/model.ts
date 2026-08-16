@@ -24,6 +24,8 @@ export interface MarketMetric {
   amount_ratio_20?: number;
   low_amount_ratio?: number;
   zero_volume_ratio?: number;
+  breadth_data_status?: "READY" | "MISSING";
+  limit_data_status?: "READY" | "MISSING";
 }
 
 export interface MarketBetaSnapshot {
@@ -38,6 +40,28 @@ export interface MarketBetaSnapshot {
   valuation_score: number;
   risk_level: string;
   reasons: string[];
+}
+
+export interface MarketIndexPoint {
+  trade_date: string;
+  nav: number;
+}
+
+export interface MarketIndexSeries {
+  symbol: string;
+  series_id?: string;
+  name: string;
+  series_kind?: "market_index" | "research";
+  adjust_policy?: "index_raw" | "qfq_m0_t1_5bps";
+  points: MarketIndexPoint[];
+}
+
+export interface MarketIndexComparison {
+  data_status: "READY" | "PARTIAL" | "MISSING";
+  as_of: string;
+  adjust_policy: "index_raw" | "mixed";
+  message?: string;
+  indices: MarketIndexSeries[];
 }
 
 export type MarketStyleTrendState = "UP" | "DOWN" | "REBOUND" | "WEAK" | "INSUFFICIENT";

@@ -31,6 +31,8 @@ export function normalizeChartData(values: Array<number | null | undefined>): Ar
 
 export function resolveSeriesColor(name: string, index: number): string {
   const normalized = name.toUpperCase();
+  if (name.includes("上证指数")) return CHART_COLORS.slate;
+  if (name.includes("沪深300")) return CHART_COLORS.cyan;
   if (normalized.includes("MA5")) return CHART_COLORS.blue;
   if (normalized.includes("MA10") || normalized.includes("波动")) return CHART_COLORS.amber;
   if (normalized.includes("MA20") || normalized.includes("回撤") || normalized.includes("涨停") || normalized.includes("新高")) {

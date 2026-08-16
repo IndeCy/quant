@@ -97,6 +97,82 @@ class RuntimePaths:
         ]
         return next((candidate for candidate in candidates if candidate.exists()), candidates[0])
 
+    def resolve_data_file(self, filename: str) -> Path:
+        """在 QUANT_HOME 与项目根目录之间解析可迁移的只读数据文件。"""
+        if not filename or Path(filename).name != filename:
+            raise ValueError("filename must be a plain file name")
+        candidates = [
+            self.data_dir / filename,
+            self.root / filename,
+            _project_root() / "data" / filename,
+            _project_root() / filename,
+        ]
+        return next((candidate for candidate in candidates if candidate.exists()), candidates[0])
+
+    @property
+    def fina_indicator_path(self) -> Path:
+        return self.resolve_data_file("fina_indicator.duckdb")
+
+    @property
+    def income_statement_path(self) -> Path:
+        return self.resolve_data_file("income.duckdb")
+
+    @property
+    def balance_sheet_path(self) -> Path:
+        return self.resolve_data_file("balancesheet.duckdb")
+
+    @property
+    def cashflow_statement_path(self) -> Path:
+        return self.resolve_data_file("cashflow.duckdb")
+
+    @property
+    def forecast_path(self) -> Path:
+        """定位业绩预告历史库，研究与迁移统一通过运行路径解析。"""
+        return self.resolve_data_file("forecast.duckdb")
+
+    @property
+    def dividend_path(self) -> Path:
+        """定位标准分红增量库，避免研究脚本硬编码项目目录。"""
+        return self.resolve_data_file("dividend_increment.duckdb")
+
+    @property
+    def earnings_express_path(self) -> Path:
+        """定位业绩快报历史库。"""
+        return self.resolve_data_file("express.duckdb")
+
+    @property
+    def shareholder_count_path(self) -> Path:
+        """定位股东户数增量缓存。"""
+        return self.data_dir / "shareholder_count_increment.duckdb"
+
+    @property
+    def holder_trade_path(self) -> Path:
+        """定位重要股东增减持事件增量缓存。"""
+        return self.data_dir / "holder_trade_increment.duckdb"
+
+    @property
+    def margin_trade_path(self) -> Path:
+        """定位融资融券研究增量缓存，尚未纳入生产日更。"""
+        return self.data_dir / "margin_trade_increment.duckdb"
+
+    @property
+    def block_trade_path(self) -> Path:
+        """定位大宗交易事件增量缓存。"""
+        return self.data_dir / "block_trade_increment.duckdb"
+
+    @property
+    def fund_ownership_path(self) -> Path:
+        """定位公募基金披露持仓研究缓存。"""
+        return self.data_dir / "fund_ownership_increment.duckdb"
+
+    @property
+    def fund_daily_history_path(self) -> Path:
+        return self.resolve_data_file("etf_lof_reits_daily_adj_20041220_20260617.duckdb")
+
+    @property
+    def fund_basic_history_path(self) -> Path:
+        return self.resolve_data_file("etf_lof_reits_basic_export_20041220_20260617.duckdb")
+
     @property
     def quality_overlay_paper_path(self) -> Path:
         return self.data_dir / "quality_overlay_paper.sqlite3"

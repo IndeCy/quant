@@ -2,7 +2,7 @@
 set -euo pipefail
 
 ROOT="$(git rev-parse --show-toplevel)"
-PYTHON_BIN="${PYTHON_BIN:-/Users/admin/recommend_analysis/.venv/bin/python3}"
+PYTHON_BIN="${PYTHON_BIN:-$HOME/recommend_analysis/.venv/bin/python3}"
 
 "$PYTHON_BIN" "$ROOT/scripts/check_architecture.py"
 "$PYTHON_BIN" "$ROOT/scripts/check_generated_artifacts.py"

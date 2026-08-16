@@ -14,6 +14,7 @@ import { schedulerNextRunLabel, schedulerStateLabel } from "../../entities/sched
 import { formatCommand } from "../../entities/service/format";
 import { formatPercent } from "../../shared/lib/formatters";
 import { PageHeader } from "../../shared/ui/PageHeader";
+import { PaperExecutionSlaPanel } from "./PaperExecutionSlaPanel";
 
 export function SchedulerPage() {
   const data = useOutletContext<DashboardContext>();
@@ -22,6 +23,7 @@ export function SchedulerPage() {
   const observation = data.operationsObservation;
   const review = data.operationsReview;
   const riskConfirmations = data.riskConfirmations;
+  const paperSla = data.paperExecutionSla;
   const [ackMessage, setAckMessage] = useState("");
   const [riskMessage, setRiskMessage] = useState("");
   const [reportMessage, setReportMessage] = useState("");
@@ -326,6 +328,7 @@ export function SchedulerPage() {
           <code>{scheduler.log_path}</code>
         </div>
       </section>
+      <PaperExecutionSlaPanel value={paperSla} />
       <section className="panel detail-panel">
         <div className="detail-heading">
           <div>

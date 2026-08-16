@@ -112,6 +112,7 @@ def test_install_daily_pipeline_jobs_registers_data_then_batch_runner(tmp_path: 
         sys.executable,
         "scripts/run_market_open_paper_execution.py",
     ]
+    assert jobs[1].misfire_grace_time == 5 * 60 * 60 + 25 * 60
     assert "--push" in jobs[1].kwargs["command"]
     assert jobs[2].kwargs["command"][:2] == [
         sys.executable,

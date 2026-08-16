@@ -2,6 +2,7 @@ import { useOutletContext } from "react-router-dom";
 
 import type { DashboardContext } from "../../app/types";
 import { ChartPanel } from "../../shared/ui/ChartPanel";
+import { AllStrategyHoldingsPanel } from "./components/AllStrategyHoldingsPanel";
 import { FactorCompositionPanel } from "./components/FactorCompositionPanel";
 import { MetricGrid } from "./components/MetricGrid";
 import { MultiStrategyChart } from "./components/MultiStrategyChart";
@@ -11,6 +12,7 @@ import { RecentRunsPanel } from "./components/RecentRunsPanel";
 import { ReadinessPanel } from "./components/ReadinessPanel";
 import { StrategyOverviewGrid } from "./components/StrategyOverviewGrid";
 import { StrategyDefinitionPanel } from "./components/StrategyDefinitionPanel";
+import { StrategyHoldingsPanel } from "./components/StrategyHoldingsPanel";
 import { StrategyPerformanceChart } from "./components/StrategyPerformanceChart";
 
 export function DashboardPage() {
@@ -31,7 +33,11 @@ export function DashboardPage() {
         <StrategyOverviewGrid strategies={data.strategies} seriesMap={data.strategySeriesMap} onSelect={data.selectStrategy} />
         <div className="content-grid">
           <section className="column wide">
-            <MultiStrategyChart strategies={data.strategies} seriesMap={data.strategySeriesMap} />
+            <MultiStrategyChart
+              strategies={data.strategies}
+              seriesMap={data.strategySeriesMap}
+              marketIndexComparison={data.marketIndexComparison}
+            />
             <ChartPanel
               title="多策略回撤对比"
               dates={allDates}
@@ -48,6 +54,11 @@ export function DashboardPage() {
             <RecentReportsPanel reports={data.reports} />
           </aside>
         </div>
+        <AllStrategyHoldingsPanel
+          strategies={data.strategies}
+          states={data.strategyInstanceStates}
+          onSelect={data.selectStrategy}
+        />
       </>
     );
   }
@@ -82,6 +93,10 @@ export function DashboardPage() {
           <MarketBetaPanel snapshot={data.marketBeta} marketSeries={data.marketSeries} />
           <ReadinessPanel report={data.readiness} />
           <StrategyDefinitionPanel strategy={selectedStrategy} />
+          <StrategyHoldingsPanel
+            name={selectedStrategy.name}
+            state={data.strategyInstanceStates[selectedStrategy.strategy_id]}
+          />
           <FactorCompositionPanel factors={selectedStrategy.factors ?? []} />
           <RecentRunsPanel runs={selectedRuns} />
           <RecentReportsPanel reports={selectedReports} />

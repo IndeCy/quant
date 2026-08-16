@@ -70,7 +70,7 @@ def build_market_monitor_frame(
     benchmark_values: pd.Series,
     breadth: pd.DataFrame | None = None,
 ) -> pd.DataFrame:
-    """构建大盘监控指标，宽度数据缺失时保守填0。"""
+    """构建大盘监控指标；未提供派生观测时不写入假 0。"""
     values = _normalize_series(benchmark_values)
     if values.empty:
         return pd.DataFrame()
@@ -97,10 +97,9 @@ def build_market_monitor_frame(
         if "trade_date" in extra.columns:
             extra.index = pd.to_datetime(extra["trade_date"], format="%Y%m%d")
         frame = frame.join(extra.drop(columns=["trade_date"], errors="ignore"), how="left")
-    for column in ["breadth_up_count", "breadth_down_count", "limit_up_count", "limit_down_count"]:
-        if column not in frame.columns:
-            frame[column] = 0
-        frame[column] = frame[column].fillna(0).astype(int)
+        for column in ["breadth_up_count", "breadth_down_count", "limit_up_count", "limit_down_count"]:
+            if column in frame.columns:
+                frame[column] = frame[column].fillna(0).astype(int)
     return frame.reset_index(drop=True)
 
 

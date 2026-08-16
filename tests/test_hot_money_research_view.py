@@ -33,6 +33,7 @@ def test_build_hot_money_research_view_returns_latest_mainlines(tmp_path: Path) 
 
     assert view["status"] == "READY"
     assert view["latest_trade_date"] == "20260706"
+    assert [row["sector_name"] for row in view["top_sectors"]] == ["算力"]
     assert view["mainlines"][0]["sector_name"] == "算力"
     assert view["leaders"][0]["role"] == "LEADER"
     assert [row["name"] for row in view["sector_limit_ups"]] == ["A1", "A2"]
@@ -47,6 +48,7 @@ def test_build_hot_money_research_view_reports_missing_cache(tmp_path: Path) -> 
     view = build_hot_money_research_view(tmp_path / "missing.duckdb")
 
     assert view["status"] == "MISSING_CACHE"
+    assert view["top_sectors"] == []
     assert view["mainlines"] == []
     assert view["leaders"] == []
 

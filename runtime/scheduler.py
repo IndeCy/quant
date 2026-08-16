@@ -190,7 +190,7 @@ def install_market_open_paper_execution_job(
         minute=minute,
         id=MARKET_OPEN_PAPER_EXECUTION_JOB_ID,
         replace_existing=True,
-        misfire_grace_time=DEFAULT_MISFIRE_GRACE_SECONDS,
+        misfire_grace_time=5 * 60 * 60 + 25 * 60,
         kwargs={
             "command": command,
             "cwd": str(project_root()),

@@ -86,6 +86,54 @@ def test_repository_upserts_market_rows(tmp_path) -> None:
     assert history.loc[0, "ma20_above_ratio"] == 0.6
 
 
+def test_repository_preserves_market_observations_when_base_curve_is_refreshed(tmp_path) -> None:
+    """基础基准曲线重写时不得清零已沉淀的宽度和成交额指标。"""
+    repo = MonitoringRepository(tmp_path / "monitoring.sqlite3")
+    enriched = pd.DataFrame(
+        [
+            {
+                "trade_date": "20260727",
+                "benchmark_id": "510300",
+                "benchmark_nav": 1.0,
+                "benchmark_return": 0.01,
+                "benchmark_drawdown": -0.02,
+                "ma60": 0.98,
+                "ma120": 0.95,
+                "trend_state": "UP",
+                "breadth_up_count": 4000,
+                "breadth_down_count": 1200,
+                "market_amount": 2_000_000_000.0,
+                "amount_ratio_20": 1.05,
+                "ma20_above_ratio": 0.62,
+            }
+        ]
+    )
+    repo.upsert_market_daily(enriched)
+
+    base_curve = enriched[
+        [
+            "trade_date",
+            "benchmark_id",
+            "benchmark_nav",
+            "benchmark_return",
+            "benchmark_drawdown",
+            "ma60",
+            "ma120",
+            "trend_state",
+        ]
+    ].copy()
+    base_curve.loc[0, "benchmark_nav"] = 1.01
+    repo.upsert_market_daily(base_curve)
+
+    latest = repo.load_market_history("510300").iloc[-1]
+    assert latest["benchmark_nav"] == 1.01
+    assert latest["breadth_up_count"] == 4000
+    assert latest["breadth_down_count"] == 1200
+    assert latest["market_amount"] == 2_000_000_000.0
+    assert latest["amount_ratio_20"] == 1.05
+    assert latest["ma20_above_ratio"] == 0.62
+
+
 def test_repository_upserts_market_beta_snapshots(tmp_path) -> None:
     """Beta 观测快照按交易日幂等覆盖，并保留可解释原因。"""
     repo = MonitoringRepository(tmp_path / "monitoring.sqlite3")

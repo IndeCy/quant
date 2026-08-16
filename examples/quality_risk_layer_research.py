@@ -11,6 +11,7 @@ from pathlib import Path
 import math
 import os
 import sys
+from typing import Protocol
 
 import pandas as pd
 
@@ -100,6 +101,20 @@ class RiskLayerRun:
     events: pd.DataFrame
 
 
+class RiskExposureController(Protocol):
+    """状态型风险控制器的最小研究接口。"""
+
+    def update(
+        self,
+        date: pd.Timestamp,
+        *,
+        volatility: float,
+        drawdown: float,
+        daily_return: float,
+    ) -> float:
+        """根据截至当日收盘的状态返回下一交易日目标仓位。"""
+
+
 def calculate_risk_state(
     scheme: str,
     daily_values: dict[pd.Timestamp, float],
@@ -142,6 +157,7 @@ def run_risk_layer_backtest(
     vol_window: int = 60,
     vol_threshold: float | None = None,
     reduced_exposure: float | None = None,
+    exposure_controller: RiskExposureController | None = None,
 ) -> RiskLayerRun:
     """在线运行风险层，信号在收盘生成并于下一交易日执行。"""
     cash = INITIAL_CASH
@@ -196,6 +212,15 @@ def run_risk_layer_backtest(
             vol_threshold,
             reduced_exposure,
         )
+        if exposure_controller is not None:
+            values = pd.Series(daily_values).sort_index()
+            daily_return = float(values.pct_change().iloc[-1]) if len(values) >= 2 else 0.0
+            exposure = exposure_controller.update(
+                date,
+                volatility=float(state["volatility60"]),
+                drawdown=float(state["drawdown"]),
+                daily_return=daily_return,
+            )
         if current_quality is not None:
             exposure_history[date] = exposure
         exposure_changed = previous_exposure is None or exposure != previous_exposure

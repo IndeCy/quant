@@ -190,6 +190,7 @@ def get_realtime_quote(codes: list[str]) -> dict[str, dict]:
               'change_pct': 涨跌幅(%),
               'high': 最高,
               'low': 最低,
+              'volume_lots': 总成交量(手),
               'amount_wan': 成交额(万元),
               'turnover_pct': 换手率(%),
               'pe_ttm': PE(TTM),
@@ -213,7 +214,7 @@ def get_realtime_quote(codes: list[str]) -> dict[str, dict]:
     """
     prefixed = []
     for c in codes:
-        if c.startswith(("6", "9")):
+        if c.startswith(("5", "6", "9")):
             prefixed.append(f"sh{c}")
         elif c.startswith("8"):
             prefixed.append(f"bj{c}")
@@ -244,10 +245,12 @@ def get_realtime_quote(codes: list[str]) -> dict[str, dict]:
             "price": _f(3),
             "last_close": _f(4),
             "open": _f(5),
+            "quote_time": vals[30],
             "change_amt": _f(31),
             "change_pct": _f(32),
             "high": _f(33),
             "low": _f(34),
+            "volume_lots": _f(6),
             "amount_wan": _f(37),
             "turnover_pct": _f(38),
             "pe_ttm": _f(39),
@@ -260,6 +263,14 @@ def get_realtime_quote(codes: list[str]) -> dict[str, dict]:
             "vol_ratio": _f(49),
             "pe_static": _f(52),
         }
+        if len(vals) > 81:
+            result[code].update(
+                {
+                    "premium_pct": _f(77),
+                    "reference_nav": _f(78),
+                    "previous_nav": _f(81),
+                }
+            )
     return result
 
 

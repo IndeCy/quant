@@ -18,6 +18,7 @@ from domain.strategy_execution import StrategyExecutionResult, TargetPortfolio
 from runtime.paths import RuntimePaths, get_runtime_paths
 from runtime.local_paper_bridge import load_live_market_for_symbols, sync_strategy_target_to_local_paper
 from runtime.notification_config import resolve_bark_url
+from runtime.paper_execution_policy import broker_config_from_instance
 from runtime.repository import SystemRepository
 from runtime.strategy_commit_coordinator import StrategyCommitCoordinator
 from runtime.strategy_commit_journal import StrategyCommitJournalRepository
@@ -36,17 +37,17 @@ from strategies.factor_topn_runner import (
     compute_factor_topn_monthly_instance,
     persist_factor_topn_monthly_instance,
 )
+from runtime.fixed_allocation_observer_adapter import (
+    compute_fixed_allocation_observer_adapter,
+    persist_fixed_allocation_observer_adapter,
+)
 from strategies.mainline_chain_factor_runner import (
     MainlineChainComputation,
     compute_factor_chain_rotation_instance,
     persist_factor_chain_rotation_instance,
 )
-from strategies.quality_overlay_runner import (
-    QualityOverlayComputation,
-    compute_quality_overlay_instance,
-    persist_quality_overlay_instance,
-)
-
+from strategies.quality_overlay_runner import QualityOverlayComputation, compute_quality_overlay_instance, persist_quality_overlay_instance
+from strategies.quality_value_lowvol_adapter import compute_quality_value_lowvol_adapter, persist_quality_value_lowvol_adapter
 
 def run_enabled_strategy_instances(
     paths: RuntimePaths | None = None,
@@ -81,7 +82,6 @@ def run_enabled_strategy_instances(
         force_commit=force_commit,
     )
 
-
 @dataclass(frozen=True)
 class _ComputedInstance:
     """批处理内部的计算结果，异常延迟到串行提交阶段登记。"""
@@ -91,7 +91,6 @@ class _ComputedInstance:
     computation: StrategyComputation | None
     error: Exception | None
     duration_seconds: float
-
 
 def execute_strategy_instances(
     instances: list[dict[str, Any]],
@@ -227,36 +226,24 @@ def _commit_instance(
     )
 
 
-def _run_instance(
-    instance: dict[str, Any],
-    paths: RuntimePaths,
-    repository: SystemRepository,
-    executors: StrategyExecutorRegistry,
-    trade_date: str,
-    push: bool = False,
-    bark_url: str = "",
-) -> dict[str, object]:
-    """兼容单实例调用，但仍复用标准两阶段批处理。"""
-    summary = execute_strategy_instances(
-        [instance],
-        paths,
-        repository,
-        executors,
-        trade_date,
-        push=push,
-        bark_url=bark_url,
-        max_workers=1,
-    )
-    return dict(summary["results"][0])
-
-
 def build_default_strategy_executor_registry() -> StrategyExecutorRegistry:
     """登记内置模板和显式兼容适配器，新增策略不再修改分发分支。"""
     registry = StrategyExecutorRegistry()
     registry.register("factor_topn_monthly", _compute_factor_topn, _persist_factor_topn)
     registry.register("factor_chain_rotation", _compute_factor_chain_rotation, _persist_factor_chain_rotation)
     registry.register("opportunity_observer", _compute_opportunity_observer, _persist_opportunity_observer)
+    registry.register(
+        "fixed_allocation_observer",
+        compute_fixed_allocation_observer_adapter,
+        persist_fixed_allocation_observer_adapter,
+    )
     registry.register("quality_overlay_compat", _compute_quality_native, _persist_quality_native)
+    for adapter_id in ("quality_value_lowvol_asof_v0", "quality_value_extension_asof_v1"):
+        registry.register(
+            adapter_id,
+            compute_quality_value_lowvol_adapter,
+            persist_quality_value_lowvol_adapter,
+        )
     return registry
 
 
@@ -434,6 +421,7 @@ def _sync_target_portfolio(
         initial_cash=float((instance.get("config") or {}).get("initial_capital", 1_000_000.0)),
         benchmark_symbol=str(instance.get("benchmark") or "510300"),
         benchmark_name=str(instance.get("benchmark") or "510300"),
+        broker_config=broker_config_from_instance(instance),
     )
     return (
         f"paper_broker created={result.created_orders}, executed={result.executed_orders}, "

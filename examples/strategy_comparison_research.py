@@ -20,6 +20,12 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from backtest.execution_model import ExecutionModel
 from backtest.research_benchmark import align_benchmark_return, load_hs300_benchmark
+from data.market_features import (
+    load_feature_bars,
+    load_month_end_signal_dates,
+    load_trading_calendar,
+    materialize_market_features,
+)
 
 DB_PATH = Path("daily_adj_19901219_20260615.duckdb")
 REPORT_PATH = Path("reports/strategy_comparison_research.md")
@@ -101,75 +107,16 @@ def main() -> None:
 
 def create_feature_table(con) -> None:
     """创建研究用月频因子临时表，统一使用前复权 qfq 价格。"""
-    con.execute(
-        f"""
-        CREATE OR REPLACE TEMP TABLE features AS
-        WITH bars AS (
-            SELECT
-                a.ts_code AS symbol,
-                a.trade_date,
-                a.open_qfq AS open,
-                a.high_qfq AS high,
-                a.low_qfq AS low,
-                a.close_qfq AS close,
-                a.pre_close_qfq AS pre_close,
-                d.vol AS volume,
-                d.amount,
-                st.name AS st_name,
-                LAG(a.close_qfq) OVER(PARTITION BY a.ts_code ORDER BY a.trade_date) AS prev_close,
-                LAG(a.close_qfq, 20) OVER(PARTITION BY a.ts_code ORDER BY a.trade_date) AS close_20,
-                LAG(a.close_qfq, 120) OVER(PARTITION BY a.ts_code ORDER BY a.trade_date) AS close_120,
-                AVG(a.close_qfq) OVER(PARTITION BY a.ts_code ORDER BY a.trade_date ROWS BETWEEN 59 PRECEDING AND CURRENT ROW) AS ma60,
-                AVG(a.close_qfq) OVER(PARTITION BY a.ts_code ORDER BY a.trade_date ROWS BETWEEN 119 PRECEDING AND CURRENT ROW) AS ma120
-            FROM daily_adj_cache a
-            JOIN daily d ON a.ts_code = d.ts_code AND a.trade_date = d.trade_date
-            LEFT JOIN stock_st st ON a.ts_code = st.ts_code AND a.trade_date = st.trade_date
-            WHERE a.trade_date >= '{LOOKBACK_START}'
-        ),
-        returns AS (
-            SELECT
-                *,
-                close / NULLIF(prev_close, 0) - 1 AS ret,
-                close / NULLIF(close_20, 0) - 1 AS ret20,
-                close / NULLIF(close_120, 0) - 1 AS ret120
-            FROM bars
-        )
-        SELECT
-            *,
-            STDDEV_SAMP(ret) OVER(PARTITION BY symbol ORDER BY trade_date ROWS BETWEEN 59 PRECEDING AND CURRENT ROW) AS vol60,
-            QUANTILE_CONT(amount, 0.2) OVER(PARTITION BY trade_date) AS amount_p20,
-            CASE
-              WHEN pre_close IS NULL OR pre_close <= 0 THEN false
-              WHEN st_name IS NOT NULL THEN open >= pre_close * 1.047
-              ELSE open >= pre_close * 1.097
-            END AS limit_up,
-            CASE
-              WHEN pre_close IS NULL OR pre_close <= 0 THEN false
-              WHEN st_name IS NOT NULL THEN open <= pre_close * 0.953
-              ELSE open <= pre_close * 0.903
-            END AS limit_down,
-            COALESCE(volume, 0) <= 0 OR COALESCE(amount, 0) <= 0 AS is_suspended
-        FROM returns
-        WHERE trade_date >= '{START_DATE}'
-          AND open > 0 AND close > 0
-        """
+    materialize_market_features(
+        con,
+        lookback_start=LOOKBACK_START,
+        research_start=START_DATE,
     )
 
 
 def load_signal_dates(con) -> list[str]:
     """读取每月最后一个真实交易日，最后一天无 T+1 时剔除。"""
-    return [
-        row[0]
-        for row in con.execute(
-            """
-            SELECT MAX(trade_date) AS signal_date
-            FROM features
-            GROUP BY SUBSTR(trade_date, 1, 6)
-            HAVING MAX(trade_date) < (SELECT MAX(trade_date) FROM features)
-            ORDER BY signal_date
-            """
-        ).fetchall()
-    ]
+    return load_month_end_signal_dates(con)
 
 
 def load_monthly_selections(con, signal_dates: list[str], selector_sql: str) -> dict[str, list[str]]:
@@ -195,27 +142,12 @@ def load_monthly_selections(con, signal_dates: list[str], selector_sql: str) -> 
 
 def load_research_bars(con, symbols: list[str]) -> pd.DataFrame:
     """加载所有入选过股票的统一前复权行情。"""
-    if not symbols:
-        return pd.DataFrame()
-    symbol_values = ",".join(["?"] * len(symbols))
-    frame = con.execute(
-        f"""
-        SELECT trade_date, symbol, open, high, low, close, volume, amount,
-               is_suspended, limit_up, limit_down
-        FROM features
-        WHERE symbol IN ({symbol_values})
-        ORDER BY trade_date, symbol
-        """,
-        symbols,
-    ).fetchdf()
-    frame["date"] = pd.to_datetime(frame["trade_date"], format="%Y%m%d")
-    return frame.set_index(["date", "symbol"]).sort_index()
+    return load_feature_bars(con, symbols)
 
 
 def load_calendar(con) -> list[pd.Timestamp]:
     """读取研究期真实交易日历。"""
-    dates = con.execute("SELECT DISTINCT trade_date FROM features ORDER BY trade_date").fetchdf()["trade_date"]
-    return list(pd.to_datetime(dates, format="%Y%m%d"))
+    return load_trading_calendar(con)
 
 
 def run_monthly_backtest(

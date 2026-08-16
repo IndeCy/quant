@@ -241,6 +241,85 @@
   word-break: break-word;
 }
 
+.strategy-holdings-panel .panel-head p {
+  color: #64748b;
+  font-size: 12px;
+  margin: 4px 0 0;
+}
+
+.strategy-holdings-panel table {
+  min-width: 0;
+}
+
+.all-strategy-holdings-panel {
+  margin-top: 14px;
+}
+
+.all-strategy-holdings-panel .panel-head p {
+  color: #64748b;
+  font-size: 12px;
+  margin: 4px 0 0;
+}
+
+.all-strategy-holdings-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.all-strategy-holdings-card {
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 12px;
+}
+
+.all-strategy-holdings-card > button {
+  align-items: center;
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+  display: flex;
+  font: inherit;
+  justify-content: space-between;
+  padding: 0;
+  text-align: left;
+  width: 100%;
+}
+
+.all-strategy-holdings-card > button span,
+.holdings-card-meta {
+  color: #64748b;
+  font-size: 12px;
+}
+
+.holdings-card-meta {
+  display: flex;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.holdings-chip-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+
+.holdings-chip-list > span {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  color: #475569;
+  display: inline-flex;
+  font-size: 11px;
+  gap: 5px;
+  padding: 4px 7px;
+}
+
+.holdings-chip-list strong {
+  color: #0f172a;
+}
+
 .artifact-row {
   grid-template-columns: minmax(120px, 1fr) 112px minmax(160px, 1.2fr);
 }
@@ -340,6 +419,10 @@
 }
 
 @media (max-width: 1180px) {
+  .all-strategy-holdings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .reports-layout,
   .runs-layout,
   .health-grid,

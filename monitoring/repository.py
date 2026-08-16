@@ -97,7 +97,11 @@ class MonitoringRepository:
             )
 
     def upsert_market_daily(self, frame: pd.DataFrame) -> None:
-        """按 trade_date + benchmark_id 覆盖写入大盘日频指标。"""
+        """按 trade_date + benchmark_id 覆盖写入大盘日频指标。
+
+        调用方只负责自己提供的列；未提供的宽度、成交额等派生列必须保留
+        既有值，避免基础基准曲线刷新时把 Beta 观察结果清零。
+        """
         if frame.empty:
             return
         columns = [
@@ -127,53 +131,35 @@ class MonitoringRepository:
             "low_amount_ratio",
             "zero_volume_ratio",
         ]
-        data = frame.reindex(columns=columns).copy()
-        data = data.fillna(
-            {
-                "trend_state": "",
-                "breadth_up_count": 0,
-                "breadth_down_count": 0,
-                "limit_up_count": 0,
-                "limit_down_count": 0,
-                **{name: 0 for name in self.MARKET_EXTRA_COLUMNS},
-            }
+        provided_columns = [column for column in columns if column in frame.columns]
+        data = frame.reindex(columns=provided_columns).copy()
+        fill_values = {
+            "trend_state": "",
+            "breadth_up_count": 0,
+            "breadth_down_count": 0,
+            "limit_up_count": 0,
+            "limit_down_count": 0,
+            **{name: 0 for name in self.MARKET_EXTRA_COLUMNS},
+        }
+        data = data.fillna({name: value for name, value in fill_values.items() if name in provided_columns})
+        insert_columns = ", ".join(provided_columns)
+        placeholders = ", ".join("?" for _ in provided_columns)
+        update_columns = [
+            column
+            for column in provided_columns
+            if column not in {"trade_date", "benchmark_id"}
+        ]
+        update_sql = ",\n                    ".join(
+            f"{column}=excluded.{column}"
+            for column in update_columns
         )
         with self._connect() as con:
             con.executemany(
-                """
-                INSERT INTO market_state_daily(
-                    trade_date, benchmark_id, benchmark_nav, benchmark_return,
-                    benchmark_drawdown, ma60, ma120, trend_state, breadth_up_count,
-                    breadth_down_count, limit_up_count, limit_down_count,
-                    breadth_flat_count, equal_weight_return, median_return,
-                    ma20_above_ratio, ma60_above_ratio, ma120_above_ratio,
-                    new_high_20_count, new_low_20_count, market_amount,
-                    amount_ma20, amount_ratio_20, low_amount_ratio, zero_volume_ratio
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                f"""
+                INSERT INTO market_state_daily({insert_columns})
+                VALUES ({placeholders})
                 ON CONFLICT(trade_date, benchmark_id) DO UPDATE SET
-                    benchmark_nav=excluded.benchmark_nav,
-                    benchmark_return=excluded.benchmark_return,
-                    benchmark_drawdown=excluded.benchmark_drawdown,
-                    ma60=excluded.ma60,
-                    ma120=excluded.ma120,
-                    trend_state=excluded.trend_state,
-                    breadth_up_count=excluded.breadth_up_count,
-                    breadth_down_count=excluded.breadth_down_count,
-                    limit_up_count=excluded.limit_up_count,
-                    limit_down_count=excluded.limit_down_count,
-                    breadth_flat_count=excluded.breadth_flat_count,
-                    equal_weight_return=excluded.equal_weight_return,
-                    median_return=excluded.median_return,
-                    ma20_above_ratio=excluded.ma20_above_ratio,
-                    ma60_above_ratio=excluded.ma60_above_ratio,
-                    ma120_above_ratio=excluded.ma120_above_ratio,
-                    new_high_20_count=excluded.new_high_20_count,
-                    new_low_20_count=excluded.new_low_20_count,
-                    market_amount=excluded.market_amount,
-                    amount_ma20=excluded.amount_ma20,
-                    amount_ratio_20=excluded.amount_ratio_20,
-                    low_amount_ratio=excluded.low_amount_ratio,
-                    zero_volume_ratio=excluded.zero_volume_ratio,
+                    {update_sql},
                     modified_at=CURRENT_TIMESTAMP
                 """,
                 [tuple(row) for row in data.itertuples(index=False, name=None)],

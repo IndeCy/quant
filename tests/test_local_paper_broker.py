@@ -5,9 +5,12 @@ from __future__ import annotations
 from pathlib import Path
 
 import pandas as pd
+import pytest
 
+from backtest.paper_execution import BrokerConfig
 from runtime.local_paper_broker import LocalPaperBroker, PaperBrokerTarget
 from runtime.local_paper_bridge import next_broker_trading_dates
+from runtime.paper_execution_policy import load_execution_policy
 
 
 def _market_data() -> pd.DataFrame:
@@ -217,10 +220,286 @@ def test_insufficient_cash_rejects_one_order_without_aborting_batch(tmp_path: Pa
     assert orders["VALID.SZ"]["status"] == "FILLED"
 
 
-def _execution_bar(symbol: str, open_price: float) -> dict[str, object]:
+def test_account_execution_policy_survives_market_open_restart(tmp_path: Path) -> None:
+    """盘后保存的费率口径必须被次日独立开盘进程读取并真实入账。"""
+    db_path = tmp_path / "paper.sqlite3"
+    config = BrokerConfig(
+        slippage_bps=100.0,
+        execution_delay=1,
+        max_participation_rate=1.0,
+        commission_rate=0.01,
+        stamp_tax_rate=0.02,
+        min_commission=0.0,
+        lot_size=100,
+    )
+    signal_broker = LocalPaperBroker(db_path, config)
+    first = signal_broker.sync_target(
+        PaperBrokerTarget(
+            strategy_id="persisted_execution_policy",
+            strategy_name="持久化执行口径测试",
+            trade_date="20260708",
+            target_weights={"AAA.SZ": 0.5},
+            market_data=_market_data(),
+            trading_dates=["20260708", "20260709"],
+            initial_cash=100_000.0,
+        )
+    )
+    signal_broker.close()
+
+    persisted = load_execution_policy(db_path, first.account_id)
+    assert persisted is not None
+    assert persisted.slippage_bps == 100.0
+    assert persisted.commission_rate == 0.01
+    assert persisted.stamp_tax_rate == 0.02
+    assert persisted.lot_size == 100
+
+    open_broker = LocalPaperBroker(db_path)
+    executed, rejected = open_broker.execute_due_orders(
+        "20260709",
+        _market_data(),
+        [first.account_id],
+    )
+    buy_order = open_broker.store.list_orders(first.account_id)[0]
+    account = open_broker.store.get_account(first.account_id)
+
+    assert (executed, rejected) == (1, 0)
+    assert buy_order["fill_price"] == 10.302
+    assert buy_order["commission"] == 515.1
+    assert buy_order["stamp_tax"] == 0.0
+    assert float(account["cash"]) == pytest.approx(47_974.9)
+
+    open_broker.sync_target(
+        PaperBrokerTarget(
+            strategy_id="persisted_execution_policy",
+            strategy_name="持久化执行口径测试",
+            trade_date="20260709",
+            target_weights={},
+            market_data=_market_data(),
+            trading_dates=["20260709", "20260710"],
+            initial_cash=100_000.0,
+        )
+    )
+    open_broker.close()
+
+    sell_broker = LocalPaperBroker(db_path)
+    executed, rejected = sell_broker.execute_due_orders(
+        "20260710",
+        pd.DataFrame([_execution_bar("AAA.SZ", 10.0, "20260710")]),
+        [first.account_id],
+    )
+    sell_order = next(
+        item
+        for item in sell_broker.store.list_orders(first.account_id)
+        if item["side"] == "SELL"
+    )
+    account = sell_broker.store.get_account(first.account_id)
+
+    assert (executed, rejected) == (1, 0)
+    assert sell_order["fill_price"] == 9.9
+    assert sell_order["commission"] == 495.0
+    assert sell_order["stamp_tax"] == 990.0
+    assert float(account["cash"]) == pytest.approx(95_989.9)
+    assert sell_broker.store.list_positions(first.account_id) == []
+    sell_broker.close()
+
+
+def test_open_aware_policy_resizes_due_orders_with_t1_open_price(
+    tmp_path: Path,
+) -> None:
+    """显式启用后应按T+1开盘价重建整手订单，避免隔夜高开整单拒绝。"""
+    db_path = tmp_path / "paper.sqlite3"
+    config = BrokerConfig(
+        slippage_bps=10.0,
+        execution_delay=1,
+        max_participation_rate=1.0,
+        commission_rate=0.0003,
+        min_commission=5.0,
+        lot_size=100,
+        open_aware_order_sizing=True,
+    )
+    signal_market = pd.DataFrame(
+        [
+            _signal_bar("AAA.SZ", 10.0),
+            _signal_bar("BBB.SZ", 10.0),
+        ]
+    )
+    broker = LocalPaperBroker(db_path, config)
+    synced = broker.sync_target(
+        PaperBrokerTarget(
+            strategy_id="open_aware_test",
+            strategy_name="开盘重算测试",
+            trade_date="20260708",
+            target_weights={"AAA.SZ": 0.5, "BBB.SZ": 0.5},
+            market_data=signal_market,
+            trading_dates=["20260708", "20260709"],
+            initial_cash=100_000.0,
+        )
+    )
+    broker.close()
+
+    open_market = pd.DataFrame(
+        [
+            _execution_bar("AAA.SZ", 10.5),
+            _execution_bar("BBB.SZ", 10.5),
+        ]
+    )
+    restarted = LocalPaperBroker(db_path)
+    resize = restarted.resize_due_orders(
+        synced.account_id,
+        "20260709",
+        open_market,
+    )
+    executed, rejected = restarted.execute_due_orders(
+        "20260709",
+        open_market,
+        [synced.account_id],
+    )
+    orders = restarted.store.list_orders(synced.account_id)
+    positions = restarted.store.list_positions(synced.account_id)
+    restarted.close()
+
+    assert resize.status == "RESIZED"
+    assert resize.cancelled_orders == 2
+    assert resize.created_orders == 2
+    assert (executed, rejected) == (2, 0)
+    assert sorted(
+        order["quantity"]
+        for order in orders
+        if order["status"] == "FILLED"
+    ) == [4_700, 4_700]
+    assert sorted(item["quantity"] for item in positions) == [4_700, 4_700]
+
+
+def test_open_aware_partial_resize_retries_missing_symbol(
+    tmp_path: Path,
+) -> None:
+    """单票缺开盘价不得阻塞组合，未完成目标应在下一交易日重试。"""
+    db_path = tmp_path / "paper.sqlite3"
+    config = BrokerConfig(
+        slippage_bps=0.0,
+        execution_delay=1,
+        max_participation_rate=1.0,
+        lot_size=100,
+        open_aware_order_sizing=True,
+    )
+    broker = LocalPaperBroker(db_path, config)
+    synced = broker.sync_target(
+        PaperBrokerTarget(
+            strategy_id="open_aware_partial",
+            strategy_name="开盘部分重算测试",
+            trade_date="20260708",
+            target_weights={"AAA.SZ": 0.5, "BBB.SZ": 0.5},
+            market_data=pd.DataFrame(
+                [
+                    _signal_bar("AAA.SZ", 10.0),
+                    _signal_bar("BBB.SZ", 10.0),
+                ]
+            ),
+            trading_dates=["20260708", "20260709"],
+            initial_cash=100_000.0,
+        )
+    )
+    first_market = pd.DataFrame(
+        [
+            _execution_bar("AAA.SZ", 10.0, "20260709"),
+            {
+                **_execution_bar("BBB.SZ", 0.0, "20260709"),
+                "is_suspended": True,
+            },
+        ]
+    )
+
+    first_resize = broker.resize_due_orders(
+        synced.account_id,
+        "20260709",
+        first_market,
+    )
+    first_fill = broker.execute_due_orders(
+        "20260709",
+        first_market,
+        [synced.account_id],
+    )
+    second_market = pd.DataFrame(
+        [
+            _execution_bar("AAA.SZ", 10.0, "20260710"),
+            _execution_bar("BBB.SZ", 10.0, "20260710"),
+        ]
+    )
+    second_resize = broker.resize_due_orders(
+        synced.account_id,
+        "20260710",
+        second_market,
+    )
+    second_fill = broker.execute_due_orders(
+        "20260710",
+        second_market,
+        [synced.account_id],
+    )
+    positions = broker.store.list_positions(synced.account_id)
+    batch = broker.store.conn.execute(
+        "SELECT status FROM paper_target_batch WHERE account_id = ?",
+        [synced.account_id],
+    ).fetchone()
+    broker.close()
+
+    assert first_resize.status == "PARTIAL"
+    assert first_resize.created_orders == 1
+    assert first_fill == (1, 0)
+    assert second_resize.status == "RESIZED"
+    assert second_resize.created_orders == 1
+    assert second_fill == (1, 0)
+    assert str(batch["status"]) == "APPLIED"
+    assert sorted(item["quantity"] for item in positions) == [5_000, 5_000]
+
+
+def test_legacy_account_does_not_resize_due_orders(tmp_path: Path) -> None:
+    """未声明新政策的历史账户必须继续使用原收盘定量语义。"""
+    broker = LocalPaperBroker(tmp_path / "paper.sqlite3")
+    synced = broker.sync_target(
+        PaperBrokerTarget(
+            strategy_id="legacy_sizing_test",
+            strategy_name="旧订单政策测试",
+            trade_date="20260708",
+            target_weights={"AAA.SZ": 0.5},
+            market_data=pd.DataFrame([_signal_bar("AAA.SZ", 10.0)]),
+            trading_dates=["20260708", "20260709"],
+            initial_cash=100_000.0,
+        )
+    )
+
+    resize = broker.resize_due_orders(
+        synced.account_id,
+        "20260709",
+        pd.DataFrame([_execution_bar("AAA.SZ", 10.5)]),
+    )
+    orders = broker.store.list_orders(synced.account_id)
+    broker.close()
+
+    assert resize.status == "SKIPPED"
+    assert orders[0]["status"] == "PENDING"
+    assert orders[0]["quantity"] == 5_000
+
+
+def _signal_bar(
+    symbol: str,
+    close_price: float,
+    trade_date: str = "20260708",
+) -> dict[str, object]:
+    """构造盘后目标同步使用的信号日行情。"""
+    return {
+        **_execution_bar(symbol, close_price, trade_date),
+        "close": close_price,
+    }
+
+
+def _execution_bar(
+    symbol: str,
+    open_price: float,
+    trade_date: str = "20260709",
+) -> dict[str, object]:
     """构造具备充足流动性的统一开盘行情。"""
     return {
-        "trade_date": "20260709",
+        "trade_date": trade_date,
         "symbol": symbol,
         "name": symbol,
         "open": open_price,

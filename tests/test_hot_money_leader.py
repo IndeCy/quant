@@ -95,3 +95,25 @@ def test_leader_streak_resets_when_previous_limit_is_not_previous_trade_date() -
     daily = result[(result["trade_date"] == "20260708") & (result["ts_code"] == "000001.SZ")]
 
     assert daily["limit_streak"].tolist() == [1]
+
+
+def test_leader_engine_limits_output_date_without_losing_historical_streak() -> None:
+    """只生成最新日时仍须用完整历史计算连板。"""
+    limit_rows = pd.DataFrame(
+        [
+            {"trade_date": "20260706", "ts_code": "000001.SZ", "name": "A1", "limit_type": "U", "amount": 80.0, "pct_chg": 10.0, "open_times": 0},
+            {"trade_date": "20260707", "ts_code": "000001.SZ", "name": "A1", "limit_type": "U", "amount": 120.0, "pct_chg": 10.0, "open_times": 0},
+        ]
+    )
+    sector_map = pd.DataFrame([{"ts_code": "000001.SZ", "sector_name": "算力"}])
+    sector_momentum = pd.DataFrame([{"trade_date": "20260707", "sector_name": "算力", "is_mainline": True}])
+
+    result = build_leader_stock_daily(
+        limit_rows,
+        sector_momentum,
+        sector_map,
+        trade_date="20260707",
+    )
+
+    assert result["trade_date"].tolist() == ["20260707"]
+    assert result["limit_streak"].tolist() == [2]

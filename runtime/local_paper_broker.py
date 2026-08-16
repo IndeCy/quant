@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from dataclasses import dataclass
 import math
 from pathlib import Path
 from typing import Any
@@ -11,59 +10,33 @@ import pandas as pd
 
 from backtest.paper_execution import BrokerConfig, BrokerSimulator, OrderManager, PaperOrder
 from backtest.paper_trading import PaperTradingStore
+from runtime.paper_broker_models import (
+    PaperBrokerSyncResult,
+    PaperBrokerTarget,
+    RiskReductionPlanResult,
+)
+from runtime.paper_execution_policy import PaperExecutionPolicyManager
+from runtime.paper_open_order_sizing import (
+    OpenOrderResizeResult,
+    PaperOpenOrderSizingService,
+    ensure_paper_order_runtime_columns,
+)
 
 
 LOT_SIZE = 100
-
-
-@dataclass(frozen=True)
-class PaperBrokerTarget:
-    """策略盘后目标组合，统一进入本地模拟券商。"""
-
-    strategy_id: str
-    strategy_name: str
-    trade_date: str
-    target_weights: dict[str, float]
-    market_data: pd.DataFrame
-    trading_dates: list[str]
-    initial_cash: float = 1_000_000.0
-    benchmark_symbol: str = "510300"
-    benchmark_name: str = "沪深300"
-    execute_due_orders: bool = False
-    replace_pending_orders: bool = False
-
-
-@dataclass(frozen=True)
-class PaperBrokerSyncResult:
-    """本地模拟券商同步结果。"""
-
-    account_id: int
-    trade_date: str
-    next_trade_date: str
-    created_orders: int
-    executed_orders: int
-    rejected_orders: int
-    pending_orders: int
-    cancelled_orders: int = 0
-
-
-@dataclass(frozen=True)
-class RiskReductionPlanResult:
-    """风险减仓覆盖原委托后的订单计划结果。"""
-
-    account_id: int
-    target_exposure: float
-    cancelled_orders: int
-    created_orders: int
-
 
 class LocalPaperBroker:
     """把策略目标权重转成统一模拟盘委托、成交和持仓。"""
 
     def __init__(self, db_path: str | Path, broker_config: BrokerConfig | None = None) -> None:
         self.store = PaperTradingStore(db_path)
-        self.broker = BrokerSimulator(broker_config or BrokerConfig())
-        self._ensure_execution_columns()
+        self.execution_policies = PaperExecutionPolicyManager(db_path, broker_config)
+        self.broker = self.execution_policies.default_broker
+        self.open_order_sizing = PaperOpenOrderSizingService(
+            self.store,
+            self.execution_policies,
+        )
+        ensure_paper_order_runtime_columns(self.store.conn)
 
     def close(self) -> None:
         """关闭底层模拟盘数据库。"""
@@ -77,6 +50,14 @@ class LocalPaperBroker:
         dates = sorted(_compact_date(item) for item in target.trading_dates)
         next_trade_date = _next_trade_date(trade_date, dates)
         account_id = self._get_or_create_account(target, trade_iso)
+        self.execution_policies.bind_account(account_id)
+        if next_trade_date:
+            self.open_order_sizing.save_target(
+                account_id,
+                trade_iso,
+                _iso_date(next_trade_date),
+                target.target_weights,
+            )
 
         executed, rejected = (0, 0)
         if target.execute_due_orders:
@@ -124,6 +105,20 @@ class LocalPaperBroker:
             executed += account_executed
             rejected += account_rejected
         return executed, rejected
+
+    def resize_due_orders(
+        self,
+        account_id: int,
+        trade_date: str,
+        market_data: pd.DataFrame,
+    ) -> OpenOrderResizeResult:
+        """显式启用时按T+1开盘价格重建到期策略订单。"""
+        market = _normalize_market_data(market_data)
+        return self.open_order_sizing.resize_due_orders(
+            account_id,
+            _iso_date(trade_date),
+            market,
+        )
 
     def prepare_risk_reduction(
         self,
@@ -226,7 +221,12 @@ class LocalPaperBroker:
                 quantity=int(order["quantity"]),
                 signal_price=float(order["price"]),
             )
-            filled = self.broker.execute(paper_order, market_row, manager)
+            filled = self.execution_policies.execute(
+                int(order["account_id"]),
+                paper_order,
+                market_row,
+                manager,
+            )
             if filled.status == "REJECTED":
                 self._mark_rejected(int(order["id"]), trade_iso, filled.reject_reason)
                 rejected += 1
@@ -237,26 +237,45 @@ class LocalPaperBroker:
                 rejected += 1
                 continue
             amount = quantity * float(filled.fill_price)
+            execution = manager.execution_logs[-1]
+            commission = float(execution.commission)
+            stamp_tax = float(execution.stamp_tax)
+            cash_amount = (
+                amount + commission
+                if str(order["side"]) == "BUY"
+                else amount - commission - stamp_tax
+            )
             settlement_reason = self._settlement_reject_reason(
                 int(order["account_id"]),
                 str(order["symbol"]),
                 str(order["side"]),
                 quantity,
-                amount,
+                cash_amount,
             )
             if settlement_reason:
                 self._mark_rejected(int(order["id"]), trade_iso, settlement_reason)
                 rejected += 1
                 continue
-            self._apply_fill(int(order["account_id"]), str(order["symbol"]), str(order["symbol_name"]), str(order["side"]), quantity, amount)
+            self._apply_fill(int(order["account_id"]), str(order["symbol"]), str(order["symbol_name"]), str(order["side"]), quantity, cash_amount)
             self.store.conn.execute(
                 """
-                UPDATE paper_order
-                SET fill_date = ?, fill_price = ?, filled_quantity = ?, amount = ?, status = ?,
+                UPDATE paper_order SET
+                    fill_date = ?, fill_price = ?, filled_quantity = ?, amount = ?,
+                    commission = ?, stamp_tax = ?, execution_impact = ?, status = ?,
                     reject_reason = '', modify_time = CURRENT_TIMESTAMP
                 WHERE id = ?
                 """,
-                (trade_iso, float(filled.fill_price), quantity, amount, filled.status, int(order["id"])),
+                (
+                    trade_iso,
+                    float(filled.fill_price),
+                    quantity,
+                    amount,
+                    commission,
+                    stamp_tax,
+                    float(execution.execution_impact),
+                    filled.status,
+                    int(order["id"]),
+                ),
             )
             executed += 1
         self.store.conn.commit()
@@ -407,15 +426,6 @@ class LocalPaperBroker:
             (account_id,),
         ).fetchone()
         return row is not None
-
-    def _ensure_execution_columns(self) -> None:
-        columns = {row["name"] for row in self.store.conn.execute("PRAGMA table_info(paper_order)").fetchall()}
-        if "filled_quantity" not in columns:
-            self.store.conn.execute("ALTER TABLE paper_order ADD COLUMN filled_quantity integer NOT NULL DEFAULT 0")
-        if "reject_reason" not in columns:
-            self.store.conn.execute("ALTER TABLE paper_order ADD COLUMN reject_reason varchar(80) NOT NULL DEFAULT ''")
-        self.store.conn.commit()
-
 
 def _normalize_market_data(frame: pd.DataFrame) -> pd.DataFrame:
     data = frame.copy()

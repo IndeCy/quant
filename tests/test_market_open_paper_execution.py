@@ -6,10 +6,15 @@ from pathlib import Path
 
 import pandas as pd
 
+from backtest.paper_execution import BrokerConfig
 from backtest.paper_trading import PaperTradingStore
 from monitoring.metrics import build_strategy_monitor_frame
 from monitoring.repository import MonitoringRepository
-from runtime.market_open_paper_execution import run_market_open_paper_execution
+from runtime.local_paper_broker import LocalPaperBroker, PaperBrokerTarget
+from runtime.market_open_paper_execution import (
+    fetch_realtime_market_data,
+    run_market_open_paper_execution,
+)
 from runtime.paths import RuntimePaths
 from runtime.portfolio_account import build_account_snapshot
 from runtime.repository import SystemRepository
@@ -94,6 +99,96 @@ def test_market_open_execution_fills_pending_orders_with_realtime_quotes(tmp_pat
     assert account_snapshot["trade_date"] == "20260710"
     assert account_snapshot["positions"][0]["quantity"] == 1000
     assert account_snapshot["positions"][0]["target_weight"] == 0.1
+
+
+def test_market_open_execution_resizes_enabled_account_before_fill(
+    tmp_path: Path,
+    monkeypatch,
+) -> None:
+    """正式开盘任务应先按实时开盘价重建显式启用账户的订单。"""
+    paths = RuntimePaths(tmp_path / "runtime")
+    paths.ensure_directories()
+    config = BrokerConfig(
+        slippage_bps=10.0,
+        max_participation_rate=1.0,
+        commission_rate=0.0003,
+        min_commission=5.0,
+        lot_size=100,
+        open_aware_order_sizing=True,
+    )
+    signal_market = pd.DataFrame(
+        [
+            _dated_bar("AAA.SZ", 10.0, "20260708"),
+            _dated_bar("BBB.SZ", 10.0, "20260708"),
+        ]
+    )
+    broker = LocalPaperBroker(paths.paper_trading_path, config)
+    synced = broker.sync_target(
+        PaperBrokerTarget(
+            strategy_id="open_aware_live_test",
+            strategy_name="开盘重算正式入口测试",
+            trade_date="20260708",
+            target_weights={"AAA.SZ": 0.5, "BBB.SZ": 0.5},
+            market_data=signal_market,
+            trading_dates=["20260708", "20260709"],
+            initial_cash=100_000.0,
+        )
+    )
+    broker.close()
+    monkeypatch.setattr(
+        "runtime.market_open_paper_execution.fetch_realtime_market_data",
+        lambda symbols, trade_date=None: pd.DataFrame(
+            [
+                _dated_bar("AAA.SZ", 10.5, "20260709"),
+                _dated_bar("BBB.SZ", 10.5, "20260709"),
+            ]
+        ),
+    )
+
+    result = run_market_open_paper_execution(
+        paths,
+        trade_date="20260709",
+        push=False,
+    )
+    store = PaperTradingStore(paths.paper_trading_path)
+    try:
+        orders = store.list_orders(synced.account_id)
+        positions = store.list_positions(synced.account_id)
+    finally:
+        store.close()
+
+    assert result.status == "SUCCESS"
+    assert result.resized_orders == 2
+    assert result.resize_failures == 0
+    assert sorted(item["quantity"] for item in positions) == [4_700, 4_700]
+    assert len([item for item in orders if item["status"] == "CANCELLED"]) == 2
+
+
+def test_realtime_market_data_converts_quote_lots_to_shares(
+    monkeypatch,
+) -> None:
+    """腾讯实时总成交量以手返回，进入Broker前必须转换为股。"""
+    monkeypatch.setattr(
+        "runtime.market_open_paper_execution.get_realtime_quote",
+        lambda codes: {
+            "000001": {
+                "name": "平安银行",
+                "price": 10.2,
+                "open": 10.1,
+                "high": 10.3,
+                "low": 10.0,
+                "volume_lots": 1_234,
+                "amount_wan": 1_250,
+                "limit_up": 11.0,
+                "limit_down": 9.0,
+            }
+        },
+    )
+
+    frame = fetch_realtime_market_data(["000001.SZ"], "20260709")
+
+    assert frame.iloc[0]["volume"] == 123_400
+    assert frame.iloc[0]["amount"] == 12_500_000
 
 
 def test_market_open_execution_waits_for_risk_confirmation(tmp_path: Path, monkeypatch) -> None:
@@ -345,4 +440,17 @@ def _market_open_bar(symbol: str, price: float) -> dict[str, object]:
         "is_suspended": False,
         "limit_up": False,
         "limit_down": False,
+    }
+
+
+def _dated_bar(
+    symbol: str,
+    price: float,
+    trade_date: str,
+) -> dict[str, object]:
+    """构造指定日期的可成交行情。"""
+    return {
+        **_market_open_bar(symbol, price),
+        "trade_date": trade_date,
+        "name": symbol,
     }

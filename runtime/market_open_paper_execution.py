@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from datetime import datetime
+import json
+import sqlite3
 from typing import Any
 
 import pandas as pd
@@ -36,6 +38,8 @@ class MarketOpenExecutionResult:
     blocked_orders: int = 0
     cancelled_orders: int = 0
     risk_reduction_orders: int = 0
+    resized_orders: int = 0
+    resize_failures: int = 0
 
 
 def run_market_open_paper_execution(
@@ -87,9 +91,24 @@ def run_market_open_paper_execution(
     try:
         cancelled_orders = 0
         risk_reduction_orders = 0
+        resized_orders = 0
+        resize_failures = 0
+        executable_accounts: list[int] = []
         for account_id in allowed_accounts:
             strategy_id = account_strategies.get(account_id, "")
             if strategy_id not in reduction_targets:
+                resize = broker.resize_due_orders(
+                    account_id,
+                    target_date,
+                    market_data,
+                )
+                if resize.status == "FAILED":
+                    resize_failures += 1
+                    continue
+                if resize.status == "PARTIAL":
+                    resize_failures += 1
+                resized_orders += resize.created_orders
+                executable_accounts.append(account_id)
                 continue
             plan = broker.prepare_risk_reduction(
                 account_id=account_id,
@@ -100,13 +119,22 @@ def run_market_open_paper_execution(
             )
             cancelled_orders += plan.cancelled_orders
             risk_reduction_orders += plan.created_orders
-        executed, rejected = broker.execute_due_orders(target_date, market_data, allowed_accounts)
+            executable_accounts.append(account_id)
+        executed, rejected = broker.execute_due_orders(
+            target_date,
+            market_data,
+            executable_accounts,
+        )
         for account_id in allowed_accounts:
             project_paper_account_snapshot(runtime_paths, broker, account_id, target_date, market_data)
     finally:
         broker.close()
     pending_after = len(_pending_symbols(runtime_paths, target_date))
-    status = "SUCCESS" if rejected == 0 and blocked_orders == 0 else "WARNING"
+    status = (
+        "SUCCESS"
+        if rejected == 0 and blocked_orders == 0 and resize_failures == 0
+        else "WARNING"
+    )
     result = MarketOpenExecutionResult(
         target_date,
         status,
@@ -116,6 +144,8 @@ def run_market_open_paper_execution(
         blocked_orders,
         cancelled_orders,
         risk_reduction_orders,
+        resized_orders,
+        resize_failures,
     )
     message = _format_message(result, pending_after)
     _record_run(runtime_paths, run_dir, result, message)
@@ -145,7 +175,7 @@ def fetch_realtime_market_data(symbols: list[str], trade_date: str | None = None
                 "high": float(quote.get("high") or open_price),
                 "low": float(quote.get("low") or open_price),
                 "close": price or open_price,
-                "volume": 1_000_000_000,
+                "volume": float(quote.get("volume_lots") or 0.0) * 100.0,
                 "amount": float(quote.get("amount_wan") or 0.0) * 10_000,
                 "is_suspended": open_price <= 0 and price <= 0,
                 "limit_up": bool(limit_up and open_price >= limit_up),
@@ -185,7 +215,17 @@ def _pending_symbols(paths: RuntimePaths, trade_date: str) -> list[str]:
             """,
             [_iso_date(trade_date)],
         ).fetchall()
-    return [str(row[0]) for row in rows]
+        batches = _target_batch_rows(
+            con,
+            """
+            SELECT target_weights FROM paper_target_batch
+            WHERE status IN ('PENDING', 'PARTIAL') AND execute_date <= ?
+            """,
+            [_iso_date(trade_date)],
+        )
+    symbols = {str(row[0]) for row in rows}
+    symbols.update(_target_batch_symbols(batches))
+    return sorted(symbols)
 
 
 def _due_account_ids(paths: RuntimePaths, trade_date: str) -> list[int]:
@@ -197,13 +237,21 @@ def _due_account_ids(paths: RuntimePaths, trade_date: str) -> list[int]:
     with sqlite3.connect(paths.paper_trading_path) as con:
         rows = con.execute(
             """
-            SELECT DISTINCT account_id FROM paper_order
+            SELECT account_id FROM paper_order
             WHERE status = 'PENDING' AND order_date <= ?
             ORDER BY account_id
             """,
             [_iso_date(trade_date)],
         ).fetchall()
-    return [int(row[0]) for row in rows]
+        batch_accounts = _target_batch_rows(
+            con,
+            """
+            SELECT account_id FROM paper_target_batch
+            WHERE status IN ('PENDING', 'PARTIAL') AND execute_date <= ?
+            """,
+            [_iso_date(trade_date)],
+        )
+    return sorted({int(row[0]) for row in [*rows, *batch_accounts]})
 
 
 def _account_strategy_codes(paths: RuntimePaths, account_ids: list[int]) -> dict[int, str]:
@@ -274,7 +322,44 @@ def _account_symbols(paths: RuntimePaths, account_ids: list[int]) -> list[str]:
             """,
             [*account_ids, *account_ids],
         ).fetchall()
-    return [str(row[0]) for row in rows]
+        batches = _target_batch_rows(
+            con,
+            f"""
+            SELECT target_weights FROM paper_target_batch
+            WHERE account_id IN ({placeholders})
+              AND status IN ('PENDING', 'PARTIAL')
+            """,
+            account_ids,
+        )
+    symbols = {str(row[0]) for row in rows}
+    symbols.update(_target_batch_symbols(batches))
+    return sorted(symbols)
+
+
+def _target_batch_symbols(rows: list[object]) -> set[str]:
+    """从待执行目标批次中提取股票代码，确保延期批次次日仍可重试。"""
+    symbols: set[str] = set()
+    for row in rows:
+        payload = str(row[0] or "{}")
+        symbols.update(str(symbol) for symbol in json.loads(payload))
+    return symbols
+
+
+def _target_batch_rows(
+    connection: sqlite3.Connection,
+    sql: str,
+    params: list[object],
+) -> list[object]:
+    """旧Paper库没有目标批次表时按空集合兼容读取。"""
+    table = connection.execute(
+        """
+        SELECT 1 FROM sqlite_master
+        WHERE type = 'table' AND name = 'paper_target_batch'
+        """
+    ).fetchone()
+    if table is None:
+        return []
+    return list(connection.execute(sql, params).fetchall())
 
 
 def _record_run(paths: RuntimePaths, run_dir: object, result: MarketOpenExecutionResult, message: str) -> None:
@@ -301,6 +386,8 @@ def _format_message(result: MarketOpenExecutionResult, pending_after: int) -> st
             f"- 风险门禁拦截：{result.blocked_orders}",
             f"- 风险减仓取消原单：{result.cancelled_orders}",
             f"- 风险减仓生成卖单：{result.risk_reduction_orders}",
+            f"- 开盘重建订单：{result.resized_orders}",
+            f"- 开盘重建失败：{result.resize_failures}",
             f"- 剩余待成交：{pending_after}",
         ]
     )

@@ -12,7 +12,7 @@ from typing import Iterable
 
 
 def changed_files(root: Path, base_ref: str) -> list[str]:
-    """读取相对基准的已提交和工作区变化。"""
+    """读取相对基准的已提交、工作区和未跟踪变化。"""
     result = subprocess.run(
         ["git", "diff", "--name-only", base_ref],
         cwd=root,
@@ -20,7 +20,21 @@ def changed_files(root: Path, base_ref: str) -> list[str]:
         capture_output=True,
         text=True,
     )
-    return sorted(set(line for line in result.stdout.splitlines() if line))
+    untracked = subprocess.run(
+        ["git", "ls-files", "--others", "--exclude-standard"],
+        cwd=root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    return sorted(
+        {
+            line
+            for output in (result.stdout, untracked.stdout)
+            for line in output.splitlines()
+            if line
+        }
+    )
 
 
 def find_protected_changes(changed: Iterable[str], protected: Iterable[str]) -> list[str]:

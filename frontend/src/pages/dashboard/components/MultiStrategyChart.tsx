@@ -1,5 +1,7 @@
 import { useMemo, useState } from "react";
 
+import { buildMarketIndexComparisonLines } from "../../../entities/market/comparison";
+import type { MarketIndexComparison } from "../../../entities/market/model";
 import type { StrategyDefinition, StrategyMetric } from "../../../entities/strategy/model";
 import { buildPaperWindow } from "../../../entities/strategy/paperWindow";
 import { ChartPanel } from "../../../shared/ui/ChartPanel";
@@ -8,9 +10,10 @@ import { PerformanceModeSwitch, type PerformanceMode } from "./PerformanceModeSw
 interface MultiStrategyChartProps {
   strategies: StrategyDefinition[];
   seriesMap: Record<string, StrategyMetric[]>;
+  marketIndexComparison: MarketIndexComparison;
 }
 
-export function MultiStrategyChart({ strategies, seriesMap }: MultiStrategyChartProps) {
+export function MultiStrategyChart({ strategies, seriesMap, marketIndexComparison }: MultiStrategyChartProps) {
   const historyDates = Array.from(
     new Set(strategies.flatMap((strategy) => seriesMap[strategy.strategy_id]?.map((item) => item.trade_date) ?? []))
   ).sort();
@@ -32,13 +35,15 @@ export function MultiStrategyChart({ strategies, seriesMap }: MultiStrategyChart
       return { name: `${strategy.name} Paper`, data: paperDates.map((date) => paperByDate.get(date) ?? Number.NaN) };
     })
     .filter((item) => item.data.some((value) => Number.isFinite(value)));
+  const historyIndexSeries = buildMarketIndexComparisonLines(marketIndexComparison, historyDates);
+  const paperIndexSeries = buildMarketIndexComparisonLines(marketIndexComparison, paperDates);
   return (
     <>
       <PerformanceModeSwitch mode={mode} onChange={setMode} paperDates={paperDates} />
       <ChartPanel
         title={mode === "paper" ? "多策略Paper净值对比" : "多策略历史净值对比"}
         dates={mode === "paper" ? paperDates : historyDates}
-        series={mode === "paper" ? paperSeries : historySeries}
+        series={mode === "paper" ? [...paperIndexSeries, ...paperSeries] : [...historyIndexSeries, ...historySeries]}
         scaleYAxis
       />
     </>

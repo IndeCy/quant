@@ -65,6 +65,7 @@ function classifyHighLow(high: number | undefined, low: number | undefined): Ref
 
 export function MarketBetaPanel({ snapshot, marketSeries }: MarketBetaPanelProps) {
   const latestMarket = marketSeries[marketSeries.length - 1];
+  const latestLimitMarket = [...marketSeries].reverse().find((item) => item.limit_data_status === "READY");
   const up = latestMarket?.breadth_up_count ?? 0;
   const down = latestMarket?.breadth_down_count ?? 0;
   const flat = latestMarket?.breadth_flat_count ?? 0;
@@ -103,8 +104,17 @@ export function MarketBetaPanel({ snapshot, marketSeries }: MarketBetaPanelProps
       <div className="beta-reading-grid">
         <div>
           <span>上涨占比</span>
-          <strong>{formatPercent(upRatio)} <em className={`reference-tag ${upReference.className}`}>{upReference.label}</em></strong>
-          <small>{up}涨 / {down}跌 / {flat}平</small>
+          <strong>
+            {latestMarket?.breadth_data_status === "READY" ? formatPercent(upRatio) : "待更新"}{" "}
+            {latestMarket?.breadth_data_status === "READY" ? (
+              <em className={`reference-tag ${upReference.className}`}>{upReference.label}</em>
+            ) : null}
+          </strong>
+          <small>
+            {latestMarket?.breadth_data_status === "READY"
+              ? `${up}涨 / ${down}跌 / ${flat}平`
+              : "尚无有效市场宽度"}
+          </small>
           <small>{upReference.hint}</small>
         </div>
         <div>
@@ -124,6 +134,16 @@ export function MarketBetaPanel({ snapshot, marketSeries }: MarketBetaPanelProps
           <strong>{latestMarket?.new_high_20_count ?? 0}/{latestMarket?.new_low_20_count ?? 0} <em className={`reference-tag ${highLowReference.className}`}>{highLowReference.label}</em></strong>
           <small>20日窗口</small>
           <small>{highLowReference.hint}</small>
+        </div>
+        <div>
+          <span>涨停/跌停</span>
+          <strong>
+            {latestLimitMarket
+              ? `${latestLimitMarket.limit_up_count ?? 0}/${latestLimitMarket.limit_down_count ?? 0}`
+              : "待更新"}
+          </strong>
+          <small>{latestLimitMarket ? `数据日期 ${latestLimitMarket.trade_date}` : "尚无有效涨跌停观测"}</small>
+          <small>数据缺失不再按 0 家展示</small>
         </div>
       </div>
       <ul className="reason-list">

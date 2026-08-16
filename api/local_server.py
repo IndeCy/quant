@@ -7,9 +7,10 @@ from typing import Any
 
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
-
+from api.dashboard_routes import register_dashboard_routes
 from api.market_beta import latest_market_beta, market_beta_series
-from api.market_style import market_style_overview as build_market_style_overview
+from api.market_routes import register_market_routes
+from api.paper_execution_sla_routes import register_paper_execution_sla_routes
 from api.risk_recovery_routes import register_risk_recovery_routes
 from api.service import LocalApiService
 from runtime.environment_audit import build_environment_audit
@@ -20,8 +21,7 @@ from runtime.operations_review import build_operations_review
 from runtime.risk_confirmation import build_risk_confirmation_state
 from runtime.risk_confirmation_service import confirm_risk_action
 
-
-def create_app(service: LocalApiService | None = None) -> FastAPI:
+def create_app(service: LocalApiService | None = None, *, warm_dashboard: bool = False) -> FastAPI:
     """创建本地量化系统 API 应用。"""
     api_service = service or LocalApiService()
     app = FastAPI(title="Quant Local API", version="0.1.0")
@@ -32,7 +32,9 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
         allow_headers=["*"],
     )
     register_risk_recovery_routes(app, api_service)
-
+    register_paper_execution_sla_routes(app, api_service)
+    register_market_routes(app, api_service)
+    register_dashboard_routes(app, api_service, warm=warm_dashboard)
     @app.get("/api/health")
     def health() -> dict[str, Any]:
         """返回本地运行目录健康状态。"""
@@ -208,6 +210,19 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
             return api_service.save_research_note(payload)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    @app.get("/api/research/experiments")
+    def experiments() -> list[dict[str, Any]]:
+        """返回通用研究实验摘要。"""
+        return api_service.experiments()
+
+    @app.get("/api/research/experiments/{experiment_id}")
+    def experiment_detail(experiment_id: str) -> dict[str, Any]:
+        """返回实验定义、运行历史和产物。"""
+        detail = api_service.experiment_detail(experiment_id)
+        if detail is None:
+            raise HTTPException(status_code=404, detail="experiment not found")
+        return detail
 
     @app.get("/api/research/opportunities")
     def opportunity_themes() -> list[dict[str, Any]]:
@@ -465,11 +480,6 @@ def create_app(service: LocalApiService | None = None) -> FastAPI:
         """返回 beta 观测历史。"""
         return market_beta_series(api_service.paths, limit=limit)
 
-    @app.get("/api/market/style-overview")
-    def market_style_overview(limit: int = Query(default=240, ge=60, le=1000)) -> dict[str, Any]:
-        """返回微盘与大盘风格代理的 K 线观测。"""
-        return build_market_style_overview(api_service.paths, limit=limit)
-
     return app
 
 
@@ -481,7 +491,7 @@ def main() -> None:
     args = parser.parse_args()
     import uvicorn
 
-    uvicorn.run(create_app(), host=args.host, port=args.port, reload=False)
+    uvicorn.run(create_app(warm_dashboard=True), host=args.host, port=args.port, reload=False)
 
 
 if __name__ == "__main__":
