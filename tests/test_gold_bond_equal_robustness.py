@@ -44,7 +44,7 @@ def test_same_fingerprint_reuses_before_panel_load(
 ) -> None:
     """相同鲁棒性定义和数据版本必须在基金面板读取前复用。"""
     for path in [
-        tmp_path / "etf_lof_reits_daily_20130104_20260617.duckdb",
+        tmp_path / "data" / "etf_lof_reits_daily_adj_20041220_20260617.duckdb",
         tmp_path / "data" / "benchmark_increment.duckdb",
         tmp_path / "data" / "monitoring.sqlite3",
     ]:
