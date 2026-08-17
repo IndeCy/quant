@@ -2,6 +2,7 @@ name: quant-guardrails
 
 on:
   pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
   push:
     branches: [release]
 
@@ -29,4 +30,6 @@ jobs:
         env:
           PYTHON_BIN: python
           GUARDRAIL_BASE_REF: ${{ github.event.pull_request.base.sha || github.event.before }}
+          # 只有经维护者显式标记的 PR 才能通过 M0 人工审批门禁。
+          QUANT_APPROVE_M0_CHANGE: ${{ github.event_name == 'pull_request' && contains(github.event.pull_request.labels.*.name, 'm0-approved') && '1' || '0' }}
         run: ./scripts/verify.sh

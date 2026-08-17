@@ -159,3 +159,15 @@ def test_fixed_cannot_silently_ignore_grid_thresholds(tmp_path: Path) -> None:
     assert find_research_risk_errors(tmp_path) == [
         "examples/factor_study.py:1: FIXED 会忽略波动率阈值参数，应使用 GRID"
     ]
+
+
+def test_ci_m0_approval_requires_scoped_pr_label() -> None:
+    """CI 只能通过显式 PR 标签注入 M0 审批，不能永久关闭门禁。"""
+    root = Path(__file__).resolve().parents[2]
+    workflow = (root / ".github/workflows/guardrails.yml").read_text(encoding="utf-8")
+
+    assert "types: [opened, synchronize, reopened, labeled, unlabeled]" in workflow
+    assert "github.event_name == 'pull_request'" in workflow
+    assert "contains(github.event.pull_request.labels.*.name, 'm0-approved')" in workflow
+    assert "QUANT_APPROVE_M0_CHANGE: 1" not in workflow
+    assert 'QUANT_APPROVE_M0_CHANGE: "1"' not in workflow
