@@ -52,7 +52,7 @@ def update_shareholder_count_cache(
     end_date: str,
     force_full: bool = False,
     overlap_days: int = 31,
-    page_size: int = 5000,
+    page_size: int = 3000,
 ) -> ShareholderSyncResult:
     """按公告月分页更新缓存，重复事件使用确定性主键覆盖。"""
     start = _parse_date(start_date)

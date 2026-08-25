@@ -83,6 +83,16 @@ class RuntimePaths:
         return self.data_dir / "beta_increment.duckdb"
 
     @property
+    def order_flow_path(self) -> Path:
+        """定位个股订单规模资金流增量缓存。"""
+        return self.data_dir / "order_flow_increment.duckdb"
+
+    @property
+    def top_inst_path(self) -> Path:
+        """定位龙虎榜机构席位增量缓存。"""
+        return self.data_dir / "top_inst_increment.duckdb"
+
+    @property
     def base_market_path(self) -> Path:
         """定位只读历史行情基线，支持 Mac mini 通过配置无复制挂载。"""
         configured = get_config_value("QUANT_BASE_MARKET_DB", prefer_environ=True)

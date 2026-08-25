@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Protocol
 
@@ -160,18 +161,34 @@ class BetaIncrementalStore:
 class TushareBetaUpdater:
     """按交易日补齐 Market Beta V1 所需 P0 扩展数据。"""
 
-    def __init__(self, client: TushareBetaClient, store: BetaIncrementalStore, fund_symbols: list[str] | None = None) -> None:
+    def __init__(
+        self,
+        client: TushareBetaClient,
+        store: BetaIncrementalStore,
+        fund_symbols: list[str] | None = None,
+        *,
+        fund_share_lookback_days: int = 14,
+    ) -> None:
+        if fund_share_lookback_days < 0:
+            raise ValueError("fund_share_lookback_days 不能为负")
         self.client = client
         self.store = store
-        self.fund_symbols = fund_symbols or ["510300.SH"]
+        self.fund_symbols = sorted(set(fund_symbols or ["510300.SH"]))
+        self.fund_share_lookback_days = fund_share_lookback_days
 
     def update(self, trade_date: str) -> BetaUpdateResult:
         """更新指定交易日所有 P0 beta 数据源。"""
         daily_basic_rows = self.store.upsert_daily_basic(self.client.daily_basic(trade_date))
         index_dailybasic_rows = self.store.upsert_index_dailybasic(self.client.index_dailybasic(trade_date))
+        fund_share_start = (
+            datetime.strptime(trade_date, "%Y%m%d")
+            - timedelta(days=self.fund_share_lookback_days)
+        ).strftime("%Y%m%d")
         fund_share_rows = 0
         for symbol in self.fund_symbols:
-            fund_share_rows += self.store.upsert_fund_share(self.client.fund_share(symbol, trade_date, trade_date))
+            fund_share_rows += self.store.upsert_fund_share(
+                self.client.fund_share(symbol, fund_share_start, trade_date)
+            )
         moneyflow_hsgt_rows = self.store.upsert_moneyflow_hsgt(self.client.moneyflow_hsgt(trade_date, trade_date))
         margin_rows = self.store.upsert_margin(self.client.margin(trade_date))
         margin_detail_rows = self.store.upsert_margin_detail(self.client.margin_detail(trade_date))

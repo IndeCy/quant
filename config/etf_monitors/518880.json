@@ -1,10 +1,7 @@
 {
   "symbol": "518880",
   "display_name": "华安黄金ETF",
-  "cost": 8.607,
-  "quantity": 3900,
-  "current_weight": 0.0697086,
-  "target_weight": 0.25,
+  "holding_source": "../portfolio_rebalance.json",
   "tranche_weight": 0.025,
   "buy_review_premium_pct": 0.20,
   "strong_buy_review_premium_pct": -0.15,

@@ -12,6 +12,9 @@ from data.tushare_beta_incremental import BetaIncrementalStore, TushareBetaUpdat
 class FakeBetaClient:
     """测试用 beta 数据客户端，避免单测访问真实 Tushare。"""
 
+    def __init__(self) -> None:
+        self.fund_share_requests: list[tuple[str, str, str]] = []
+
     def daily_basic(self, trade_date: str) -> pd.DataFrame:
         return pd.DataFrame(
             [
@@ -43,6 +46,7 @@ class FakeBetaClient:
         )
 
     def fund_share(self, ts_code: str, start_date: str, end_date: str) -> pd.DataFrame:
+        self.fund_share_requests.append((ts_code, start_date, end_date))
         return pd.DataFrame([{"trade_date": end_date, "ts_code": ts_code, "fd_share": 123.0}])
 
     def moneyflow_hsgt(self, start_date: str, end_date: str) -> pd.DataFrame:
@@ -112,7 +116,8 @@ def test_beta_store_upserts_p0_tables_idempotently(tmp_path: Path) -> None:
 def test_beta_updater_fetches_all_p0_sources(tmp_path: Path) -> None:
     """更新器应一次补齐单日 P0 beta 数据，供每日流水线复用。"""
     store = BetaIncrementalStore(tmp_path / "beta.duckdb")
-    updater = TushareBetaUpdater(FakeBetaClient(), store, fund_symbols=["510300.SH"])
+    client = FakeBetaClient()
+    updater = TushareBetaUpdater(client, store, fund_symbols=["510300.SH"])
 
     result = updater.update("20260710")
 
@@ -123,3 +128,21 @@ def test_beta_updater_fetches_all_p0_sources(tmp_path: Path) -> None:
     assert result.moneyflow_hsgt_rows == 1
     assert result.margin_rows == 1
     assert result.margin_detail_rows == 1
+    assert client.fund_share_requests == [("510300.SH", "20260626", "20260710")]
+
+
+def test_beta_updater_covers_portfolio_funds_without_duplicates(tmp_path: Path) -> None:
+    """ETF 份额应覆盖组合标的，并用短窗口吸收源端延迟与订正。"""
+    client = FakeBetaClient()
+    updater = TushareBetaUpdater(
+        client,
+        BetaIncrementalStore(tmp_path / "beta.duckdb"),
+        fund_symbols=["518880.SH", "511010.SH", "518880.SH"],
+    )
+
+    updater.update("20260710")
+
+    assert client.fund_share_requests == [
+        ("511010.SH", "20260626", "20260710"),
+        ("518880.SH", "20260626", "20260710"),
+    ]

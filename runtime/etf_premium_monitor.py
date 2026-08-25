@@ -14,6 +14,7 @@ from data.calendar import TradingCalendar
 from data.market_snapshot import create_fund_market_snapshot
 from runtime.notification_config import NotificationResult, send_bark_notification
 from runtime.paths import RuntimePaths
+from runtime.portfolio_rebalance_monitor import load_rebalance_config
 
 
 SHANGHAI_TZ = ZoneInfo("Asia/Shanghai")
@@ -58,6 +59,7 @@ class EtfPremiumMonitorConfig:
     weekly_status_reminder: bool = False
     quantity: float = 0.0
     below_ma5_warning: bool = False
+    holding_source: str | None = None
 
 
 @dataclass(frozen=True)
@@ -89,6 +91,24 @@ class EtfTrendSnapshot:
 def load_monitor_config(path: Path) -> EtfPremiumMonitorConfig:
     """读取非敏感监控参数并做边界校验。"""
     payload = json.loads(path.read_text(encoding="utf-8"))
+    holding_source = str(payload.get("holding_source") or "").strip()
+    if holding_source:
+        source_path = Path(holding_source)
+        if not source_path.is_absolute():
+            source_path = path.parent / source_path
+        portfolio = load_rebalance_config(source_path.resolve())
+        trend_symbol = str(payload.get("trend_symbol") or "")
+        matches = [asset for asset in portfolio.assets if asset.symbol == trend_symbol]
+        if len(matches) != 1 or trend_symbol[:6] != str(payload.get("symbol") or ""):
+            raise ValueError("持仓来源中缺少与监控代码一致的唯一资产")
+        holding = matches[0]
+        # 单品提醒只维护行情阈值，持仓事实统一来自组合基准，避免多份配置漂移。
+        payload.update(
+            cost=holding.cost,
+            quantity=holding.quantity,
+            current_weight=holding.current_weight,
+            target_weight=holding.target_weight,
+        )
     config = EtfPremiumMonitorConfig(**payload)
     if len(config.symbol) != 6 or not config.symbol.isdigit():
         raise ValueError("symbol 必须是6位证券代码")

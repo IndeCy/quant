@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from dataclasses import replace
 from datetime import date, datetime
+import json
 from pathlib import Path
 
 from runtime.etf_premium_monitor import (
@@ -14,10 +15,12 @@ from runtime.etf_premium_monitor import (
     classify_snapshot,
     fetch_snapshot,
     is_monitoring_window,
+    load_monitor_config,
     run_monitor,
 )
 from runtime.notification_config import NotificationResult
 from runtime.paths import RuntimePaths
+from runtime.portfolio_rebalance_monitor import load_rebalance_config
 
 
 def _config() -> EtfPremiumMonitorConfig:
@@ -63,6 +66,24 @@ def _trend(drawdown_pct: float, ma5_gap_pct: float = 1.0) -> EtfTrendSnapshot:
         ma_gap_pct=3.0,
         drawdown_pct=drawdown_pct,
     )
+
+
+def test_project_monitors_use_portfolio_as_single_holding_source() -> None:
+    root = Path(__file__).resolve().parents[1]
+    portfolio = load_rebalance_config(root / "config/portfolio_rebalance.json")
+    holdings = {asset.symbol: asset for asset in portfolio.assets}
+
+    for symbol, holding in holdings.items():
+        path = root / f"config/etf_monitors/{symbol[:6]}.json"
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        config = load_monitor_config(path)
+
+        assert payload["holding_source"] == "../portfolio_rebalance.json"
+        assert not {"cost", "quantity", "current_weight", "target_weight"} & payload.keys()
+        assert config.cost == holding.cost
+        assert config.quantity == holding.quantity
+        assert config.current_weight == holding.current_weight
+        assert config.target_weight == holding.target_weight
 
 
 def test_monitoring_window_excludes_opening_and_lunch() -> None:

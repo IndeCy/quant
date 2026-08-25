@@ -244,7 +244,10 @@ def test_daily_pipeline_sends_data_update_template(
 
     monkeypatch.setattr(
         "runtime.daily_pipeline.run_data_update",
-        lambda trade_date=None: "A股新增交易日 0 个，主线链动缓存已同步: 写入11502行，游资涨跌停缓存已同步: 写入85行",
+        lambda trade_date=None: (
+            "A股新增交易日 0 个，主线链动缓存已同步: 写入11502行，"
+            "游资涨跌停缓存已同步: 写入85行，研究扩展数据增量: 更新6域/抓取12000行"
+        ),
     )
     monkeypatch.setattr("runtime.daily_pipeline.run_data_quality_gate", lambda paths: _quality_pass())
     monkeypatch.setattr("runtime.daily_pipeline.run_strategy_batch", lambda paths, push=False, trade_date=None: _strategy_summary(trade_date))
@@ -276,6 +279,7 @@ def test_daily_pipeline_sends_data_update_template(
     assert "数据更新状态：SUCCESS" in notifications[0]["body"]
     assert "A股日线：已是最新，无新增交易日" in notifications[0]["body"]
     assert "游资涨跌停缓存：写入85行" in notifications[0]["body"]
+    assert "研究扩展数据：更新6域/抓取12000行" in notifications[0]["body"]
     assert "今日最强势板块 Top5（20260702）：" in notifications[0]["body"]
     assert "1. 板块1｜强度89.00｜涨停6家｜龙头龙头1" in notifications[0]["body"]
     assert "5. 板块5｜强度85.00｜涨停2家｜龙头龙头5" in notifications[0]["body"]

@@ -361,12 +361,11 @@ def _format_data_update_lines(message: str) -> list[str]:
         lines.append(f"游资涨跌停缓存：{cache}")
     elif "游资涨跌停缓存：已是最新" in message:
         lines.append("游资涨跌停缓存：已是最新")
-    if "Beta扩展数据已同步" in message:
-        beta = message.split("Beta扩展数据已同步:", 1)[1].split("，", 1)[0].strip()
-        lines.append(f"Beta扩展数据：{beta}")
-    elif "Beta扩展数据未更新" in message:
-        beta = message.split("Beta扩展数据未更新:", 1)[1].split("，", 1)[0].strip()
-        lines.append(f"Beta扩展数据：未更新，{beta}")
+    for label in ("Beta扩展数据", "研究扩展数据"):
+        if label in message:
+            detail = message.split(label, 1)[1].split("，", 1)[0].lstrip(":").strip()
+            detail = detail.removeprefix("增量: ").removeprefix("已同步: ")
+            lines.append(f"{label}：{detail}")
     if not lines:
         lines.append(f"摘要：{message}")
     return lines

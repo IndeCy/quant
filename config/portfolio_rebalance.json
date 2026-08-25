@@ -1,13 +1,13 @@
 {
   "portfolio_id": "localized_permanent_v1",
   "display_name": "本地永久组合",
-  "reference_date": "2026-08-10",
+  "reference_date": "2026-08-25",
   "total_capital": 500000.0,
   "assets": [
     {
       "symbol": "513500.SH",
       "display_name": "标普500ETF",
-      "current_weight": 0.0427548,
+      "current_weight": 0.0423124,
       "target_weight": 0.30,
       "quantity": 7900,
       "cost": 2.505
@@ -15,21 +15,21 @@
     {
       "symbol": "518880.SH",
       "display_name": "黄金ETF",
-      "current_weight": 0.0697086,
+      "current_weight": 0.1671618,
       "target_weight": 0.25,
-      "quantity": 3900,
-      "cost": 8.607
+      "quantity": 8700,
+      "cost": 9.020
     },
     {
       "symbol": "511010.SH",
       "display_name": "5年国债ETF",
-      "current_weight": 0.1128856,
+      "current_weight": 0.1978158,
       "target_weight": 0.25,
-      "quantity": 400,
-      "cost": 140.932
+      "quantity": 700,
+      "cost": 141.064
     }
   ],
-  "cash_current_weight": 0.774651,
+  "cash_current_weight": 0.59271,
   "cash_target_weight": 0.20,
   "rebalance_band_pp": 10.0,
   "reminder_cooldown_days": 7,

@@ -19,9 +19,11 @@ from data.tushare_beta_incremental import BetaIncrementalStore, TushareBetaProCl
 from pipeline.production_daily import write_run_log
 from runtime.config import get_config_value
 from runtime.mainline_cache_sync import sync_mainline_cache_from_increment
+from runtime.daily_extension_data import format_extension_sync_summary, sync_daily_extension_data
 from runtime.hot_money_limit_cache_pipeline import resolve_hot_money_cache_dates, update_hot_money_limit_cache
 from runtime.opportunity_catalog import register_builtin_opportunity_themes
 from runtime.paths import get_runtime_paths
+from runtime.portfolio_rebalance_monitor import load_rebalance_config
 from runtime.repository import SystemRepository
 
 
@@ -51,6 +53,7 @@ def main(trade_date: str | None = None) -> None:
             raise RuntimeError(f"主线链动缓存同步失败，缺失标的: {', '.join(sync_result.missing_symbols[:20])}")
         warnings.append(f"主线链动缓存已同步: 写入{sync_result.rows_written}行")
         _append_hot_money_cache_message(paths, updated_dates, warnings)
+        warnings.append(_update_research_extension_incremental(paths, run_date))
         message = _build_success_message(updated_dates, warnings)
         write_run_log(run_dir, "SUCCESS", message)
         repository.record_strategy_run("system_data_update", run_date, "SUCCESS", run_dir, message)
@@ -98,7 +101,11 @@ def _update_beta_incremental(paths, run_date: str) -> str:
         return "Beta扩展数据未更新: 缺少TUSHARE_TOKEN"
     try:
         store = BetaIncrementalStore(paths.beta_increment_path)
-        updater = TushareBetaUpdater(TushareBetaProClient(token), store, fund_symbols=["510300.SH"])
+        updater = TushareBetaUpdater(
+            TushareBetaProClient(token),
+            store,
+            fund_symbols=_fund_share_symbols(paths),
+        )
         result = updater.update(run_date)
         rows = (
             result.daily_basic_rows
@@ -111,6 +118,28 @@ def _update_beta_incremental(paths, run_date: str) -> str:
         return f"Beta扩展数据已同步: 写入{rows}行"
     except Exception as exc:
         return f"Beta扩展数据未更新: {exc}"
+
+
+def _fund_share_symbols(paths) -> list[str]:
+    """基金份额覆盖基准 ETF 和当前永久组合中的全部场内基金。"""
+    symbols = {"510300.SH"}
+    config_path = paths.config_dir / "portfolio_rebalance.json"
+    if config_path.exists():
+        portfolio = load_rebalance_config(config_path)
+        symbols.update(asset.symbol for asset in portfolio.assets)
+    return sorted(symbols)
+
+
+def _update_research_extension_incremental(paths, run_date: str) -> str:
+    """日更研究数据域；任一域异常仅记录审计，不阻断当前生产策略。"""
+    token = get_config_value("TUSHARE_TOKEN")
+    if not token:
+        return "研究扩展数据未更新: 缺少TUSHARE_TOKEN"
+    try:
+        results = sync_daily_extension_data(paths, run_date, token)
+        return format_extension_sync_summary(results)
+    except Exception as exc:
+        return f"研究扩展数据未更新: {type(exc).__name__}: {exc}"
 
 
 def _opportunity_symbols(repository: SystemRepository) -> list[str]:

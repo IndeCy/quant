@@ -1,10 +1,7 @@
 {
   "symbol": "511010",
   "display_name": "国泰5年国债ETF",
-  "cost": 140.932,
-  "quantity": 400,
-  "current_weight": 0.1128856,
-  "target_weight": 0.25,
+  "holding_source": "../portfolio_rebalance.json",
   "tranche_weight": 0.04,
   "buy_review_premium_pct": 0.15,
   "strong_buy_review_premium_pct": -0.10,

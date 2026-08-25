@@ -46,15 +46,16 @@ def test_project_config_uses_declared_weights_and_targets() -> None:
     path = Path(__file__).resolve().parents[1] / "config/portfolio_rebalance.json"
     config = load_rebalance_config(path)
 
+    assert config.reference_date == date(2026, 8, 25)
     assert [asset.current_weight for asset in config.assets] == [
-        0.0427548,
-        0.0697086,
-        0.1128856,
+        0.0423124,
+        0.1671618,
+        0.1978158,
     ]
     assert [asset.target_weight for asset in config.assets] == [0.30, 0.25, 0.25]
-    assert [asset.quantity for asset in config.assets] == [7900, 3900, 400]
-    assert [asset.cost for asset in config.assets] == [2.505, 8.607, 140.932]
-    assert config.cash_current_weight == 0.774651
+    assert [asset.quantity for asset in config.assets] == [7900, 8700, 700]
+    assert [asset.cost for asset in config.assets] == [2.505, 9.020, 141.064]
+    assert config.cash_current_weight == 0.59271
     assert config.cash_target_weight == 0.20
     assert config.total_capital == 500_000
 
