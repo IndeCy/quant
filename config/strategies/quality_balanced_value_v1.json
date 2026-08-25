@@ -1,0 +1,45 @@
+{
+  "strategy_id": "quality_balanced_value_v1",
+  "name": "Quality Balanced Value V1",
+  "version": "1.0.0",
+  "template_id": "factor_topn_monthly",
+  "status": "shadow_live",
+  "enabled": true,
+  "universe": "quality_cleanup_all_a",
+  "filters": [
+    "listed_3y",
+    "exclude_st",
+    "exclude_delisted",
+    "annual_report_1231",
+    "amount_above_p20",
+    "material_corporate_action_gate_10pct",
+    "qfq"
+  ],
+  "factors": [
+    {"factor_id": "roe", "weight": 0.26666666666666666, "transform": "winsorize_5_95_zscore"},
+    {"factor_id": "roa", "weight": 0.26666666666666666, "transform": "winsorize_5_95_zscore"},
+    {"factor_id": "ocf_to_or", "weight": 0.26666666666666666, "transform": "winsorize_5_95_zscore"},
+    {"factor_id": "earnings_yield", "weight": 0.1, "transform": "winsorize_1_99_zscore"},
+    {"factor_id": "book_yield", "weight": 0.1, "transform": "winsorize_1_99_zscore"}
+  ],
+  "construction": {
+    "top_n": 20,
+    "weighting": "equal_weight",
+    "rebalance": "monthly"
+  },
+  "risk_overlay": "vol_20_45_to_30",
+  "benchmark": "510300",
+  "adjust_policy": "qfq",
+  "execution_policy": "m0_t1",
+  "config": {
+    "adapter": "quality_value_extension_asof_v1",
+    "score_mode": "quality_balanced_value_v1",
+    "initial_capital": 1000000.0,
+    "execution_slippage_bps": 5.0,
+    "volatility_window": 20,
+    "volatility_threshold": 0.45,
+    "reduced_exposure": 0.3,
+    "corporate_action_materiality_threshold": 0.1,
+    "deployment_scope": "forward_paper_only"
+  }
+}

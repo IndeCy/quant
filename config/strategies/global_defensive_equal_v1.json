@@ -1,0 +1,33 @@
+{
+  "strategy_id": "global_defensive_equal_v1",
+  "name": "全球防守三资产等权 V1",
+  "version": "1.0.0",
+  "template_id": "fixed_allocation_observer",
+  "status": "research_observation",
+  "enabled": true,
+  "universe": "domestic_listed_cross_asset_etf",
+  "filters": ["fund_data_quality_gate", "common_trade_date", "qfq"],
+  "factors": [],
+  "construction": {
+    "weighting": "fixed_equal_weight",
+    "rebalance": "monthly",
+    "assets": [
+      {"symbol": "513500.SH", "name": "博时标普500ETF", "weight": 0.3333333333333333},
+      {"symbol": "518880.SH", "name": "华安黄金ETF", "weight": 0.3333333333333333},
+      {"symbol": "511010.SH", "name": "国泰5年国债ETF", "weight": 0.3333333333333333}
+    ]
+  },
+  "risk_overlay": "none",
+  "benchmark": "510300.SH",
+  "adjust_policy": "qfq",
+  "execution_policy": "observation_only_m0_t1",
+  "config": {
+    "observation_start": "20150101",
+    "panel_start": "20140101",
+    "initial_capital": 1000000.0,
+    "execution_slippage_bps": 5.0,
+    "trade_policy": "observation_only",
+    "deployment_scope": "forward_observation_only",
+    "research_fingerprint": "global_defensive_equal_v1"
+  }
+}

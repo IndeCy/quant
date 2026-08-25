@@ -1,0 +1,66 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="510" height="530">
+<style>text{font-family:Arial,"PingFang SC",sans-serif;font-size:13px;fill:#172033}.title{font-size:18px;font-weight:700}</style>
+<text class="title" x="255.0" y="28" text-anchor="middle">ROA x OCF Sharpe 1M</text>
+<text x="255.0" y="512" text-anchor="middle">OCF_TO_OR Quintile</text>
+<text x="18" y="265.0" transform="rotate(-90 18 265.0)" text-anchor="middle">ROA Quintile</text>
+<text x="129.0" y="58" text-anchor="middle">Q1</text>
+<text x="207.0" y="58" text-anchor="middle">Q2</text>
+<text x="285.0" y="58" text-anchor="middle">Q3</text>
+<text x="363.0" y="58" text-anchor="middle">Q4</text>
+<text x="441.0" y="58" text-anchor="middle">Q5</text>
+<text x="78" y="114.0" text-anchor="end">Q5</text>
+<rect x="90" y="70" width="78" height="78" fill="rgb(215,135,80)" stroke="#ffffff"/>
+<text x="129.0" y="114.0" text-anchor="middle">0.09</text>
+<rect x="168" y="70" width="78" height="78" fill="rgb(215,143,80)" stroke="#ffffff"/>
+<text x="207.0" y="114.0" text-anchor="middle">0.09</text>
+<rect x="246" y="70" width="78" height="78" fill="rgb(253,205,90)" stroke="#ffffff"/>
+<text x="285.0" y="114.0" text-anchor="middle">0.10</text>
+<rect x="324" y="70" width="78" height="78" fill="rgb(215,211,80)" stroke="#ffffff"/>
+<text x="363.0" y="114.0" text-anchor="middle">0.10</text>
+<rect x="402" y="70" width="78" height="78" fill="rgb(251,205,90)" stroke="#ffffff"/>
+<text x="441.0" y="114.0" text-anchor="middle">0.10</text>
+<text x="78" y="192.0" text-anchor="end">Q4</text>
+<rect x="90" y="148" width="78" height="78" fill="rgb(215,80,80)" stroke="#ffffff"/>
+<text x="129.0" y="192.0" text-anchor="middle">0.08</text>
+<rect x="168" y="148" width="78" height="78" fill="rgb(196,205,90)" stroke="#ffffff"/>
+<text x="207.0" y="192.0" text-anchor="middle">0.11</text>
+<rect x="246" y="148" width="78" height="78" fill="rgb(135,205,90)" stroke="#ffffff"/>
+<text x="285.0" y="192.0" text-anchor="middle">0.12</text>
+<rect x="324" y="148" width="78" height="78" fill="rgb(194,205,90)" stroke="#ffffff"/>
+<text x="363.0" y="192.0" text-anchor="middle">0.11</text>
+<rect x="402" y="148" width="78" height="78" fill="rgb(215,191,80)" stroke="#ffffff"/>
+<text x="441.0" y="192.0" text-anchor="middle">0.09</text>
+<text x="78" y="270.0" text-anchor="end">Q3</text>
+<rect x="90" y="226" width="78" height="78" fill="rgb(215,109,80)" stroke="#ffffff"/>
+<text x="129.0" y="270.0" text-anchor="middle">0.08</text>
+<rect x="168" y="226" width="78" height="78" fill="rgb(235,205,90)" stroke="#ffffff"/>
+<text x="207.0" y="270.0" text-anchor="middle">0.10</text>
+<rect x="246" y="226" width="78" height="78" fill="rgb(207,205,90)" stroke="#ffffff"/>
+<text x="285.0" y="270.0" text-anchor="middle">0.11</text>
+<rect x="324" y="226" width="78" height="78" fill="rgb(105,205,90)" stroke="#ffffff"/>
+<text x="363.0" y="270.0" text-anchor="middle">0.12</text>
+<rect x="402" y="226" width="78" height="78" fill="rgb(215,168,80)" stroke="#ffffff"/>
+<text x="441.0" y="270.0" text-anchor="middle">0.09</text>
+<text x="78" y="348.0" text-anchor="end">Q2</text>
+<rect x="90" y="304" width="78" height="78" fill="rgb(215,152,80)" stroke="#ffffff"/>
+<text x="129.0" y="348.0" text-anchor="middle">0.09</text>
+<rect x="168" y="304" width="78" height="78" fill="rgb(224,205,90)" stroke="#ffffff"/>
+<text x="207.0" y="348.0" text-anchor="middle">0.11</text>
+<rect x="246" y="304" width="78" height="78" fill="rgb(193,205,90)" stroke="#ffffff"/>
+<text x="285.0" y="348.0" text-anchor="middle">0.11</text>
+<rect x="324" y="304" width="78" height="78" fill="rgb(208,205,90)" stroke="#ffffff"/>
+<text x="363.0" y="348.0" text-anchor="middle">0.11</text>
+<rect x="402" y="304" width="78" height="78" fill="rgb(215,174,80)" stroke="#ffffff"/>
+<text x="441.0" y="348.0" text-anchor="middle">0.09</text>
+<text x="78" y="426.0" text-anchor="end">Q1</text>
+<rect x="90" y="382" width="78" height="78" fill="rgb(232,205,90)" stroke="#ffffff"/>
+<text x="129.0" y="426.0" text-anchor="middle">0.10</text>
+<rect x="168" y="382" width="78" height="78" fill="rgb(222,205,90)" stroke="#ffffff"/>
+<text x="207.0" y="426.0" text-anchor="middle">0.11</text>
+<rect x="246" y="382" width="78" height="78" fill="rgb(148,205,90)" stroke="#ffffff"/>
+<text x="285.0" y="426.0" text-anchor="middle">0.12</text>
+<rect x="324" y="382" width="78" height="78" fill="rgb(177,205,90)" stroke="#ffffff"/>
+<text x="363.0" y="426.0" text-anchor="middle">0.11</text>
+<rect x="402" y="382" width="78" height="78" fill="rgb(215,160,80)" stroke="#ffffff"/>
+<text x="441.0" y="426.0" text-anchor="middle">0.09</text>
+</svg>

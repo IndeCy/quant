@@ -1,0 +1,240 @@
+.beta-score {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.beta-score strong {
+  font-size: 32px;
+  line-height: 1;
+}
+
+.beta-score span,
+.beta-score-grid span {
+  color: #607089;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.beta-score-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.beta-score-grid div,
+.beta-reading-grid div {
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.beta-score-grid strong {
+  display: block;
+  margin-top: 3px;
+}
+
+.beta-reading-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.beta-reading-grid span,
+.beta-reading-grid small {
+  display: block;
+  color: #607089;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.beta-reading-grid strong {
+  display: block;
+  margin: 4px 0 2px;
+  font-size: 17px;
+  line-height: 1.2;
+}
+
+.reference-tag {
+  display: inline-flex;
+  align-items: center;
+  height: 18px;
+  padding: 0 6px;
+  border-radius: 999px;
+  font-size: 11px;
+  font-style: normal;
+  font-weight: 800;
+  vertical-align: 2px;
+}
+
+.reference-tag.success {
+  color: #047857;
+  background: #d1fae5;
+}
+
+.reference-tag.neutral {
+  color: #475569;
+  background: #e2e8f0;
+}
+
+.reference-tag.warning {
+  color: #b45309;
+  background: #fef3c7;
+}
+
+.reference-tag.danger {
+  color: #b91c1c;
+  background: #fee2e2;
+}
+
+.beta-reading-grid small {
+  overflow-wrap: anywhere;
+  font-weight: 600;
+}
+
+.reason-list {
+  margin: 0;
+  padding-left: 18px;
+  color: #516174;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.market-metric-card small {
+  display: block;
+  margin-top: 7px;
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.market-metric-card strong.success {
+  color: #047857;
+}
+
+.market-metric-card strong.warning {
+  color: #b45309;
+}
+
+.market-metric-card strong.danger {
+  color: #b91c1c;
+}
+
+.market-metric-card strong.neutral {
+  color: #334155;
+}
+
+.market-style-section {
+  margin-bottom: 14px;
+}
+
+.market-style-summary-panel {
+  margin-bottom: 14px;
+}
+
+.market-style-summary-panel .panel-head p,
+.market-style-chart-head p,
+.market-style-empty p {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.market-style-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  border-top: 1px solid #eef2f7;
+}
+
+.market-style-summary-grid div {
+  min-width: 0;
+  padding: 12px 14px 0 0;
+}
+
+.market-style-summary-grid span,
+.market-style-inline-metrics span {
+  color: #64748b;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.market-style-summary-grid strong {
+  display: block;
+  margin-top: 5px;
+  color: #172033;
+  font-size: 19px;
+}
+
+.market-style-chart-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.market-style-chart-panel {
+  min-width: 0;
+}
+
+.market-style-chart-head {
+  align-items: flex-start;
+}
+
+.market-style-chart-head h2 {
+  margin-bottom: 4px;
+}
+
+.market-style-chart-head .status {
+  min-width: 92px;
+  height: 30px;
+}
+
+.market-style-inline-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+  padding: 9px 0;
+  border-top: 1px solid #eef2f7;
+  border-bottom: 1px solid #eef2f7;
+}
+
+.market-style-inline-metrics span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.market-style-inline-metrics strong {
+  display: block;
+  margin-top: 3px;
+  color: #263244;
+  font-size: 13px;
+}
+
+.market-style-kline {
+  width: 100%;
+  height: 360px;
+}
+
+.market-style-empty {
+  margin-bottom: 14px;
+}
+
+@media (max-width: 1180px) {
+  .market-style-chart-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 640px) {
+  .market-style-summary-grid,
+  .market-style-inline-metrics {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .market-style-kline {
+    height: 320px;
+  }
+}

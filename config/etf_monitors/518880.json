@@ -1,0 +1,20 @@
+{
+  "symbol": "518880",
+  "display_name": "华安黄金ETF",
+  "holding_source": "../portfolio_rebalance.json",
+  "tranche_weight": 0.025,
+  "buy_review_premium_pct": 0.20,
+  "strong_buy_review_premium_pct": -0.15,
+  "high_premium_warning_pct": 0.50,
+  "abnormal_discount_warning_pct": -0.50,
+  "buy_alert_cooldown_days": 7,
+  "weekly_status_reminder": true,
+  "below_ma5_warning": true,
+  "warning_alert_cooldown_days": 1,
+  "trend_symbol": "518880.SH",
+  "trend_ma_days": 200,
+  "trend_lookback_days": 250,
+  "accelerated_drawdown_pct": -8.0,
+  "max_quote_age_minutes": 15,
+  "failure_alert_after": 3
+}

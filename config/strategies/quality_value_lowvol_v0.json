@@ -1,0 +1,43 @@
+{
+  "strategy_id": "quality_value_lowvol_v0",
+  "name": "Quality Value LowVol V0",
+  "version": "0.1.0",
+  "template_id": "factor_topn_monthly",
+  "status": "retired",
+  "enabled": false,
+  "universe": "quality_cleanup_all_a",
+  "filters": [
+    "listed_3y",
+    "exclude_st",
+    "exclude_delisted",
+    "annual_report_1231",
+    "amount_above_p20",
+    "material_corporate_action_gate_10pct",
+    "qfq"
+  ],
+  "factors": [
+    {"factor_id": "roa", "weight": 0.2, "transform": "winsorize_1_99_zscore"},
+    {"factor_id": "ocf_to_or", "weight": 0.2, "transform": "winsorize_1_99_zscore"},
+    {"factor_id": "earnings_yield", "weight": 0.2, "transform": "winsorize_1_99_zscore"},
+    {"factor_id": "book_yield", "weight": 0.2, "transform": "winsorize_1_99_zscore"},
+    {"factor_id": "low_volatility_60d", "weight": 0.2, "transform": "winsorize_1_99_zscore"}
+  ],
+  "construction": {
+    "top_n": 20,
+    "weighting": "equal_weight",
+    "rebalance": "monthly"
+  },
+  "risk_overlay": "vol_20_45_to_30",
+  "benchmark": "510300",
+  "adjust_policy": "qfq",
+  "execution_policy": "m0_t1",
+  "config": {
+    "adapter": "quality_value_lowvol_asof_v0",
+    "initial_capital": 1000000.0,
+    "execution_slippage_bps": 5.0,
+    "volatility_window": 20,
+    "volatility_threshold": 0.45,
+    "reduced_exposure": 0.3,
+    "corporate_action_materiality_threshold": 0.1
+  }
+}

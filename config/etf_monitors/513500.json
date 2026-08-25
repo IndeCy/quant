@@ -1,0 +1,18 @@
+{
+  "symbol": "513500",
+  "display_name": "标普500ETF博时",
+  "holding_source": "../portfolio_rebalance.json",
+  "tranche_weight": 0.02,
+  "buy_review_premium_pct": 2.0,
+  "strong_buy_review_premium_pct": 1.0,
+  "high_premium_warning_pct": 6.0,
+  "buy_alert_cooldown_days": 7,
+  "weekly_status_reminder": true,
+  "below_ma5_warning": true,
+  "trend_symbol": "513500.SH",
+  "trend_ma_days": 200,
+  "trend_lookback_days": 250,
+  "accelerated_drawdown_pct": -10.0,
+  "max_quote_age_minutes": 15,
+  "failure_alert_after": 3
+}

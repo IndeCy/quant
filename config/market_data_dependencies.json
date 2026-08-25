@@ -1,0 +1,28 @@
+{
+  "funds": [
+    {
+      "symbol": "510300.SH",
+      "name": "沪深300ETF",
+      "purpose": "市场基准",
+      "enabled": true
+    },
+    {
+      "symbol": "518880.SH",
+      "name": "黄金ETF",
+      "purpose": "跨资产防御观察",
+      "enabled": true
+    },
+    {
+      "symbol": "511010.SH",
+      "name": "5年国债ETF",
+      "purpose": "跨资产防御观察",
+      "enabled": true
+    },
+    {
+      "symbol": "513500.SH",
+      "name": "标普500ETF",
+      "purpose": "全球权益与跨资产研究",
+      "enabled": true
+    }
+  ]
+}
